@@ -48,6 +48,6 @@ jobs:
           LOG_FILE: /tmp/test_log.txt
           LOG_LEVEL: '1'
         run: |
-          python -m coverage run -m pytest ./tests.py --tb=no --maxfail=0 -q
+          python -m coverage run -m pytest ./tests_main.py --tb=no --maxfail=0 -q
           python -m coverage report -m --fail-under=60
 

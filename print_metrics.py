@@ -18,6 +18,12 @@ def print_model_evaluation(
     code_quality_latency: int, 
     performance_claims_score: float, 
     performance_claims_latency: int, 
+    reproducibility_score: float,
+    reproducibility_latency: int,
+    reviewedness_score: float,
+    reviewedness_latency: int,
+    treescore_score: float,
+    treescore_latency: int,
     net_score: float,
     net_score_latency: int
 ): 
@@ -95,6 +101,12 @@ def print_model_evaluation(
         "dataset_quality_latency": int(dataset_quality_latency),
         "code_quality": round(code_quality_score, 2),
         "code_quality_latency": int(code_quality_latency),
+        "reproducibility": round(reproducibility_score, 2),
+        "reproducibility_latency": int(reproducibility_latency),
+        "reviewedness": round(reviewedness_score, 2),
+        "reviewedness_latency": int(reviewedness_latency),
+        "treescore": round(treescore_score, 2),
+        "treescore_latency": int(treescore_latency),
     }
 
     print(json.dumps(result,separators=(',' ':')))    

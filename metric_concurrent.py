@@ -6,6 +6,9 @@ from metrics.size import calculate_size_score
 from metrics.bus_factor import bus_factor
 from metrics.ramp_up_time import ramp_up_time
 from metrics.license import get_license_score
+from metrics.reproducibility import reproducibility
+from metrics.reviewedness import reviewedness
+from metrics.treescore import treescore
 from print_metrics import print_model_evaluation
 import logger
 import time
@@ -27,6 +30,9 @@ def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_da
             executor.submit(get_license_score, raw_model_url): "license_score",
             executor.submit(bus_factor, model_info): "bus_factor",
             executor.submit(ramp_up_time, model_info): "ramp_up_time",
+            executor.submit(reproducibility, model_info, code_info, model_readme): "reproducibility",
+            executor.submit(reviewedness, code_info): "reviewedness",
+            executor.submit(treescore, model_info): "treescore",
         }
 
         for future in as_completed(future_to_metric):
@@ -50,11 +56,18 @@ def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_da
     license_score, license_latency = results["license_score"]
     bus_score, bus_latency = results["bus_factor"]
     ramp_score, ramp_latency = results["ramp_up_time"]
+    repro_score, repro_latency = results["reproducibility"]
+    review_score, review_latency = results["reviewedness"]
+    tree_score, tree_latency = results["treescore"]
 
     logger.info("Concurrent thread results unpacked")
 
     # Final net score calculation
-    net_score = 0.1 * license_score + 0.11 * ramp_score + 0.12 * net_size_score + 0.15 * data_quality_score + 0.11 * bus_score + 0.2 * dc_score + 0.11 * code_quality_score + 0.1 * perf_score
+    # Adjusted weights to accommodate new metrics (total = 1.0)
+    net_score = (0.09 * license_score + 0.10 * ramp_score + 0.11 * net_size_score + 
+                 0.13 * data_quality_score + 0.10 * bus_score + 0.18 * dc_score + 
+                 0.10 * code_quality_score + 0.09 * perf_score + 
+                 0.05 * repro_score + 0.05 * review_score + 0.05 * tree_score)
 
     end = time.time()
     net_latency = int((end - start) * 1000)
@@ -69,6 +82,9 @@ def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_da
         data_quality_score, dq_latency, 
         code_quality_score, cq_latency, 
         perf_score, perf_latency, 
+        repro_score, repro_latency,
+        review_score, review_latency,
+        tree_score, tree_latency,
         net_score, net_latency
     )
 

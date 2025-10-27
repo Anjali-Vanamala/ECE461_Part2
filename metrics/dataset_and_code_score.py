@@ -1,7 +1,6 @@
 # If the dataset used for training and benchmarking is well documented,
 #    along with any example code
 import os
-import sys
 import time
 from typing import Tuple
 
@@ -28,8 +27,10 @@ def query_genai_studio(prompt: str) -> str:
     # get api key from environment variable
     api_key = os.environ.get("GEN_AI_STUDIO_API_KEY")
     if not api_key:
-        logger.info("Error: GEN_AI_STUDIO_API_KEY environment variable not found")
-        sys.exit(1)
+        # When API key is not provided (e.g., local dev or CI without secrets),
+        # avoid making an external network call and return a safe default score.
+        logger.info("GEN_AI_STUDIO_API_KEY not set; returning default '0.0' response for GenAI Studio.")
+        return "0.0"
 
     url = "https://genai.rcac.purdue.edu/api/chat/completions"
     headers = {
@@ -42,13 +43,17 @@ def query_genai_studio(prompt: str) -> str:
         "stream": False
     }
 
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code != 200:
-        raise Exception(f"GenAI Studio API error: {response.status_code}, {response.text}")
-
-    data = response.json()
-    # OpenAI-style completion
-    return data["choices"][0]["message"]["content"]
+    try:
+        response = requests.post(url, headers=headers, json=body, timeout=10)
+        if response.status_code != 200:
+            logger.info(f"GenAI Studio API returned status {response.status_code}; returning default '0.0'.")
+            return "0.0"
+        data = response.json()
+        # OpenAI-style completion
+        return data.get("choices", [])[0].get("message", {}).get("content", "0.0")
+    except Exception as e:
+        logger.info(f"Error calling GenAI Studio: {e}; returning default '0.0'.")
+        return "0.0"
 
 
 """

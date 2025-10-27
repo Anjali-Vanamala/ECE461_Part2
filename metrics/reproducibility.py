@@ -61,7 +61,18 @@ def extract_and_validate_readme_code(readme: str) -> bool:
         # Check for imports (indicates real code, not pseudocode)
         if re.search(r'^\s*(import|from)\s+\w+', code, re.MULTILINE):
             try:
-                ast.parse(code)
+                # Remove leading whitespace from each line to fix indentation issues
+                lines = code.split('\n')
+                dedented_lines = []
+                for line in lines:
+                    if line.strip():  # Only process non-empty lines
+                        # Remove common leading whitespace
+                        dedented_lines.append(line.lstrip())
+                    else:
+                        dedented_lines.append('')
+                dedented_code = '\n'.join(dedented_lines)
+                
+                ast.parse(dedented_code)
                 logger.debug("Found valid Python code with imports")
                 return True
             except:

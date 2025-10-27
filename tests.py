@@ -904,25 +904,27 @@ class Test_Reproducibility:
 
 
 class Test_Reviewedness:
-    @patch('metrics.reviewedness.requests.get')
+    @patch('requests.get')
     def test_reviewedness_high_rate(self, mock_get):
         """Test reviewedness with high review rate"""
         prs_response = MagicMock()
         prs_response.status_code = 200
         prs_response.json.return_value = [
-            {'number': 1, 'created_at': '2023-01-01T00:00:00Z', 'url': 'https://api.github.com/repos/test/repo/pulls/1'},
-            {'number': 2, 'created_at': '2023-06-01T00:00:00Z', 'url': 'https://api.github.com/repos/test/repo/pulls/2'}
+            {'number': 1, 'created_at': '2024-01-01T00:00:00Z', 'url': 'https://api.github.com/repos/test/repo/pulls/1'},
+            {'number': 2, 'created_at': '2024-06-01T00:00:00Z', 'url': 'https://api.github.com/repos/test/repo/pulls/2'}
         ]
         
         reviews_response = MagicMock()
         reviews_response.status_code = 200
         reviews_response.json.return_value = [{'id': 1, 'state': 'APPROVED'}]
         
+        # Mock should return PRs first, then reviews for each PR
         mock_get.side_effect = [prs_response, reviews_response, reviews_response]
         
         from metrics.reviewedness import reviewedness
         score, latency = reviewedness({'full_name': 'test/repo'})
         
+        # With 2 PRs both having reviews, fraction = 1.0, so score should be 1.0
         assert score == 1.0
         assert latency >= 0
     

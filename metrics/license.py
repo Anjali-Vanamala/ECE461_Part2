@@ -7,12 +7,13 @@ It evaluates whether model licenses are compatible with ACME Corporation's LGPLv
 by directly downloading and analyzing README files.
 """
 
+import re
 import time
 from typing import Dict, Tuple
-import re
-import requests
-import logger  # Import custom logger like performance_claims.py
 
+import requests
+
+import logger  # Import custom logger like performance_claims.py
 
 # Pre-compiled regex for better performance
 URL_PATTERN = re.compile(r'huggingface\.co/([^/]+/[^/?]+)')
@@ -303,7 +304,7 @@ def get_detailed_license_score(model_input) -> Dict[str, float]:
     }
 
 
-_license_cache = {}
+_license_cache: Dict[str, Tuple[float, int]] = {}
 
 
 def get_license_score_cached(model_input) -> Tuple[float, int]:

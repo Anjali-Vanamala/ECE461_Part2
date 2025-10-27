@@ -1,6 +1,8 @@
 '''
 pip install huggingface_hub
 '''
+from typing import Any, Dict, Tuple
+
 import logger
 
 '''
@@ -13,7 +15,7 @@ Try #2: Use pandas isnull to check if there's a missing value in the dataset
 '''
 
 
-def complete_checker(api_info, readme):
+def complete_checker(api_info: Dict[str, Any], readme: str) -> float:
 
     logger.debug("Starting completeness check")
 
@@ -33,7 +35,7 @@ def complete_checker(api_info, readme):
         'datasets': ['wikipedia', 'bookcorpus']
     }
 
-    score = 0
+    score: int = 0
     for category, keywords in complete_kw.items():
         # Check in card_data first (exact match)
         if category in card_data:
@@ -57,7 +59,7 @@ def complete_checker(api_info, readme):
         return 0.1
 
 
-def correct_checker(readme: str):
+def correct_checker(readme: str) -> float:
     import re
 
     logger.debug("Starting correctness check")
@@ -117,7 +119,7 @@ Coverage calculator -> readme content search to analyze coverage
 '''
 
 
-def coverage_checker(api_info: str, readme: str):
+def coverage_checker(api_info: Dict[str, Any], readme: str) -> float:
 
     # Following list of words are used as a filter on the readme file. This lis it curated by
     # Claude Sonnet 4 with the following prompts:
@@ -143,17 +145,16 @@ def coverage_checker(api_info: str, readme: str):
                      'stratified', 'proportional', 'equal representation', 'fair distribution',
                      'well-distributed', 'equally represented', 'balanced across']
 
-    coverage_count = sum(1 for word in checked_words if word in readme)
+    coverage_count: int = sum(1 for word in checked_words if word in (readme or ""))
 
     # Simple scoring based on coverage word frequency
     if coverage_count >= 10:
         return 1.0  # Highly descriptive of coverage
-    elif coverage_count >= 5:
+    if coverage_count >= 5:
         return 0.7  # Good coverage description
-    elif coverage_count >= 1:
+    if coverage_count >= 1:
         return 0.5  # Some coverage mentioned
-    else:
-        return 0.3  # No clear coverage description
+    return 0.3  # No clear coverage description
 
 
 '''
@@ -176,9 +177,9 @@ relevance_score : int
 '''
 
 
-def relevance_checker(api_info: str):
-
+def relevance_checker(api_info: Dict[str, Any]) -> float:
     from datetime import date
+
     from dateutil import parser
 
     logger.debug("Starting relevance check")
@@ -186,15 +187,17 @@ def relevance_checker(api_info: str):
     today = date.today()  # todays date
 
     try:
-        date_creation = api_info['createdAt']  # extract creation date from json, returns date & time format
-        date_creation = parser.parse(date_creation)  # format the date/time info, make it easy to extract date
-        date_creation = date_creation.date()  # extract date wo the time/time zone
+        date_creation = api_info.get('createdAt')  # extract creation date from json, returns date & time format
+        if not date_creation:
+            logger.info("Error: 'createdAt' field not found in API info")
+            return 0.0
 
-        days_passed = (today - date_creation).days  # get number of days passed in int
+        parsed_dt = parser.parse(date_creation)  # format the date/time info
+        creation_date = parsed_dt.date()  # extract date without the time/time zone
+
+        days_passed: int = (today - creation_date).days  # get number of days passed in int
 
         # categorize relevance based on the number of days passed
-        # might need to change the thresholds depending on the testcases fed, relevance of 1 year might be too ambitious
-        # update: changed
         if days_passed > 2500:
             relevance_score = 0.2
         elif days_passed > 1500:
@@ -204,11 +207,8 @@ def relevance_checker(api_info: str):
         else:
             relevance_score = 1.0
 
-        return relevance_score
+        return float(relevance_score)
 
-    except KeyError:
-        logger.info("Error: 'createdAt' field not found in API info")
-        return 0.0
     except Exception as e:
         logger.info(f"Error parsing creation date: {e}")
         return 0.0
@@ -235,21 +235,21 @@ data_quality_score : int
 '''
 
 
-def data_quality(api_info, readme):
+def data_quality(api_info: Dict[str, Any], readme: str) -> Tuple[float, float]:
     import time
-    start = time.time()
+    start: float = time.time()
     logger.info("Calculating data_quality metric")
 
-    data_quality_score = 0.0
+    data_quality_score: float = 0.0
 
-    complete = complete_checker(api_info, readme)
-    correct = correct_checker(readme)
-    coverage = coverage_checker(api_info, readme)
-    relevance = relevance_checker(api_info)
+    complete: float = complete_checker(api_info, readme)
+    correct: float = correct_checker(readme)
+    coverage: float = coverage_checker(api_info, readme)
+    relevance: float = relevance_checker(api_info)
 
     data_quality_score = (complete * 0.3 + correct * 0.2 + coverage * 0.2 + relevance * 0.3)
 
-    end = time.time()
-    latency = end - start
+    end: float = time.time()
+    latency: float = end - start
 
     return data_quality_score, latency

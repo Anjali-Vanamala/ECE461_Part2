@@ -1,8 +1,11 @@
-import logger
+
 import time
+from typing import Any, Dict, Tuple
+
+import logger
 
 
-def calculate_api_complexity_score(api_info) -> float:
+def calculate_api_complexity_score(api_info: Dict[str, Any]) -> float:
     """
     Calculate API Complexity score based on the tags
 
@@ -50,7 +53,7 @@ def calculate_api_complexity_score(api_info) -> float:
     return score
 
 
-def calculate_documentation_score(api_info) -> float:
+def calculate_documentation_score(api_info: Dict[str, Any]) -> float:
     """
     Calculate documentation score based on if it has a README.md, summary, or usage information
 
@@ -73,14 +76,14 @@ def calculate_documentation_score(api_info) -> float:
     has_usage = "usage" in str(card_data).lower()
 
     if has_readme or has_summary or has_usage:
-        score = 1
+        score: float = 1.0
     else:
-        score = 0
+        score = 0.0
 
     return score
 
 
-def calculate_community_support_score(api_info) -> float:
+def calculate_community_support_score(api_info: Dict[str, Any]) -> float:
     """
     Calculate community support score based on number of likes and downloads
 
@@ -98,7 +101,7 @@ def calculate_community_support_score(api_info) -> float:
     likes = api_info.get("likes", 0)
     downloads = api_info.get("downloads", 0)
 
-    score = 0
+    score = 0.0
 
     # Likes weight
     if likes > 1000:
@@ -123,7 +126,7 @@ def calculate_community_support_score(api_info) -> float:
     return score
 
 
-def calculate_quick_start_availability_score(api_info) -> float:
+def calculate_quick_start_availability_score(api_info: Dict[str, Any]) -> float:
     """
     Calculate quick start availability score based on availability of a quickstart guide, example script, or notebook
 
@@ -145,7 +148,7 @@ def calculate_quick_start_availability_score(api_info) -> float:
     has_example_script = any("example" in f for f in siblings)
     has_quickstart = "quickstart" in card_data or "usage" in card_data
 
-    score = 0
+    score: float = 0.0
     if has_quickstart:
         score += 0.5
     if has_notebook:
@@ -156,7 +159,7 @@ def calculate_quick_start_availability_score(api_info) -> float:
     return score
 
 
-def ramp_up_time(api_info: dict) -> float:
+def ramp_up_time(api_info: Dict[str, Any]) -> Tuple[float, float]:
     """
     Calculate ramp-up time score (higher score means faster to ramp up).
 

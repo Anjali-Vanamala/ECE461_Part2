@@ -1,9 +1,11 @@
-from urllib.parse import urlparse
-import requests as rq
 import re
 import sys
-import metric_concurrent
+from urllib.parse import urlparse
+
+import requests as rq
+
 import logger
+import metric_concurrent
 
 """
 If no dataset in input line, see if model was trained on

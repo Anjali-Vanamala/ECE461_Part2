@@ -20,20 +20,27 @@ code_quality_score : int
 
 '''
 
+from typing import Any, Dict, Tuple
+
 import logger
 
 # def code_quality_calc(type: str, api_info: str, readme: str) -> int:
 
 
-def code_quality(model_info: str, code_info: str, model_readme: str, code_readme: str):
+def code_quality(
+    model_info: Dict[str, Any],
+    code_info: Dict[str, Any],
+    model_readme: str,
+    code_readme: str
+) -> Tuple[float, float]:
     import time
 
     start = time.time()
     logger.info("Calculating code_quality metric")
 
     # init metrics used in final score calculation to avoid bugs
-    len_score = 0.0
-    pop_score = 0.0
+    len_score: float = 0.0
+    pop_score: float = 0.0
 
     # reusability check
     doc_length = len(model_readme.split()) if model_readme else 0
@@ -90,9 +97,9 @@ def code_quality(model_info: str, code_info: str, model_readme: str, code_readme
         logger.debug("No readme available for testability check")
         test_score = 0.0
 
-    code_quality_score = min(len_score * 0.4 + pop_score * 0.4 + test_score * 0.2, 1)
+    code_quality_score: float = min(len_score * 0.4 + pop_score * 0.4 + test_score * 0.2, 1)
     logger.info(f"Final code quality score: {code_quality_score}")
 
     end = time.time()
-    latency = end - start
+    latency: float = end - start
     return code_quality_score, latency

@@ -1,24 +1,24 @@
 # import parse_categories
-import metrics.data_quality
-import metrics.code_quality
-from metrics.size import (calculate_size_score,
-                          get_detailed_size_score,
-                          calculate_size_score_cached,
-                          extract_model_id_from_url,
-                          calculate_net_size_score,
-                          get_model_size_for_scoring,
-                          calculate_size_scores,
-                          SIZE_WEIGHTS,)
-from metrics.performance_claims import performance_claims
-from metrics.dataset_and_code_score import dataset_and_code_score
-from metrics.ramp_up_time import ramp_up_time
-from metrics.license import get_license_score, get_detailed_license_score, get_license_score_cached, extract_license_section
-from metrics.bus_factor import bus_factor
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock, mock_open, patch
+
 import requests as rq
-from unittest.mock import patch, mock_open, MagicMock
-from input import find_dataset, main
+
 import input
+import metrics.code_quality
+import metrics.data_quality
+from input import find_dataset, main
+from metrics.bus_factor import bus_factor
+from metrics.dataset_and_code_score import dataset_and_code_score
+from metrics.license import (extract_license_section,
+                             get_detailed_license_score, get_license_score,
+                             get_license_score_cached)
+from metrics.performance_claims import performance_claims
+from metrics.ramp_up_time import ramp_up_time
+from metrics.size import (SIZE_WEIGHTS, calculate_net_size_score,
+                          calculate_size_score, calculate_size_score_cached,
+                          calculate_size_scores, extract_model_id_from_url,
+                          get_detailed_size_score, get_model_size_for_scoring)
 
 """
 Usage Instructions:
@@ -556,6 +556,7 @@ class Test_License:
         # Test case for no positive indicators (line 117)
         # This is hard to test with real models, so we'll test the function directly
         from metrics.license import analyze_license_text
+
         # Test text with no license indicators
         license_text = "This is some random text with no license information."
         score = analyze_license_text(license_text)

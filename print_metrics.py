@@ -72,7 +72,12 @@ def print_model_evaluation(
         Prints the JSON-formatted evaluation dictionary to stdout.
     """
 
-    name = api_info.get("id").split('/')[1]
+    id_val = api_info.get("id") or ""
+    if "/" in id_val:
+        # namespace/model format expected
+        name = id_val.split("/", 1)[1]
+    else:
+        name = id_val
     category = "MODEL"
 
     result = {
@@ -98,4 +103,5 @@ def print_model_evaluation(
         "code_quality_latency": int(code_quality_latency),
     }
 
-    print(json.dumps(result, separators=(',' ':')))
+    # Use compact separators (no spaces) for consistent machine-readable output
+    print(json.dumps(result, separators=(",", ":")))

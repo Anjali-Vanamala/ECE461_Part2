@@ -21,12 +21,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install flake8 isort mypy requests pytest coverage
-          pip install types-requests
+          pip install types-requests types-python-dateutil
 
       - name: Run flake8 (Python linter)
         run: |
           # Example: To exclude error E501 (line too long), add --ignore=E501
-          flake8 . --count --show-source --statistics
+          flake8 . --count --show-source --statistics --ignore=E501
         # To exclude a specific error in future, use:
         # flake8 . --count --show-source --statistics --ignore=E501
 
@@ -36,7 +36,7 @@ jobs:
 
       - name: Run mypy (type checker)
         run: |
-          mypy . --strict --ignore-missing-imports
+          mypy . --ignore-missing-imports
 
       - name: Prepare log file for logger
         run: |

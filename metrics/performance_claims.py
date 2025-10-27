@@ -1,12 +1,13 @@
 # Evidence of claims (benchmarks, evals)
-import logger
-
-from urllib.parse import urlparse
-import time
-from huggingface_hub import model_info, hf_hub_download
 import os
-import requests
+import time
+from typing import Any
+from urllib.parse import urlparse
 
+import requests
+from huggingface_hub import hf_hub_download, model_info
+
+import logger
 
 """
 Use Purdue GenAI Studio to measure performance claims.
@@ -67,7 +68,7 @@ object
 """
 
 
-def fetch_model_card(model_url: str) -> tuple[str, object]:
+def fetch_model_card(model_url: str) -> tuple[str, Any]:
     parsed = urlparse(model_url)
     path = parsed.path.strip("/")
     parts = path.split("/")
@@ -100,11 +101,11 @@ float
 """
 
 
-def performance_claims(model_url: str) -> tuple[str, str]:
+def performance_claims(model_url: str) -> tuple[float, float]:
     # start latency timer
     start = time.time()
     logger.info("Calculating performance_claims metric")
-    score = 0
+    score: float = 0.0
 
     model_id, info = fetch_model_card(model_url)
 
@@ -114,13 +115,14 @@ def performance_claims(model_url: str) -> tuple[str, str]:
     # if all the values are None, must check README
     total_vals = 0
     verified = 0
-    if info.model_index:
-        for entry in info.model_index:
+    model_index = getattr(info, "model_index", None)
+    if model_index:
+        for entry in model_index:
             for result in entry.get("results", []):
                 for metric in result.get("metrics", []):
-                    if metric["value"] is not None:
+                    if metric.get("value") is not None:
                         total_vals += 1
-                        if metric["verified"] is True:
+                        if metric.get("verified") is True:
                             verified += 1
 
     if total_vals != 0:  # some values found

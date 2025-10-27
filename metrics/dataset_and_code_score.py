@@ -1,11 +1,13 @@
 # If the dataset used for training and benchmarking is well documented,
 #    along with any example code
-import logger
-
-import requests
-import time
 import os
 import sys
+import time
+from typing import Tuple
+
+import requests
+
+import logger
 
 """
 Use Purdue GenAI Studio to measure dataset documentation.
@@ -70,7 +72,7 @@ float
 """
 
 
-def dataset_and_code_score(code_url: str, dataset_url: str) -> tuple[float, float]:
+def dataset_and_code_score(code_url: str, dataset_url: str) -> Tuple[float, float]:
     # start latency timer
     start = time.time()
     logger.info("Calculating dataset_and_score metric")
@@ -78,7 +80,7 @@ def dataset_and_code_score(code_url: str, dataset_url: str) -> tuple[float, floa
     # Code, Dataset sources, uses, data collection and processing, bias
     # half of score is code exists
     # half of score is AI assessment of dataset documentation
-    score = 0
+    score = 0.0
 
     # Assume if no dataset or code link given, then it doesn't exist
     if code_url:
@@ -111,8 +113,7 @@ def dataset_and_code_score(code_url: str, dataset_url: str) -> tuple[float, floa
                 logger.debug("Invalid llm output. Retrying.")
 
     end = time.time()
-    latency = end - start
-
+    latency: float = end - start
     return score, latency * 1000
 
 # UNIT TEST
@@ -123,4 +124,4 @@ class Test_datasetandcodescore:
         code_url = "https://github.com/google-research/bert"
         dataset_url = "https://huggingface.co/datasets/bookcorpus/bookcorpus"
         score, latency = dataset_and_code_score(code_url, dataset_url)
-        assert (score == 1)
+        assert abs(score - 1.0) < 1e-6

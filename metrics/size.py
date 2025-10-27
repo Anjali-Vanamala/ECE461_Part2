@@ -9,10 +9,12 @@ The calculator uses the Hugging Face API to get model information and calculates
 scores using a linear decay function based on hardware-specific thresholds.
 """
 
-from typing import Dict, Tuple
-import time
-from huggingface_hub import HfApi
 import re
+import time
+from typing import Any, Dict, Tuple
+
+from huggingface_hub import HfApi
+
 import logger  # Import custom logger like performance_claims.py
 
 # Constants for weights (defined once to avoid repetition)
@@ -205,7 +207,7 @@ def calculate_size_score(model_input) -> Tuple[dict, float, int]:
     return size_scores, net_size_score, latency
 
 
-def get_detailed_size_score(model_input) -> Dict[str, float]:
+def get_detailed_size_score(model_input) -> Dict[str, Any]:
     """
     Get detailed size scores for output formatting (original functionality).
 
@@ -243,7 +245,7 @@ def get_detailed_size_score(model_input) -> Dict[str, float]:
     }
 
 
-_size_cache = {}
+_size_cache: Dict[str, Tuple[dict, float, int]] = {}
 
 
 def calculate_size_score_cached(model_input) -> Tuple[dict, float, int]:

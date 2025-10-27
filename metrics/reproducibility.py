@@ -4,8 +4,7 @@ Reproducibility Metric Calculator for Models and Code Repositories.
 Scores based on availability of example code in model files, GitHub repo, or README.
 
 Scoring:
-    1.0 - Example code exists and passes basic validation
-    0.5 - Example code exists but has syntax/import issues
+    1.0 - Example code exists and appears valid
     0.0 - No example code found
 """
 
@@ -17,7 +16,7 @@ from typing import Tuple
 
 # Shared constants
 EXAMPLE_KEYWORDS = ['example', 'demo', 'tutorial', 'quickstart', 'usage', 'sample']
-EXAMPLE_EXTENSIONS = ['.py', '.ipynb']
+EXAMPLE_EXTENSIONS = ['.py', '.ipynb', '.md']
 
 
 def has_example_files(model_info: dict, code_info: dict) -> bool:

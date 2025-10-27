@@ -21,6 +21,26 @@ _parent_score_cache = {}
 # Maximum number of parents to consider (prevent excessive API calls)
 MAX_PARENTS = 5
 
+# Maximum cache size to prevent memory growth
+MAX_CACHE_SIZE = 100
+
+
+def clear_parent_cache():
+    """Clear the parent score cache to free memory."""
+    global _parent_score_cache
+    _parent_score_cache.clear()
+    logger.debug("Parent score cache cleared")
+
+
+def _manage_cache_size():
+    """Remove oldest entries if cache exceeds MAX_CACHE_SIZE."""
+    if len(_parent_score_cache) > MAX_CACHE_SIZE:
+        # Remove oldest 20% of entries (simple FIFO approximation)
+        keys_to_remove = list(_parent_score_cache.keys())[:MAX_CACHE_SIZE // 5]
+        for key in keys_to_remove:
+            del _parent_score_cache[key]
+        logger.debug(f"Cache size managed: removed {len(keys_to_remove)} entries")
+
 
 def get_parent_models(model_info_dict: dict) -> List[str]:
     """
@@ -114,6 +134,9 @@ def calculate_parent_net_score(parent_id: str) -> float:
         
         # Cache the result
         _parent_score_cache[parent_id] = score
+        
+        # Manage cache size
+        _manage_cache_size()
         
         return score
     

@@ -16,6 +16,23 @@ import requests
 from typing import Tuple
 from datetime import datetime, timedelta
 
+# Rate limiting constants
+RATE_LIMIT_DELAY = 0.1  # 100ms between API calls
+_last_api_call_time = 0
+
+
+def _rate_limit():
+    """Ensure we don't exceed GitHub API rate limits."""
+    global _last_api_call_time
+    current_time = time.time()
+    time_since_last = current_time - _last_api_call_time
+    
+    if time_since_last < RATE_LIMIT_DELAY:
+        sleep_time = RATE_LIMIT_DELAY - time_since_last
+        time.sleep(sleep_time)
+    
+    _last_api_call_time = time.time()
+
 def get_reviewed_pr_fraction(code_info: dict) -> float:
     """
     Calculate fraction of reviewed PRs from last 2 years.
@@ -49,6 +66,7 @@ def get_reviewed_pr_fraction(code_info: dict) -> float:
             'direction': 'desc'
         }
         
+        _rate_limit()  # Rate limit before API call
         response = requests.get(api_url, params=params, timeout=10)
         
         if response.status_code != 200:
@@ -75,6 +93,7 @@ def get_reviewed_pr_fraction(code_info: dict) -> float:
         for pr in recent_prs:
             # Check if PR has reviews
             reviews_url = pr.get('url') + '/reviews'
+            _rate_limit()  # Rate limit before each review check
             reviews_response = requests.get(reviews_url, timeout=10)
             
             if reviews_response.status_code == 200:

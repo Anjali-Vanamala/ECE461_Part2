@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 isort mypy requests pytest coverage python-dotenv huggingface_hub
+          pip install flake8 isort mypy requests pytest coverage python-dotenv huggingface_hub python-dateutil
           pip install types-requests types-python-dateutil
 
       - name: Run flake8 (Python linter)

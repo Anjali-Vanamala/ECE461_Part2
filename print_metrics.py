@@ -77,7 +77,7 @@ def print_model_evaluation(
         Prints the JSON-formatted evaluation dictionary to stdout.
     """
     
-    name = api_info.get("id").split('/')[1]
+    name = api_info.get("id", "").split('/')[1] if api_info.get("id") else "unknown"
     category = "MODEL"
 
     result = {
@@ -109,7 +109,7 @@ def print_model_evaluation(
         "treescore_latency": int(treescore_latency),
     }
 
-    print(json.dumps(result,separators=(',' ':')))    
+    print(json.dumps(result, separators=(',', ':')))    
 
 
 

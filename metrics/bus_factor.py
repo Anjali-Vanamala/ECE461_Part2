@@ -4,10 +4,11 @@ import logger
 from datetime import datetime, timezone
 import time
 
-def calculate_active_maintenance_score(api_info) -> float: 
+
+def calculate_active_maintenance_score(api_info) -> float:
     """
     Calculate active maintenance score based on the creation date an last updated date
-    
+
     Parameters
     ----------
     api_info : dict
@@ -23,7 +24,7 @@ def calculate_active_maintenance_score(api_info) -> float:
 
     if not created_at or not last_modified:
         logger.debug("API Info has no information about dates.")
-    
+
     created_date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
     modified_date = datetime.fromisoformat(last_modified.replace("Z", "+00:00"))
     now = datetime.now(timezone.utc)
@@ -40,7 +41,6 @@ def calculate_active_maintenance_score(api_info) -> float:
     else:
         age_score = 0.4
 
-
     if days_since_modified < 30:
         update_score = 1
     elif days_since_modified < 90:
@@ -52,14 +52,13 @@ def calculate_active_maintenance_score(api_info) -> float:
     else:
         update_score = 0.2
 
-    
     return update_score * 0.75 + age_score * 0.25
 
 
 def calculate_contributor_diversity_score(api_info) -> float:
     """
     Calculate contributor diversity score based on the number of contributors
-    
+
     Parameters
     ----------
     api_info : dict
@@ -71,8 +70,8 @@ def calculate_contributor_diversity_score(api_info) -> float:
         Contributor diversity score (0-1)
     """
     num_contributors = len(api_info.get('spaces', []))
-    
-    return min (num_contributors / 10.0, 1.0)
+
+    return min(num_contributors / 10.0, 1.0)
 
 
 def calculate_org_backing_score(api_info) -> float:
@@ -93,14 +92,15 @@ def calculate_org_backing_score(api_info) -> float:
     KNOWN_ORGS = {"google", "meta", "microsoft", "openai", "apple", "ibm", "huggingface"}
 
     author = api_info.get("author", "").lower()
-    if any(org in author for org in KNOWN_ORGS): 
+    if any(org in author for org in KNOWN_ORGS):
         return 1
-    elif author: 
+    elif author:
         return 0.5
-    else: 
+    else:
         return 0
 
-def bus_factor(api_info) -> float: 
+
+def bus_factor(api_info) -> float:
     """
     Calculate bus factor (higher score is better).
 
@@ -120,22 +120,19 @@ def bus_factor(api_info) -> float:
     """
 
     logger.info(" Calculating bus factor metric")
-    
-    # start latency timer 
+
+    # start latency timer
     start = time.perf_counter()
 
     contributor_diversity_score = calculate_contributor_diversity_score(api_info)
     active_maintenance_score = calculate_active_maintenance_score(api_info)
     org_backing_score = calculate_org_backing_score(api_info)
 
-    bus_factor_metric_score = (0.55 * contributor_diversity_score + 
-             0.2 * active_maintenance_score + 
-             0.25 * org_backing_score)
-    
-    # end latency timer 
+    bus_factor_metric_score = (0.55 * contributor_diversity_score + 0.2 * active_maintenance_score + 0.25 * org_backing_score)
+
+    # end latency timer
     end = time.perf_counter()
 
     latency = (end - start) * 1000
 
     return round(bus_factor_metric_score, 2), latency
-

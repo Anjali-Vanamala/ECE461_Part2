@@ -11,12 +11,13 @@ import logger
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
 def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_dataset_url):
     start = time.time()
     logger.info("Begin processing metrics.")
 
     results = {}
-    
+
     with ThreadPoolExecutor() as executor:
         future_to_metric = {
             executor.submit(data_quality, model_info, model_readme): "data_quality",
@@ -60,15 +61,14 @@ def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_da
     net_latency = int((end - start) * 1000)
 
     print_model_evaluation(
-        model_info, 
-        size_scores, size_latency, 
+        model_info,
+        size_scores, size_latency,
         license_score, license_latency,
-        ramp_score, ramp_latency, 
-        bus_score, bus_latency, 
-        dc_score, dc_latency, 
-        data_quality_score, dq_latency, 
-        code_quality_score, cq_latency, 
-        perf_score, perf_latency, 
+        ramp_score, ramp_latency,
+        bus_score, bus_latency,
+        dc_score, dc_latency,
+        data_quality_score, dq_latency,
+        code_quality_score, cq_latency,
+        perf_score, perf_latency,
         net_score, net_latency
     )
-

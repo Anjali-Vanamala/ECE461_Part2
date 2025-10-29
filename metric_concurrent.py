@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from metrics.data_quality import data_quality
 from metrics.code_quality import code_quality
 from metrics.dataset_and_code_score import dataset_and_code_score
@@ -13,15 +14,40 @@ from print_metrics import print_model_evaluation
 import logger
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+=======
+>>>>>>> ee8e060a1a191f964b5b9cf84cc005059097ac93
 
-def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_dataset_url):
+import time
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from typing import Any, Dict
+
+import logger
+from metrics.bus_factor import bus_factor
+from metrics.code_quality import code_quality
+from metrics.data_quality import data_quality
+from metrics.dataset_and_code_score import dataset_and_code_score
+from metrics.license import get_license_score
+from metrics.performance_claims import performance_claims
+from metrics.ramp_up_time import ramp_up_time
+from metrics.size import calculate_size_score
+from print_metrics import print_model_evaluation
+
+
+def main(
+    model_info: Any,
+    model_readme: Any,
+    raw_model_url: str,
+    code_info: Any,
+    code_readme: Any,
+    raw_dataset_url: str
+) -> None:
     start = time.time()
     logger.info("Begin processing metrics.")
 
-    results = {}
-    
+    results: Dict[str, Any] = {}
+
     with ThreadPoolExecutor() as executor:
-        future_to_metric = {
+        future_to_metric: Dict[Future, str] = {
             executor.submit(data_quality, model_info, model_readme): "data_quality",
             executor.submit(code_quality, model_info, code_info, model_readme, code_readme): "code_quality",
             executor.submit(dataset_and_code_score, code_info, raw_dataset_url): "dc_score",
@@ -36,7 +62,7 @@ def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_da
         }
 
         for future in as_completed(future_to_metric):
-            metric_name = future_to_metric[future]
+            metric_name: str = future_to_metric[future]
             try:
                 results[metric_name] = future.result()
             except Exception as e:
@@ -44,6 +70,24 @@ def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_da
                 results[metric_name] = None
 
     # Unpack the results
+    data_quality_score: float
+    dq_latency: int
+    code_quality_score: float
+    cq_latency: int
+    dc_score: float
+    dc_latency: int
+    perf_score: float
+    perf_latency: int
+    size_scores: Any
+    net_size_score: float
+    size_latency: int
+    license_score: float
+    license_latency: int
+    bus_score: float
+    bus_latency: int
+    ramp_score: float
+    ramp_latency: int
+
     data_quality_score, dq_latency = results["data_quality"]
     code_quality_score, cq_latency = results["code_quality"]
     dc_score, dc_latency = results["dc_score"]
@@ -63,19 +107,24 @@ def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_da
     logger.info("Concurrent thread results unpacked")
 
     # Final net score calculation
+<<<<<<< HEAD
     # Adjusted weights to accommodate new metrics (total = 1.0)
     net_score = (0.09 * license_score + 0.10 * ramp_score + 0.11 * net_size_score + 
                  0.13 * data_quality_score + 0.10 * bus_score + 0.18 * dc_score + 
                  0.10 * code_quality_score + 0.09 * perf_score + 
                  0.05 * repro_score + 0.05 * review_score + 0.05 * tree_score)
+=======
+    net_score: float = (0.1 * license_score + 0.11 * ramp_score + 0.12 * net_size_score + 0.15 * data_quality_score + 0.11 * bus_score + 0.2 * dc_score + 0.11 * code_quality_score + 0.1 * perf_score)
+>>>>>>> ee8e060a1a191f964b5b9cf84cc005059097ac93
 
     end = time.time()
-    net_latency = int((end - start) * 1000)
+    net_latency: int = int((end - start) * 1000)
 
     print_model_evaluation(
-        model_info, 
-        size_scores, size_latency, 
+        model_info,
+        size_scores, size_latency,
         license_score, license_latency,
+<<<<<<< HEAD
         ramp_score, ramp_latency, 
         bus_score, bus_latency, 
         dc_score, dc_latency, 
@@ -85,6 +134,13 @@ def main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_da
         repro_score, repro_latency,
         review_score, review_latency,
         tree_score, tree_latency,
+=======
+        ramp_score, ramp_latency,
+        bus_score, bus_latency,
+        dc_score, dc_latency,
+        data_quality_score, dq_latency,
+        code_quality_score, cq_latency,
+        perf_score, perf_latency,
+>>>>>>> ee8e060a1a191f964b5b9cf84cc005059097ac93
         net_score, net_latency
     )
-

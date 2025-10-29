@@ -88,7 +88,7 @@ def get_reviewed_pr_fraction(code_info: Dict[str, Any]) -> float:
 
         if not recent_prs:
             logger.info("No PRs found in last 2 years")
-            return 0.5  # No recent activity, but not necessarily bad
+            return 0.0  # No recent PRs, so cannot measure review practices
 
         logger.info(f"Found {len(recent_prs)} PRs in last 2 years")
 

@@ -1,0 +1,81 @@
+name: CD - Deploy Lambda Container (API Gateway integration manual)
+
+# TODO: Replace <ACCOUNT_ID> placeholder with actual AWS account ID [MVP]
+# TODO: Create ECR repository: ece461-part2 in us-east-1 [MVP]
+# TODO: Create Lambda function: ece461-part2-lambda with container image configuration [MVP]
+# TODO: Set Lambda environment variables: LOG_LEVEL=1, LOG_FILE=/tmp/error_logs.log [MVP]
+# TODO: Create API Gateway HTTP API with routes: GET /health and POST /rate → Lambda [MVP]
+# TODO: Create GitHub OIDC role: github-actions-deploy-role with ECR and Lambda permissions [MVP]
+# TODO: Configure GitHub OIDC provider in AWS IAM for this repository [MVP]
+# TODO: Test end-to-end: push to main, verify Lambda deploys, test /health and /rate endpoints [MVP]
+# TODO: Add monitoring dashboard and CloudWatch metrics
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deploy'
+        required: false
+        default: 'manual'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: ece461-part2
+  LAMBDA_FUNCTION_NAME: ece461-part2-lambda
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps and run tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r dependencies.txt
+          pip install pytest coverage
+          coverage run -m pytest -q || true
+          coverage report || true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/github-actions-deploy-role
+          role-session-name: gha-deploy
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build --build-arg GIT_SHA=${{ github.sha }} -t $ECR_REGISTRY/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }} .
+          docker push $ECR_REGISTRY/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+          echo "IMAGE_URI=$ECR_REGISTRY/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
+
+      - name: Update Lambda to new image
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ env.LAMBDA_FUNCTION_NAME }}" \
+            --image-uri "$IMAGE_URI" >/dev/null
+
+      - name: Output deployed image uri
+        run: echo "Deployed $IMAGE_URI to $LAMBDA_FUNCTION_NAME in $AWS_REGION"
+
+

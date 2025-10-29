@@ -57,7 +57,7 @@ if [ "$COMMAND" == "install" ]; then
 elif [ "$COMMAND" == "test" ]; then
     # largely from ChatGPT
     # Run pytest under coverage, capture output
-    pytest_out=$(coverage run -m pytest tests.py --tb=no --disable-warnings --maxfail=0 -q)
+    pytest_out=$(python3 -m coverage run -m pytest tests_main.py --tb=no --disable-warnings --maxfail=0 -q)
 
     # Extract passed and failed counts from the pytest summary line
     passed_tests=$(echo "$pytest_out" | grep -o '[0-9]\+ passed' | awk '{print $1}')
@@ -72,7 +72,7 @@ elif [ "$COMMAND" == "test" ]; then
     total_tests=$((passed_tests + failed_tests + skipped_tests))
 
     # Get coverage %
-    coverage_percent=$(coverage report | tail -1 | awk '{print $4}' | tr -d '%')
+    coverage_percent=$(python3 -m coverage report | tail -1 | awk '{print $4}' | tr -d '%')
 
     echo "${passed_tests}/${total_tests} test cases passed. ${coverage_percent}% line coverage achieved."
     # Exit code: 0 only if ALL passed

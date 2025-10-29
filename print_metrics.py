@@ -7,26 +7,6 @@ def print_model_evaluation(
     size_latency: int,
     license_score: float,
     license_latency: int,
-<<<<<<< HEAD
-    ramp_up_time_score: float, 
-    ramp_up_time_latency: int, 
-    bus_factor_score: float, 
-    bus_factor_latency: int, 
-    available_dataset_and_code_score: float, 
-    available_dataset_and_code_latency: int, 
-    dataset_quality_score: float, 
-    dataset_quality_latency: int, 
-    code_quality_score: float, 
-    code_quality_latency: int, 
-    performance_claims_score: float, 
-    performance_claims_latency: int, 
-    reproducibility_score: float,
-    reproducibility_latency: int,
-    reviewedness_score: float,
-    reviewedness_latency: int,
-    treescore_score: float,
-    treescore_latency: int,
-=======
     ramp_up_time_score: float,
     ramp_up_time_latency: int,
     bus_factor_score: float,
@@ -39,7 +19,12 @@ def print_model_evaluation(
     code_quality_latency: int,
     performance_claims_score: float,
     performance_claims_latency: int,
->>>>>>> ee8e060a1a191f964b5b9cf84cc005059097ac93
+    reproducibility_score: float,
+    reproducibility_latency: int,
+    reviewedness_score: float,
+    reviewedness_latency: int,
+    treescore_score: float,
+    treescore_latency: int,
     net_score: float,
     net_score_latency: int
 ):
@@ -82,6 +67,18 @@ def print_model_evaluation(
         Score assessing the validity or credibility of performance claims made by the API.
     performance_claims_latency : int
         Latency in milliseconds associated with evaluating performance claims.
+    reproducibility_score : float
+        Score representing the reproducibility of the model based on available examples.
+    reproducibility_latency : int
+        Latency in milliseconds associated with evaluating reproducibility.
+    reviewedness_score : float
+        Score representing the fraction of code introduced via reviewed pull requests.
+    reviewedness_latency : int
+        Latency in milliseconds associated with evaluating reviewedness.
+    treescore_score : float
+        Score representing the average net score of immediate parent models.
+    treescore_latency : int
+        Latency in milliseconds associated with evaluating treescore.
     net_score : float
         Overall aggregated score for the API.
     net_score_latency : int
@@ -92,10 +89,6 @@ def print_model_evaluation(
     None
         Prints the JSON-formatted evaluation dictionary to stdout.
     """
-<<<<<<< HEAD
-    
-    name = api_info.get("id", "").split('/')[1] if api_info.get("id") else "unknown"
-=======
 
     id_val = api_info.get("id") or ""
     if "/" in id_val:
@@ -103,7 +96,6 @@ def print_model_evaluation(
         name = id_val.split("/", 1)[1]
     else:
         name = id_val
->>>>>>> ee8e060a1a191f964b5b9cf84cc005059097ac93
     category = "MODEL"
 
     result = {
@@ -135,12 +127,5 @@ def print_model_evaluation(
         "treescore_latency": int(treescore_latency),
     }
 
-<<<<<<< HEAD
-    print(json.dumps(result, separators=(',', ':')))    
-
-
-
-=======
     # Use compact separators (no spaces) for consistent machine-readable output
     print(json.dumps(result, separators=(",", ":")))
->>>>>>> ee8e060a1a191f964b5b9cf84cc005059097ac93

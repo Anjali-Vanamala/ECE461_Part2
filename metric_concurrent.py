@@ -1,22 +1,3 @@
-<<<<<<< HEAD
-from metrics.data_quality import data_quality
-from metrics.code_quality import code_quality
-from metrics.dataset_and_code_score import dataset_and_code_score
-from metrics.performance_claims import performance_claims
-from metrics.size import calculate_size_score
-from metrics.bus_factor import bus_factor
-from metrics.ramp_up_time import ramp_up_time
-from metrics.license import get_license_score
-from metrics.reproducibility import reproducibility
-from metrics.reviewedness import reviewedness
-from metrics.treescore import treescore
-from print_metrics import print_model_evaluation
-import logger
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-=======
->>>>>>> ee8e060a1a191f964b5b9cf84cc005059097ac93
-
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Any, Dict
@@ -29,7 +10,10 @@ from metrics.dataset_and_code_score import dataset_and_code_score
 from metrics.license import get_license_score
 from metrics.performance_claims import performance_claims
 from metrics.ramp_up_time import ramp_up_time
+from metrics.reproducibility import reproducibility
+from metrics.reviewedness import reviewedness
 from metrics.size import calculate_size_score
+from metrics.treescore import treescore
 from print_metrics import print_model_evaluation
 
 
@@ -87,6 +71,12 @@ def main(
     bus_latency: int
     ramp_score: float
     ramp_latency: int
+    repro_score: float
+    repro_latency: int
+    review_score: float
+    review_latency: int
+    tree_score: float
+    tree_latency: int
 
     data_quality_score, dq_latency = results["data_quality"]
     code_quality_score, cq_latency = results["code_quality"]
@@ -107,15 +97,20 @@ def main(
     logger.info("Concurrent thread results unpacked")
 
     # Final net score calculation
-<<<<<<< HEAD
     # Adjusted weights to accommodate new metrics (total = 1.0)
-    net_score = (0.09 * license_score + 0.10 * ramp_score + 0.11 * net_size_score + 
-                 0.13 * data_quality_score + 0.10 * bus_score + 0.18 * dc_score + 
-                 0.10 * code_quality_score + 0.09 * perf_score + 
-                 0.05 * repro_score + 0.05 * review_score + 0.05 * tree_score)
-=======
-    net_score: float = (0.1 * license_score + 0.11 * ramp_score + 0.12 * net_size_score + 0.15 * data_quality_score + 0.11 * bus_score + 0.2 * dc_score + 0.11 * code_quality_score + 0.1 * perf_score)
->>>>>>> ee8e060a1a191f964b5b9cf84cc005059097ac93
+    net_score: float = (
+        0.09 * license_score +
+        0.10 * ramp_score +
+        0.11 * net_size_score +
+        0.13 * data_quality_score +
+        0.10 * bus_score +
+        0.18 * dc_score +
+        0.10 * code_quality_score +
+        0.09 * perf_score +
+        0.05 * repro_score +
+        0.05 * review_score +
+        0.05 * tree_score
+    )
 
     end = time.time()
     net_latency: int = int((end - start) * 1000)
@@ -124,23 +119,14 @@ def main(
         model_info,
         size_scores, size_latency,
         license_score, license_latency,
-<<<<<<< HEAD
-        ramp_score, ramp_latency, 
-        bus_score, bus_latency, 
-        dc_score, dc_latency, 
-        data_quality_score, dq_latency, 
-        code_quality_score, cq_latency, 
-        perf_score, perf_latency, 
-        repro_score, repro_latency,
-        review_score, review_latency,
-        tree_score, tree_latency,
-=======
         ramp_score, ramp_latency,
         bus_score, bus_latency,
         dc_score, dc_latency,
         data_quality_score, dq_latency,
         code_quality_score, cq_latency,
         perf_score, perf_latency,
->>>>>>> ee8e060a1a191f964b5b9cf84cc005059097ac93
+        repro_score, repro_latency,
+        review_score, review_latency,
+        tree_score, tree_latency,
         net_score, net_latency
     )

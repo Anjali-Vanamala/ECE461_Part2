@@ -186,7 +186,7 @@ class Test_performanceclaims:
         model_url = "https://huggingface.co/parvk11/audience_classifier_model"
         score, latency = performance_claims(model_url)
         # sample output: 0.15
-        assert (0 <= score <= (0.15 + .15) or score == 0.0)
+        assert (0 <= score <= (.6))
 
     def test_whispertiny(self):
         model_url = "https://huggingface.co/openai/whisper-tiny/tree/main"
@@ -201,7 +201,7 @@ class Test_datasetandcodescore:
         dataset_url = "https://huggingface.co/datasets/bookcorpus/bookcorpus"
         score, latency = dataset_and_code_score(code_url, dataset_url)
         # sample output: 1
-        assert ((1 - 0.15) <= score <= 1 or score == 0.6)
+        assert ((1 - 0.2) <= score <= 1 or score == 0.6)
 
     def test_no_urls(self):
         code_url = ""

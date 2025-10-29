@@ -210,8 +210,7 @@ relevance_score : int
 '''
 def relevance_checker(api_info: str):
     
-    from datetime import date
-    from dateutil import parser
+    from datetime import date, datetime
     
     logger.debug("Starting relevance check")
     
@@ -219,7 +218,9 @@ def relevance_checker(api_info: str):
     
     try:
         date_creation = api_info['createdAt'] #extract creation date from json, returns date & time format
-        date_creation = parser.parse(date_creation) #format the date/time info, make it easy to extract date
+        # Handle ISO 8601 format with 'Z' suffix by replacing it with '+00:00'
+        date_str = date_creation.replace('Z', '+00:00')
+        date_creation = datetime.fromisoformat(date_str) #format the date/time info, make it easy to extract date
         date_creation = date_creation.date() #extract date wo the time/time zone
         
         days_passed = (today - date_creation).days #get number of days passed in int

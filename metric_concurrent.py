@@ -98,19 +98,7 @@ def main(
 
     # Final net score calculation
     # Adjusted weights to accommodate new metrics (total = 1.0)
-    net_score: float = (
-        0.09 * license_score +
-        0.10 * ramp_score +
-        0.11 * net_size_score +
-        0.13 * data_quality_score +
-        0.10 * bus_score +
-        0.18 * dc_score +
-        0.10 * code_quality_score +
-        0.09 * perf_score +
-        0.05 * repro_score +
-        0.05 * review_score +
-        0.05 * tree_score
-    )
+    net_score: float = (0.09 * license_score + 0.10 * ramp_score + 0.11 * net_size_score + 0.13 * data_quality_score + 0.10 * bus_score + 0.18 * dc_score + 0.10 * code_quality_score + 0.09 * perf_score + 0.05 * repro_score + 0.05 * review_score + 0.05 * tree_score)
 
     end = time.time()
     net_latency: int = int((end - start) * 1000)

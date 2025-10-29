@@ -31,8 +31,9 @@ def has_example_files(
         siblings = model_info.get('siblings', [])
         for sibling in siblings:
             filename = sibling.get('rfilename', '').lower()
-            if (any(kw in filename for kw in EXAMPLE_KEYWORDS) and
-                    any(filename.endswith(ext) for ext in EXAMPLE_EXTENSIONS)):
+            has_keyword = any(kw in filename for kw in EXAMPLE_KEYWORDS)
+            has_extension = any(filename.endswith(ext) for ext in EXAMPLE_EXTENSIONS)
+            if has_keyword and has_extension:
                 logger.debug(f"Found example file: {sibling.get('rfilename')}")
                 return True
 

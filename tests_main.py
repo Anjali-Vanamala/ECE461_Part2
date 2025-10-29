@@ -872,13 +872,13 @@ class Test_Reproducibility:
         model_info = {'siblings': [{'rfilename': 'example.py'}]}
         code_info = {'full_name': 'test/repo'}
         model_readme = "Basic README"
-        
+
         from metrics.reproducibility import reproducibility
         score, latency = reproducibility(model_info, code_info, model_readme)
-        
+
         assert score == 1.0
         assert latency >= 0
-    
+
     def test_reproducibility_with_readme_code(self):
         """Test reproducibility finds code in README"""
         model_info = {'siblings': []}
@@ -889,22 +889,22 @@ class Test_Reproducibility:
         tokenizer = AutoTokenizer.from_pretrained("model")
         ```
         """
-        
+
         from metrics.reproducibility import reproducibility
         score, latency = reproducibility(model_info, code_info, model_readme)
-        
+
         assert score == 1.0
         assert latency >= 0
-    
+
     def test_reproducibility_no_examples(self):
         """Test reproducibility with no examples"""
         model_info = {'siblings': [{'rfilename': 'config.json'}]}
         code_info = {'full_name': 'test/repo'}
         model_readme = "Basic README"
-        
+
         from metrics.reproducibility import reproducibility
         score, latency = reproducibility(model_info, code_info, model_readme)
-        
+
         assert score == 0.0
         assert latency >= 0
 
@@ -919,26 +919,26 @@ class Test_Reviewedness:
             {'number': 1, 'created_at': '2024-01-01T00:00:00Z', 'url': 'https://api.github.com/repos/test/repo/pulls/1'},
             {'number': 2, 'created_at': '2024-06-01T00:00:00Z', 'url': 'https://api.github.com/repos/test/repo/pulls/2'}
         ]
-        
+
         reviews_response = MagicMock()
         reviews_response.status_code = 200
         reviews_response.json.return_value = [{'id': 1, 'state': 'APPROVED'}]
-        
+
         # Mock should return PRs first, then reviews for each PR
         mock_get.side_effect = [prs_response, reviews_response, reviews_response]
-        
+
         from metrics.reviewedness import reviewedness
         score, latency = reviewedness({'full_name': 'test/repo'})
-        
+
         # With 2 PRs both having reviews, fraction = 1.0, so score should be 1.0
         assert score == 1.0
         assert latency >= 0
-    
+
     def test_reviewedness_no_repo(self):
         """Test reviewedness with no GitHub repo"""
         from metrics.reviewedness import reviewedness
         score, latency = reviewedness({})
-        
+
         assert score == 0.0
         assert latency >= 0
 
@@ -951,21 +951,21 @@ class Test_Treescore:
         parent_info.downloads = 1000000
         parent_info.likes = 500
         parent_info.siblings = [MagicMock(rfilename='README.md')]
-        
+
         mock_model_info.return_value = parent_info
-        
+
         model_info = {'cardData': {'base_model': 'parent-model'}}
-        
+
         from metrics.treescore import treescore
         score, latency = treescore(model_info)
-        
+
         assert 0.0 <= score <= 1.0
         assert latency >= 0
-    
+
     def test_treescore_no_parents(self):
         """Test treescore with no parent models"""
         from metrics.treescore import treescore
         score, latency = treescore({'cardData': {}})
-        
+
         assert score == 0.0
         assert latency >= 0

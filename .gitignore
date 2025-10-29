@@ -5,3 +5,4 @@ error_logs
 test.log
 .coverage
 temp_log.txt
+.mypy_cache/

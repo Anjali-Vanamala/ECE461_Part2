@@ -112,7 +112,6 @@ def reproducibility(model_info: Dict[str, Any], code_info: Dict[str, Any],
     start = time.time()
     logger.info("Calculating reproducibility metric")
 
-
     try:
         # Check for example files in repositories
         has_files = has_example_files(model_info, code_info)

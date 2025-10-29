@@ -16,24 +16,17 @@ load_dotenv()
 LOG_FILE = os.environ.get("LOG_FILE")
 LOG_LEVEL = int(os.environ.get("LOG_LEVEL", 0))  # default to 0
 
-# Validate LOG_FILE early and narrow its type for type checkers
-if not LOG_FILE:
-    # Missing or empty path - cannot proceed
+# Handle invalid LOG_FILE input
+if LOG_FILE is None:
     sys.exit(1)
 if not os.path.isfile(LOG_FILE):
-    # If the file doesn't exist, try to create the containing directory then create the file
-    dirpath = os.path.dirname(LOG_FILE) or "."
-    try:
-        os.makedirs(dirpath, exist_ok=True)
-        open(LOG_FILE, "w").close()
-    except Exception:
-        sys.exit(1)
+    sys.exit(1)
 
-# At this point LOG_FILE is a non-empty path string; narrow for mypy
+# At this point LOG_FILE is guaranteed to be a str, narrow type for mypy
 assert LOG_FILE is not None
 LOG_FILE_PATH: str = LOG_FILE
 
-# Start with a blank log file each time (ensure writable)
+# Start with a blank log file each time
 open(LOG_FILE_PATH, "w").close()
 
 # Then open file in append mode and write message

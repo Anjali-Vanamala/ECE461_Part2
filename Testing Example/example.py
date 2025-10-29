@@ -1,5 +1,5 @@
 
-def add(a, b): 
+def add(a, b):
     """
     Adds two numbers.
 
@@ -18,7 +18,8 @@ def add(a, b):
     """
     return a + b
 
-def multiply(a, b): 
+
+def multiply(a, b):
     """
     Multiplies two numbers.
 
@@ -32,7 +33,7 @@ def multiply(a, b):
     Returns
     -------
     int
-        Product of a and b
-        
+    Product of a and b
+
     """
     return a * b

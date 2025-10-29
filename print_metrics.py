@@ -1,26 +1,27 @@
 import json
 
+
 def print_model_evaluation(
-    api_info: dict, 
+    api_info: dict,
     size_score: dict,
-    size_latency: int, 
-    license_score: float, 
+    size_latency: int,
+    license_score: float,
     license_latency: int,
-    ramp_up_time_score: float, 
-    ramp_up_time_latency: int, 
-    bus_factor_score: float, 
-    bus_factor_latency: int, 
-    available_dataset_and_code_score: float, 
-    available_dataset_and_code_latency: int, 
-    dataset_quality_score: float, 
-    dataset_quality_latency: int, 
-    code_quality_score: float, 
-    code_quality_latency: int, 
-    performance_claims_score: float, 
-    performance_claims_latency: int, 
+    ramp_up_time_score: float,
+    ramp_up_time_latency: int,
+    bus_factor_score: float,
+    bus_factor_latency: int,
+    available_dataset_and_code_score: float,
+    available_dataset_and_code_latency: int,
+    dataset_quality_score: float,
+    dataset_quality_latency: int,
+    code_quality_score: float,
+    code_quality_latency: int,
+    performance_claims_score: float,
+    performance_claims_latency: int,
     net_score: float,
     net_score_latency: int
-): 
+):
     """
     Print a JSON-formatted dictionary summarizing the evaluation of a model.
 
@@ -70,14 +71,19 @@ def print_model_evaluation(
     None
         Prints the JSON-formatted evaluation dictionary to stdout.
     """
-    
-    name = api_info.get("id").split('/')[1]
+
+    id_val = api_info.get("id") or ""
+    if "/" in id_val:
+        # namespace/model format expected
+        name = id_val.split("/", 1)[1]
+    else:
+        name = id_val
     category = "MODEL"
 
     result = {
         "name": name,
         "category": category,
-        "net_score": round(net_score,2),
+        "net_score": round(net_score, 2),
         "net_score_latency": int(net_score_latency),
         "ramp_up_time": round(ramp_up_time_score, 2),
         "ramp_up_time_latency": int(ramp_up_time_latency),
@@ -87,7 +93,7 @@ def print_model_evaluation(
         "performance_claims_latency": int(performance_claims_latency),
         "license": round(license_score, 2),
         "license_latency": int(license_latency),
-        "size_score": size_score,  
+        "size_score": size_score,
         "size_score_latency": int(size_latency),
         "dataset_and_code_score": round(available_dataset_and_code_score, 2),
         "dataset_and_code_score_latency": int(available_dataset_and_code_latency),
@@ -97,7 +103,5 @@ def print_model_evaluation(
         "code_quality_latency": int(code_quality_latency),
     }
 
-    print(json.dumps(result,separators=(',' ':')))    
-
-
-
+    # Use compact separators (no spaces) for consistent machine-readable output
+    print(json.dumps(result, separators=(",", ":")))

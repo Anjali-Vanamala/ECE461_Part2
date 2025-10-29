@@ -22,8 +22,12 @@ if LOG_FILE is None:
 if not os.path.isfile(LOG_FILE):
     sys.exit(1)
 
+# At this point LOG_FILE is guaranteed to be a str, narrow type for mypy
+assert LOG_FILE is not None
+LOG_FILE_PATH: str = LOG_FILE
+
 # Start with a blank log file each time
-open(LOG_FILE, "w").close()
+open(LOG_FILE_PATH, "w").close()
 
 # Then open file in append mode and write message
 # LOG_LEVEL 1 informational messages
@@ -31,7 +35,7 @@ open(LOG_FILE, "w").close()
 
 def info(msg: str):
     if LOG_LEVEL >= 1:
-        with open(LOG_FILE, "a") as log_file:
+        with open(LOG_FILE_PATH, "a") as log_file:
             log_file.write("Info:" + msg + "\n")
 
 # LOG_LEVEL 2 debug messages
@@ -40,5 +44,5 @@ def info(msg: str):
 
 def debug(msg: str):
     if LOG_LEVEL == 2:
-        with open(LOG_FILE, "a") as log_file:
+        with open(LOG_FILE_PATH, "a") as log_file:
             log_file.write("Debug:" + msg + "\n")

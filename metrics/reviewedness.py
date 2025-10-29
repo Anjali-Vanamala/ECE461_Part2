@@ -136,8 +136,6 @@ def reviewedness(code_info: Dict[str, Any]) -> Tuple[float, int]:
     start = time.time()
     logger.info("Calculating reviewedness metric")
 
-    score = 0.0
-
     try:
         fraction = get_reviewed_pr_fraction(code_info)
 

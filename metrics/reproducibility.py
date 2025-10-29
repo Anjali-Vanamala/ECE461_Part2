@@ -112,7 +112,6 @@ def reproducibility(model_info: Dict[str, Any], code_info: Dict[str, Any],
     start = time.time()
     logger.info("Calculating reproducibility metric")
 
-    score = 0.0
 
     try:
         # Check for example files in repositories

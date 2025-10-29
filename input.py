@@ -11,21 +11,21 @@ import metric_concurrent
 
 def validate_environment() -> int:
     """Validate required environment variables at startup."""
-    
+
     # Check GITHUB_TOKEN - simple validation
     github_token = os.getenv("GITHUB_TOKEN")
     if github_token is not None:
         if not github_token or github_token.strip() == "" or github_token == "invalid":
             print("Error: Invalid GITHUB_TOKEN", file=sys.stderr)
             return 1
-    
+
     # Check LOG_FILE - simple validation (don't create files)
     log_file = os.getenv("LOG_FILE")
     if log_file is not None:
         if not os.path.exists(log_file):
             print(f"Error: Log file does not exist: {log_file}", file=sys.stderr)
             return 1
-    
+
     # Check LOG_LEVEL
     log_level = os.getenv("LOG_LEVEL")
     if log_level is not None:
@@ -37,26 +37,25 @@ def validate_environment() -> int:
         except ValueError:
             print(f"Error: LOG_LEVEL must be an integer, got: {log_level}", file=sys.stderr)
             return 1
-    
+
     return 0
-
-"""
-If no dataset in input line, see if model was trained on
-a previously seen dataset.
-
-Parameters
-----------
-model_readme : str
-    Model README text
-
-Returns
--------
-string
-    The dataset link found, or None.
-"""
 
 
 def find_dataset(model_readme: str, seen_datasets: set) -> str:
+    """
+    If no dataset in input line, see if model was trained on
+    a previously seen dataset.
+
+    Parameters
+    ----------
+    model_readme : str
+        Model README text
+
+    Returns
+    -------
+    string
+        The dataset link found, or None.
+    """
     for dataset_url in seen_datasets:
         dataset = dataset_url.split("/")[-1].lower()
         if dataset in model_readme:
@@ -65,25 +64,12 @@ def find_dataset(model_readme: str, seen_datasets: set) -> str:
     return ""  # None found
 
 
-'''
-Main function to get & condiion the user input url
-
-Parameters
-----------
-user_url: str
-    user input pre-parsed
-
-Returns
--------
-    None
-'''
-
-
 def main():
+    """Main function to get & condition the user input url."""
     # Validate environment variables first
     if validate_environment() != 0:
         sys.exit(1)
-    
+
     model_readme = ""
     dataset_readme = ""
     code_readme = ""

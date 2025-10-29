@@ -167,8 +167,6 @@ def treescore(model_info_dict: Dict[str, Any]) -> Tuple[float, int]:
     start = time.time()
     logger.info("Calculating treescore metric")
 
-    score = 0.0
-
     try:
         # Get parent models
         parents = get_parent_models(model_info_dict)

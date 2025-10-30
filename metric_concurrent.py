@@ -24,7 +24,7 @@ def main(
     code_info: Any,
     code_readme: Any,
     raw_dataset_url: str
-) -> None:
+) -> list[float]:
     start = time.time()
     logger.info("Begin processing metrics.")
 
@@ -34,7 +34,7 @@ def main(
         future_to_metric: Dict[Future, str] = {
             executor.submit(data_quality, model_info, model_readme): "data_quality",
             executor.submit(code_quality, model_info, code_info, model_readme, code_readme): "code_quality",
-            executor.submit(dataset_and_code_score, code_info, raw_dataset_url): "dc_score",
+            executor.submit(dataset_and_code_score, code_info, raw_dataset_url, model_readme): "dc_score",
             executor.submit(performance_claims, raw_model_url): "performance_claims",
             executor.submit(calculate_size_score, raw_model_url): "size_score",
             executor.submit(get_license_score, raw_model_url): "license_score",
@@ -92,6 +92,7 @@ def main(
     ramp_score, ramp_latency = results["ramp_up_time"]
     repro_score, repro_latency = results["reproducibility"]
     review_score, review_latency = results["reviewedness"]
+    review_score = max(0.0, review_score)
     tree_score, tree_latency = results["treescore"]
 
     logger.info("Concurrent thread results unpacked")
@@ -118,3 +119,14 @@ def main(
         tree_score, tree_latency,
         net_score, net_latency
     )
+    return ([net_size_score,
+             license_score,
+             ramp_score,
+             bus_score,
+             dc_score,
+             data_quality_score,
+             code_quality_score,
+             perf_score,
+             repro_score,
+             review_score,
+             tree_score])

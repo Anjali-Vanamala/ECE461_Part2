@@ -19,10 +19,10 @@ import logger  # Import custom logger like performance_claims.py
 
 # Constants for weights (defined once to avoid repetition)
 SIZE_WEIGHTS = {
-    'raspberry_pi': 0.35,  # Higher weight due to popularity
-    'jetson_nano': 0.25,  # Important for edge AI applications
-    'desktop_pc': 0.20,  # Common development environment
-    'aws_server': 0.20  # Cloud deployment is common
+    'raspberry_pi': 0.15,  # Higher weight due to popularity
+    'jetson_nano': 0.15,  # Important for edge AI applications
+    'desktop_pc': 0.35,  # Common development environment
+    'aws_server': 0.35  # Cloud deployment is common
 }
 
 

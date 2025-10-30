@@ -1,6 +1,7 @@
 # If the dataset used for training and benchmarking is well documented,
 #    along with any example code
 import os
+import re
 import time
 from typing import Tuple
 
@@ -21,6 +22,23 @@ Returns
 string
     Response from LLM. Should be just a float in string format
 """
+
+
+def extract_and_validate_readme_code(readme: str) -> bool:
+    """Extract Python code from README and validate syntax."""
+    if not readme:
+        return False
+
+    # Find Python code blocks
+    pattern = r'```python\s*(.*?)```'
+    code_blocks = re.findall(pattern, readme, re.DOTALL | re.IGNORECASE)
+
+    if not code_blocks:
+        logger.debug("No Python code blocks found in README")
+        return False
+
+    logger.debug(f"Found {len(code_blocks)} code blocks in README")
+    return True
 
 
 def query_genai_studio(prompt: str) -> str:
@@ -77,7 +95,7 @@ float
 """
 
 
-def dataset_and_code_score(code_url: str, dataset_url: str) -> Tuple[float, float]:
+def dataset_and_code_score(code_url: str, dataset_url: str, readme: str) -> Tuple[float, float]:
     # start latency timer
     start = time.time()
     logger.info("Calculating dataset_and_score metric")
@@ -88,7 +106,7 @@ def dataset_and_code_score(code_url: str, dataset_url: str) -> Tuple[float, floa
     score = 0.0
 
     # Assume if no dataset or code link given, then it doesn't exist
-    if code_url:
+    if extract_and_validate_readme_code(readme):
         score += 0.5
 
     # Use AI to parse Dataset url based on this Piazza post:

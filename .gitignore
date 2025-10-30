@@ -6,3 +6,4 @@ test.log
 .coverage
 temp_log.txt
 .mypy_cache/
+venv

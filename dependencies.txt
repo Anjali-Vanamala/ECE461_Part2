@@ -5,3 +5,7 @@ pytest
 dotenv
 coverage
 python-dateutil
+fastapi
+uvicorn
+python-multipart
+pydantic

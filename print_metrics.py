@@ -19,6 +19,12 @@ def print_model_evaluation(
     code_quality_latency: int,
     performance_claims_score: float,
     performance_claims_latency: int,
+    reproducibility_score: float,
+    reproducibility_latency: int,
+    reviewedness_score: float,
+    reviewedness_latency: int,
+    treescore_score: float,
+    treescore_latency: int,
     net_score: float,
     net_score_latency: int
 ):
@@ -61,6 +67,18 @@ def print_model_evaluation(
         Score assessing the validity or credibility of performance claims made by the API.
     performance_claims_latency : int
         Latency in milliseconds associated with evaluating performance claims.
+    reproducibility_score : float
+        Score representing the reproducibility of the model based on available examples.
+    reproducibility_latency : int
+        Latency in milliseconds associated with evaluating reproducibility.
+    reviewedness_score : float
+        Score representing the fraction of code introduced via reviewed pull requests.
+    reviewedness_latency : int
+        Latency in milliseconds associated with evaluating reviewedness.
+    treescore_score : float
+        Score representing the average net score of immediate parent models.
+    treescore_latency : int
+        Latency in milliseconds associated with evaluating treescore.
     net_score : float
         Overall aggregated score for the API.
     net_score_latency : int
@@ -101,6 +119,12 @@ def print_model_evaluation(
         "dataset_quality_latency": int(dataset_quality_latency),
         "code_quality": round(code_quality_score, 2),
         "code_quality_latency": int(code_quality_latency),
+        "reproducibility": round(reproducibility_score, 2),
+        "reproducibility_latency": int(reproducibility_latency),
+        "reviewedness": round(reviewedness_score, 2),
+        "reviewedness_latency": int(reviewedness_latency),
+        "treescore": round(treescore_score, 2),
+        "treescore_latency": int(treescore_latency),
     }
 
     # Use compact separators (no spaces) for consistent machine-readable output

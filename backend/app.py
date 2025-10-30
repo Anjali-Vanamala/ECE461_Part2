@@ -1,5 +1,6 @@
 import fastapi  # pyright: ignore[reportMissingImports]
-from backend.api.routes import health, package, ingest
+
+from backend.api.routes import health, ingest, package
 
 app = fastapi.FastAPI(
     title="Model Registry API",

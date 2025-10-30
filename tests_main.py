@@ -4,21 +4,24 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import requests as rq
 
-import input
-import metrics.code_quality
-import metrics.data_quality
-from input import find_dataset, main
-from metrics.bus_factor import bus_factor
-from metrics.dataset_and_code_score import dataset_and_code_score
-from metrics.license import (extract_license_section,
-                             get_detailed_license_score, get_license_score,
-                             get_license_score_cached)
-from metrics.performance_claims import performance_claims
-from metrics.ramp_up_time import ramp_up_time
-from metrics.size import (SIZE_WEIGHTS, calculate_net_size_score,
-                          calculate_size_score, calculate_size_score_cached,
-                          calculate_size_scores, extract_model_id_from_url,
-                          get_detailed_size_score, get_model_size_for_scoring)
+import phase1
+from phase1 import metrics
+from phase1.input import find_dataset, main
+from phase1.metrics.bus_factor import bus_factor
+from phase1.metrics.dataset_and_code_score import dataset_and_code_score
+from phase1.metrics.license import (extract_license_section,
+                                    get_detailed_license_score,
+                                    get_license_score,
+                                    get_license_score_cached)
+from phase1.metrics.performance_claims import performance_claims
+from phase1.metrics.ramp_up_time import ramp_up_time
+from phase1.metrics.size import (SIZE_WEIGHTS, calculate_net_size_score,
+                                 calculate_size_score,
+                                 calculate_size_score_cached,
+                                 calculate_size_scores,
+                                 extract_model_id_from_url,
+                                 get_detailed_size_score,
+                                 get_model_size_for_scoring)
 
 """
 Usage Instructions:
@@ -365,7 +368,7 @@ class Test_Size:
         assert scores1 == scores2
 
     def test_cache_clearing_and_reuse(self):
-        from metrics.size import _size_cache
+        from phase1.metrics.size import _size_cache
         _size_cache.clear()
         model_id = "google-bert/bert-base-uncased"
         assert model_id not in _size_cache
@@ -376,7 +379,7 @@ class Test_Size:
         assert net1 == net2
 
     def test_size_cache_with_different_inputs(self):
-        from metrics.size import _size_cache
+        from phase1.metrics.size import _size_cache
         _size_cache.clear()
         model_id = "google-bert/bert-base-uncased"
         scores1, net1, latency1 = calculate_size_score_cached(model_id)
@@ -555,7 +558,7 @@ class Test_License:
     def test_ambiguous_license_no_positive_indicators(self):
         # Test case for no positive indicators (line 117)
         # This is hard to test with real models, so we'll test the function directly
-        from metrics.license import analyze_license_text
+        from phase1.metrics.license import analyze_license_text
 
         # Test text with no license indicators
         license_text = "This is some random text with no license information."
@@ -564,20 +567,20 @@ class Test_License:
 
     def test_gated_license_detection(self):
         # Test gated license detection (line 75)
-        from metrics.license import analyze_license_text
+        from phase1.metrics.license import analyze_license_text
         license_text = "This is a gated model requiring access request."
         score = analyze_license_text(license_text)
         assert score == 0.0  # Should return 0.0 for gated licenses
 
     def test_empty_license_text(self):
         # Test empty license text (line 75)
-        from metrics.license import analyze_license_text
+        from phase1.metrics.license import analyze_license_text
         score = analyze_license_text("")
         assert score == 0.0
 
     def test_none_license_text(self):
         # Test None license text
-        from metrics.license import analyze_license_text
+        from phase1.metrics.license import analyze_license_text
         score = analyze_license_text(None)
         assert score == 0.0
 
@@ -659,7 +662,7 @@ class Test_License:
 
     def test_compatible_license_detection(self):
         # Test various compatible licenses
-        from metrics.license import analyze_license_text
+        from phase1.metrics.license import analyze_license_text
         compatible_licenses = [
             "Apache 2.0 license",
             "MIT License",
@@ -673,7 +676,7 @@ class Test_License:
 
     def test_incompatible_license_detection(self):
         # Test various incompatible licenses
-        from metrics.license import analyze_license_text
+        from phase1.metrics.license import analyze_license_text
         incompatible_licenses = [
             "GPL v3 license",
             "AGPL license",
@@ -687,7 +690,7 @@ class Test_License:
     # NEW TESTS TO COVER MISSING LINES
     def test_ambiguous_license_exact_coverage(self):
         # Direct test to cover lines 101-117 specifically
-        from metrics.license import analyze_license_text
+        from phase1.metrics.license import analyze_license_text
 
         # Test case that hits the "ambiguous but positive indicators" path (line 112-115)
         license_text = "This model is open source and permissive for research use."
@@ -702,7 +705,7 @@ class Test_License:
 
     def test_download_readme_edge_cases(self):
         # Test edge cases for download_readme_directly to cover lines 139-140, 159-160
-        from metrics.license import download_readme_directly
+        from phase1.metrics.license import download_readme_directly
 
         # Test with a non-existent model to cover error handling
         result = download_readme_directly("non/existent-model-12345")
@@ -710,7 +713,7 @@ class Test_License:
 
     def test_license_pattern_matching(self):
         # Test to cover lines 215-216, 220-221 (pattern matching edge cases)
-        from metrics.license import extract_license_section
+        from phase1.metrics.license import extract_license_section
 
         # Test with various license header formats
         test_content = """
@@ -733,7 +736,7 @@ More content
         model_id = "google-bert/bert-base-uncased"
 
         # Clear cache first
-        from metrics.license import _license_cache
+        from phase1.metrics.license import _license_cache
         _license_cache.clear()
 
         # First call - should calculate
@@ -748,7 +751,7 @@ More content
 
     def test_extract_model_id_edge_cases(self):
         # Test to cover lines 263-265 (extract_model_id edge cases)
-        from metrics.license import extract_model_id_from_url
+        from phase1.metrics.license import extract_model_id_from_url
 
         # Test various URL formats
         assert extract_model_id_from_url("https://huggingface.co/google/bert") == "google/bert"
@@ -757,7 +760,7 @@ More content
 
     def test_analyze_license_mixed_signals(self):
         # Test to cover line 307 and other edge cases
-        from metrics.license import analyze_license_text
+        from phase1.metrics.license import analyze_license_text
 
         # Test with both compatible and incompatible licenses (should return 0.0)
         license_text = "This uses Apache 2.0 but also has GPL components"
@@ -766,7 +769,7 @@ More content
 
     def test_direct_license_analysis_coverage(self):
         # Direct test to hit the exact missing lines in analyze_license_text
-        from metrics.license import analyze_license_text
+        from phase1.metrics.license import analyze_license_text
 
         # Test case 1: Empty text (line 75)
         assert analyze_license_text("") == 0.0
@@ -826,7 +829,7 @@ class Test_Input:
 
     @patch("builtins.open", new_callable=mock_open, read_data="https://github.com/user/repo,https://huggingface.co/datasets/dataset1,https://huggingface.co/models/model1\n")
     @patch("requests.get")
-    @patch("input.metric_concurrent.main")
+    @patch("phase1.metric_concurrent.main")
     def test_main_runs_successfully(self, mock_metric_main, mock_requests_get, mock_file):
         # Fake API responses
         model_api_response = MagicMock()
@@ -857,7 +860,7 @@ class Test_Input:
         ]
 
         # Fake sys.argv
-        with patch.object(input.sys, 'argv', ["input.py", "fake_input.txt"]):
+        with patch.object(phase1.input.sys, 'argv', ["input.py", "fake_input.txt"]):
             main()
 
         assert mock_metric_main.called
@@ -873,7 +876,7 @@ class Test_Reproducibility:
         code_info = {'full_name': 'test/repo'}
         model_readme = "Basic README"
 
-        from metrics.reproducibility import reproducibility
+        from phase1.metrics.reproducibility import reproducibility
         score, latency = reproducibility(model_info, code_info, model_readme)
 
         assert score == 1.0
@@ -890,7 +893,7 @@ class Test_Reproducibility:
         ```
         """
 
-        from metrics.reproducibility import reproducibility
+        from phase1.metrics.reproducibility import reproducibility
         score, latency = reproducibility(model_info, code_info, model_readme)
 
         assert score == 1.0
@@ -902,7 +905,7 @@ class Test_Reproducibility:
         code_info = {'full_name': 'test/repo'}
         model_readme = "Basic README"
 
-        from metrics.reproducibility import reproducibility
+        from phase1.metrics.reproducibility import reproducibility
         score, latency = reproducibility(model_info, code_info, model_readme)
 
         assert score == 0.0
@@ -927,7 +930,7 @@ class Test_Reviewedness:
         # Mock should return PRs first, then reviews for each PR
         mock_get.side_effect = [prs_response, reviews_response, reviews_response]
 
-        from metrics.reviewedness import reviewedness
+        from phase1.metrics.reviewedness import reviewedness
         score, latency = reviewedness({'full_name': 'test/repo'})
 
         # With 2 PRs both having reviews, fraction = 1.0, so score should be 1.0
@@ -936,7 +939,7 @@ class Test_Reviewedness:
 
     def test_reviewedness_no_repo(self):
         """Test reviewedness with no GitHub repo"""
-        from metrics.reviewedness import reviewedness
+        from phase1.metrics.reviewedness import reviewedness
         score, latency = reviewedness({})
 
         assert score == 0.0
@@ -944,7 +947,7 @@ class Test_Reviewedness:
 
 
 class Test_Treescore:
-    @patch('metrics.treescore.model_info')
+    @patch('phase1.metrics.treescore.model_info')
     def test_treescore_with_parents(self, mock_model_info):
         """Test treescore with parent models"""
         parent_info = MagicMock()
@@ -956,7 +959,7 @@ class Test_Treescore:
 
         model_info = {'cardData': {'base_model': 'parent-model'}}
 
-        from metrics.treescore import treescore
+        from phase1.metrics.treescore import treescore
         score, latency = treescore(model_info)
 
         assert 0.0 <= score <= 1.0
@@ -964,7 +967,7 @@ class Test_Treescore:
 
     def test_treescore_no_parents(self):
         """Test treescore with no parent models"""
-        from metrics.treescore import treescore
+        from phase1.metrics.treescore import treescore
         score, latency = treescore({'cardData': {}})
 
         assert score == 0.0

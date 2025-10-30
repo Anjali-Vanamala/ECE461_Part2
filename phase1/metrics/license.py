@@ -11,9 +11,8 @@ import re
 import time
 from typing import Dict, Tuple
 
-import requests
-
 import logger  # Import custom logger like performance_claims.py
+import requests
 
 # Pre-compiled regex for better performance
 URL_PATTERN = re.compile(r'huggingface\.co/([^/]+/[^/?]+)')

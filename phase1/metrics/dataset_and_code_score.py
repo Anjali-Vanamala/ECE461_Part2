@@ -4,9 +4,8 @@ import os
 import time
 from typing import Tuple
 
-import requests
-
 import logger
+import requests
 
 """
 Use Purdue GenAI Studio to measure dataset documentation.

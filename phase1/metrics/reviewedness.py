@@ -14,9 +14,8 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Tuple
 
-import requests
-
 import logger
+import requests
 
 # Rate limiting constants
 RATE_LIMIT_DELAY = 0.1  # 100ms between API calls

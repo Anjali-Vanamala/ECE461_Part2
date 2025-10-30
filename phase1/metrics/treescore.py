@@ -13,9 +13,8 @@ Scoring:
 import time
 from typing import Any, Dict, List, Tuple
 
-from huggingface_hub import model_info
-
 import logger
+from huggingface_hub import model_info
 
 # Cache to avoid recalculating same parent scores
 _parent_score_cache: Dict[str, float] = {}

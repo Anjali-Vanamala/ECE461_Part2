@@ -4,10 +4,9 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
+import logger
 import requests
 from huggingface_hub import hf_hub_download, model_info
-
-import logger
 
 """
 Use Purdue GenAI Studio to measure performance claims.

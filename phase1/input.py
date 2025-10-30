@@ -3,10 +3,9 @@ import re
 import sys
 from urllib.parse import urlparse
 
-import requests as rq
-
 import logger
 import metric_concurrent
+import requests as rq
 
 
 def validate_environment() -> int:

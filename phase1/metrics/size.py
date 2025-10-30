@@ -13,9 +13,8 @@ import re
 import time
 from typing import Any, Dict, Tuple
 
-from huggingface_hub import HfApi
-
 import logger  # Import custom logger like performance_claims.py
+from huggingface_hub import HfApi
 
 # Constants for weights (defined once to avoid repetition)
 SIZE_WEIGHTS = {

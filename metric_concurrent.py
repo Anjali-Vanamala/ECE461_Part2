@@ -17,7 +17,7 @@ from metrics.treescore import treescore
 from print_metrics import print_model_evaluation
 
 
-def concurrent(
+def main(
     model_info: Any,
     model_readme: Any,
     raw_model_url: str,

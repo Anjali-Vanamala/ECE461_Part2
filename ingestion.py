@@ -147,7 +147,7 @@ def ingestion(model: str) -> Dict[str, Any]:
 
 	# Decide ingestibility: all non-latency metric scores >= 0.5
 	non_latency_scores = [m["score"] for m in report["metrics"].values()]
-	if non_latency_scores and all(s >= 0.5 for s in non_latency_scores):
+	if non_latency_scores and all((s >= 0.5 or s == -1) for s in non_latency_scores):
 		report["ingestible"] = True
 	else:
 		report["ingestible"] = False

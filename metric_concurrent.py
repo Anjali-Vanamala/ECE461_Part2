@@ -92,6 +92,7 @@ def main(
     ramp_score, ramp_latency = results["ramp_up_time"]
     repro_score, repro_latency = results["reproducibility"]
     review_score, review_latency = results["reviewedness"]
+    review_score = max(0.0, review_score)
     tree_score, tree_latency = results["treescore"]
 
     logger.info("Concurrent thread results unpacked")

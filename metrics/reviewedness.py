@@ -52,7 +52,7 @@ def get_reviewed_pr_fraction(code_info: Dict[str, Any]) -> float:
     """
     if not code_info or not code_info.get('full_name'):
         logger.debug("No GitHub repository information")
-        return 0.0
+        return -1.0
 
     full_name = code_info.get('full_name')
     api_url = f"https://api.github.com/repos/{full_name}/pulls"
@@ -140,7 +140,10 @@ def reviewedness(code_info: Dict[str, Any]) -> Tuple[float, int]:
         fraction = get_reviewed_pr_fraction(code_info)
 
         # Score based on review fraction
-        if fraction >= 0.8:
+        if fraction == -1.0:
+            score = -1.0 
+            logger.info(f"No GitHub repo - score: -1.0")
+        elif fraction >= 0.8:
             score = 1.0
             logger.info(f"High review rate ({fraction:.2%}) - score: 1.0")
         elif fraction >= 0.5:

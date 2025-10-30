@@ -136,7 +136,7 @@ def performance_claims(model_url: str) -> tuple[float, float]:
     else:  # no metric values found in model_info
         # Have to search the readme for evaluation metrics
         path = hf_hub_download(repo_id=model_id, filename="README.md")
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             readme = f.read()
 
         # LLM REQUIREMENT FULFILLED HERE.

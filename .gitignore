@@ -3,3 +3,7 @@ __pycache__/
 .pytest_cache/
 error_logs
 venv
+test.log
+.coverage
+temp_log.txt
+.mypy_cache/

@@ -1,169 +1,189 @@
-"""ingestion.py
+import os
+import re
+import sys
+from urllib.parse import urlparse
 
-Provide a small ingestion helper that evaluates a public Hugging Face model
-against the project's Phase 1 metrics and returns whether it is ingestible.
+import requests as rq
 
-Contract
---------
-- ingestion(model: str) -> dict
-  - Accepts a HuggingFace model id (owner/name) or a URL containing it.
-  - Runs the rate-like metrics (non-latency scores) and returns a report
-	containing each metric score, latencies, errors, and an "ingestible" flag.
-
-If the package is ingestible (every non-latency score >= 0.5) the function
-will call `upload_package(...)` which is a stub that can be replaced by a
-real uploader later.
-"""
-
-from typing import Any, Dict, Tuple
-import time
-import requests
 import logger
-
-from metrics import (
-	bus_factor,
-	code_quality,
-	ramp_up_time,
-	data_quality,
-	license as license_mod,
-	reproducibility,
-	reviewedness,
-	performance_claims,
-	dataset_and_code_score,
-	size as size_mod,
-)
+import metric_concurrent
 
 
-def _extract_model_id(model: str) -> str:
-	"""Normalize model identifier from URL or plain id."""
-	if not model:
-		return ""
-	model = model.strip()
-	# If it's a full URL, try to extract the path portion containing owner/name
-	try:
-		from urllib.parse import urlparse
+def validate_environment() -> int:
+    """Validate required environment variables at startup."""
 
-		parsed = urlparse(model)
-		path = parsed.path.strip("/")
-		if path:
-			parts = path.split("/")
-			# If it contains 'tree' or 'blob' trim at that point
-			if "tree" in parts:
-				tree_index = parts.index("tree")
-				return "/".join(parts[:tree_index])
-			return path
-	except Exception:
-		pass
-	return model
+    # Check GITHUB_TOKEN - simple validation
+    github_token = os.getenv("GITHUB_TOKEN")
+    if github_token is not None:
+        if not github_token or github_token.strip() == "" or github_token == "invalid":
+            print("Error: Invalid GITHUB_TOKEN", file=sys.stderr)
+            return 1
 
-def ingestion(model: str) -> Dict[str, Any]:
-	"""Evaluate a model and decide if it is ingestible.
+    # Check LOG_FILE - simple validation (don't create files)
+    log_file = os.getenv("LOG_FILE")
+    if log_file is not None:
+        if not os.path.exists(log_file):
+            print(f"Error: Log file does not exist: {log_file}", file=sys.stderr)
+            return 1
 
-	Returns a report dict with metric scores, latencies, errors and
-	an 'ingestible' boolean.
-	"""
-	start_all = time.time()
-	report: Dict[str, Any] = {
-		"model": model,
-		"metrics": {},
-		"errors": [],
-		"ingestible": False,
-		"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-	}
+    # Check LOG_LEVEL
+    log_level = os.getenv("LOG_LEVEL")
+    if log_level is not None:
+        try:
+            level = int(log_level)
+            if level < 0 or level > 2:
+                print(f"Error: LOG_LEVEL must be 0, 1, or 2, got: {level}", file=sys.stderr)
+                return 1
+        except ValueError:
+            print(f"Error: LOG_LEVEL must be an integer, got: {log_level}", file=sys.stderr)
+            return 1
 
-	model_id = _extract_model_id(model)
-	if not model_id:
-		report["errors"].append("empty model id")
-		return report
+    return 0
 
-	# Fetch model info from HF API (best-effort)
-	model_info: Dict[str, Any] = {}
-	try:
-		api_url = f"https://huggingface.co/api/models/{model_id}"
-		resp = requests.get(api_url, timeout=10)
-		if resp.status_code == 200:
-			model_info = resp.json()
-	except Exception as e:
-		report["errors"].append(f"model_info_fetch_error: {e}")
 
-	# Fetch README (best-effort)
-	readme_text = ""
-	try:
-		raw_url = f"https://huggingface.co/{model_id}/raw/main/README.md"
-		r = requests.get(raw_url, timeout=10)
-		if r.status_code == 200:
-			readme_text = r.text.lower()
-	except Exception:
-		pass
+def find_dataset(model_readme: str, seen_datasets: set) -> str:
+    """
+    If no dataset in input line, see if model was trained on
+    a previously seen dataset.
 
-	# Prepare minimal placeholders for code/dataset info used by some metrics
-	code_info: Dict[str, Any] = {}
-	code_readme: str = ""
-	code_url = ""
-	dataset_url = ""
+    Parameters
+    ----------
+    model_readme : str
+        Model README text
 
-	# Metrics to run: mapping name -> callable
-	metric_calls = {
-		"bus_factor": lambda: bus_factor.bus_factor(model_info),
-		"code_quality": lambda: code_quality.code_quality(model_info, code_info, readme_text, code_readme),
-		"ramp_up_time": lambda: ramp_up_time.ramp_up_time(model_info),
-		"data_quality": lambda: data_quality.data_quality(model_info, readme_text),
-		"license": lambda: license_mod.get_license_score_cached(model_id),
-		"reproducibility": lambda: reproducibility.reproducibility(model_info, code_info, readme_text),
-		"reviewedness": lambda: reviewedness.reviewedness(code_info),
-		"performance_claims": lambda: performance_claims.performance_claims(f"https://huggingface.co/{model_id}"),
-		"dataset_and_code_score": lambda: dataset_and_code_score.dataset_and_code_score(code_url, dataset_url),
-		"size": lambda: size_mod.calculate_size_score(model_id),
-	}
+    Returns
+    -------
+    string
+        The dataset link found, or None.
+    """
+    for dataset_url in seen_datasets:
+        dataset = dataset_url.split("/")[-1].lower()
+        if dataset in model_readme:
+            logger.debug(f"Updated dataset url:{dataset_url}")
+            return dataset_url
+    return ""  # None found
 
-	# Execute metrics and normalize outputs to (score, latency_ms)
-	for name, fn in metric_calls.items():
-		try:
-			out = fn()
-			if name == "size":
-				# size returns (scores_dict, net_score, latency)
-				if isinstance(out, tuple) and len(out) >= 2:
-					if isinstance(out[1], (int, float)):
-						score = float(out[1])
-					else:
-						score = 0.0
-					latency = float(out[-1]) if len(out) >= 3 else 0.0
-				else:
-					score = 0.0
-					latency = 0.0
-			else:
-				# expect (score, latency) or score only
-				if isinstance(out, tuple):
-					score = float(out[0])
-					latency = float(out[1]) if len(out) > 1 else 0.0
-				else:
-					score = float(out)
-					latency = 0.0
 
-			report["metrics"][name] = {"score": round(score, 4), "latency_ms": round(latency, 2)}
-		except Exception as e:
-			report["metrics"][name] = {"score": 0.0, "latency_ms": 0}
-			report["errors"].append(f"{name}_error: {e}")
+def ingest():
+    """Main function to get & condition the user input url."""
+    # Validate environment variables first
+    if validate_environment() != 0:
+        sys.exit(1)
 
-	# Decide ingestibility: all non-latency metric scores >= 0.5
-	non_latency_scores = [m["score"] for m in report["metrics"].values()]
-	if non_latency_scores and all((s >= 0.5 or s == -1) for s in non_latency_scores):
-		report["ingestible"] = True
-	else:
-		report["ingestible"] = False
+    model_readme = ""
+    dataset_readme = ""
+    code_readme = ""
+    model_info = {}
+    code_info = {}
 
-	report["total_latency_ms"] = int((time.time() - start_all) * 1000)
-	return report
+    logger.debug("\nBegin processing input")
+
+    # Accept either a file or a single model URL
+    arg = sys.argv[1]
+    seen_datasets = set()
+
+    input_lines = []
+    if os.path.exists(arg):
+        # Treat as a file
+        with open(arg, "r", encoding="ascii") as input_file:
+            input_lines = input_file.readlines()
+    else:
+        # Treat as a direct model URL (simulate ", ,model_url")
+        input_lines = [f", ,{arg}\n"]
+
+    # loop for reading each line:
+    for line in input_lines:
+        urls = [url.strip() for url in line.split(',')]
+
+        # Handle cases with fewer than 3 URLs
+        while len(urls) < 3:
+            urls.append("")
+
+        raw_code_url = urls[0]
+        raw_dataset_url = urls[1]
+        raw_model_url = urls[2]
+
+        logger.info(f"Raw code url:{raw_code_url}\nRaw dataset url: {raw_dataset_url}\nRaw model url: {raw_model_url}")
+
+        # ----- MODEL -----
+        parsed_model = urlparse(raw_model_url)
+        model_path = parsed_model.path.strip('/')
+        parts = model_path.split("/")
+        if "tree" in parts:
+            tree_index = parts.index("tree")
+            model_path = "/".join(parts[:tree_index])
+
+        model_url = f'https://huggingface.co/api/models/{model_path}'
+        try:
+            api_response = rq.get(model_url)
+            if api_response.status_code == 200:
+                model_info = api_response.json()
+        except Exception:
+            model_info = {}
+
+        model_rm_url = f"https://huggingface.co/{model_path}/raw/main/README.md"
+        try:
+            model_readme = rq.get(model_rm_url, timeout=50)
+            if model_readme.status_code == 200:
+                model_readme = model_readme.text.lower()
+        except Exception:
+            model_readme = ""
+
+        # ----- DATASET -----
+        parsed_dataset = urlparse(raw_dataset_url)
+        dataset_path = parsed_dataset.path.strip('/')
+        if raw_dataset_url:
+            seen_datasets.add(raw_dataset_url)
+        else:
+            logger.debug("Dataset url not given. Search in previously seen.")
+            raw_dataset_url = find_dataset(model_readme, seen_datasets)
+            logger.debug(f"Found dataset url?:{raw_dataset_url}")
+
+        dataset_url = f'https://huggingface.co/api/models/{dataset_path}'
+        try:
+            rq.get(dataset_url)
+        except Exception as e:
+            print(e)
+
+        dataset_rm_url = f"https://huggingface.co/{dataset_path}/raw/main/README.md"
+        try:
+            dataset_readme = rq.get(dataset_rm_url, timeout=50)
+            if dataset_readme.status_code == 200:
+                dataset_readme = dataset_readme.text.lower()
+        except Exception:
+            dataset_readme = ""
+
+        # ----- CODE -----
+        match = re.search(r'github\.com/([^/]+)/([^/]+)', raw_code_url)
+        if match:
+            owner, repo = match.groups()
+            repo = repo.replace('.git', '')
+            code_url = f"https://api.github.com/repos/{owner}/{repo}"
+            try:
+                api_response = rq.get(code_url)
+                if api_response.status_code == 200:
+                    code_info = api_response.json()
+            except Exception:
+                code_info = {}
+            try:
+                code_readme = rq.get(f"{code_url}/readme", headers={'Accept': 'application/vnd.github.v3.raw'})
+                if code_readme.status_code == 200:
+                    code_readme = code_readme.text.lower()
+            except Exception:
+                code_readme = ""
+
+        # ----- METRICS -----
+        metrics = metric_concurrent.main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_dataset_url)
+        for value in metrics:
+            try:
+                if float(value) < 0.5 and float(value) != -1.0:
+                    logger.debug(f"Metric {value} below threshold {0.5}")
+                    return False
+            except (ValueError, TypeError):
+                logger.debug(f"Skipping non-numeric metric {value}")
+                continue
+        return True
 
 
 if __name__ == "__main__":
-	import sys
-
-	if len(sys.argv) < 2:
-		print("Usage: python ingestion.py <model-id-or-url>")
-		sys.exit(2)
-
-	result = ingestion(sys.argv[1])
-	print(result)
-
-
+    print(ingest())

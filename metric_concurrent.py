@@ -119,3 +119,15 @@ def main(
         tree_score, tree_latency,
         net_score, net_latency
     )
+    return ([net_size_score,
+        license_score,
+        ramp_score,
+        bus_score,
+        dc_score,
+        data_quality_score,
+        code_quality_score,
+        perf_score,
+        repro_score,
+        review_score,
+        tree_score,
+        net_score])

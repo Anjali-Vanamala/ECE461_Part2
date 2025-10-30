@@ -166,7 +166,7 @@ def main():
             # --------------------
 
             # Analyze metrics
-            metric_concurrent.main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_dataset_url)
+            metric_concurrent.concurrent(model_info, model_readme, raw_model_url, code_info, code_readme, raw_dataset_url)
 
 
 if __name__ == "__main__":

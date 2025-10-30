@@ -141,8 +141,8 @@ def reviewedness(code_info: Dict[str, Any]) -> Tuple[float, int]:
 
         # Score based on review fraction
         if fraction == -1.0:
-            score = -1.0 
-            logger.info(f"No GitHub repo - score: -1.0")
+            score = -1.0
+            logger.info("No GitHub repo - score: -1.0")
         elif fraction >= 0.8:
             score = 1.0
             logger.info(f"High review rate ({fraction:.2%}) - score: 1.0")

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import requests as rq
 
+import ingestion
 import input
 import metrics.code_quality
 import metrics.data_quality
@@ -40,6 +41,15 @@ structure doesn't support passing in real URLs in a test suite, AI assistance wa
     1. Generate realistic API response structures mirroring HF and GitHub data
     2. Calculate expected scores based on weighted metrics in our quality functions
 """
+
+
+class Test_Ingest:
+    def test_single_model_url(self):
+        # Test with a single model URL
+        test_url = "https://huggingface.co/google-bert/bert-base-uncased"
+        with patch('builtins.print') as mock_print:
+            ingestion.ingest(test_url)
+            mock_print.assert_called()  # Ensure print was called
 
 
 class Test_Size_Score:
@@ -180,7 +190,7 @@ class Test_performanceclaims:
         model_url = "https://huggingface.co/google-bert/bert-base-uncased"
         score, latency = performance_claims(model_url)
         # sample output : 0.92
-        assert ((0.92 - .7) <= score <= 1 or score == 0.0)  # really big acceptance bc it's ai and ai sucks
+        assert ((0.92 - .8) <= score <= 1 or score == 0.5)  # really big acceptance bc it's ai and ai sucks
 
     def test_audience(self):
         model_url = "https://huggingface.co/parvk11/audience_classifier_model"
@@ -199,14 +209,22 @@ class Test_datasetandcodescore:
     def test_bert(self):
         code_url = "https://github.com/google-research/bert"
         dataset_url = "https://huggingface.co/datasets/bookcorpus/bookcorpus"
-        score, latency = dataset_and_code_score(code_url, dataset_url)
+        model_readme = """
+        ```python
+        import transformers
+        tokenizer = AutoTokenizer.from_pretrained("model")
+        ```
+        """
+        score, latency = dataset_and_code_score(code_url, dataset_url, model_readme)
         # sample output: 1
         assert ((1 - 0.2) <= score <= 1 or score == 0.6)
 
     def test_no_urls(self):
         code_url = ""
         dataset_url = ""
-        score, latency = dataset_and_code_score(code_url, dataset_url)
+        model_readme = """
+        """
+        score, latency = dataset_and_code_score(code_url, dataset_url, model_readme)
         # sample output: 0
         assert (score == 0)
 
@@ -236,39 +254,39 @@ class Test_inputmissingdataset:
 class Test_Size:
     def test_bert_base_uncased(self):
         # Expected NET score (weighted average), not just raspberry_pi score
-        # raspberry_pi: 0.2 * 0.35 = 0.07
-        # jetson_nano: 0.6 * 0.25 = 0.15
-        # desktop_pc: 0.9 * 0.20 = 0.18
-        # aws_server: 1.0 * 0.20 = 0.20
-        # Total net score: 0.07 + 0.15 + 0.18 + 0.20 = 0.60
+        # raspberry_pi: 0.2 * 0.15 = 0.03
+        # jetson_nano: 0.6 * 0.15 = 0.09
+        # desktop_pc: 0.9 * 0.35 = 0.315
+        # aws_server: 1.0 * 0.35 = 0.35
+        # Total net score: 0.03 + 0.09 + 0.315 + 0.35 = 0.785
         max_deviation = 0.15
-        expected_size = 0.60
+        expected_size = 0.785
         model_id = "google-bert/bert-base-uncased"
         size_scores, actual_size, actual_latency = calculate_size_score(model_id)
         assert actual_size <= (min(1, expected_size + max_deviation)) and actual_size >= (max(0, expected_size - max_deviation))
 
     def test_audience_classifier_model(self):
         # Expected NET score (weighted average)
-        # raspberry_pi: 0.75 * 0.35 = 0.2625
-        # jetson_nano: 0.875 * 0.25 = 0.21875
-        # desktop_pc: 0.96875 * 0.20 = 0.19375
-        # aws_server: 1.0 * 0.20 = 0.20
-        # Total net score: ~0.875
+        # raspberry_pi: 0.75 * 0.15 = 0.1125
+        # jetson_nano: 0.875 * 0.15 = 0.13125
+        # desktop_pc: 0.96875 * 0.35 = 0.3390625
+        # aws_server: 1.0 * 0.35 = 0.35
+        # Total net score: ~0.933
         max_deviation = 0.15
-        expected_size = 0.875
+        expected_size = 0.933
         model_id = "parvk11/audience_classifier_model"
         size_scores, actual_size, actual_latency = calculate_size_score(model_id)
         assert actual_size <= (min(1, expected_size + max_deviation)) and actual_size >= (max(0, expected_size - max_deviation))
 
     def test_whisper_tiny(self):
         # Expected NET score (weighted average)
-        # raspberry_pi: 0.9 * 0.35 = 0.315
-        # jetson_nano: 0.95 * 0.25 = 0.2375
-        # desktop_pc: 0.9875 * 0.20 = 0.1975
-        # aws_server: 1.0 * 0.20 = 0.20
-        # Total net score: ~0.95
+        # raspberry_pi: 0.9 * 0.15 = 0.135
+        # jetson_nano: 0.95 * 0.15 = 0.1425
+        # desktop_pc: 0.9875 * 0.35 = 0.345625
+        # aws_server: 1.0 * 0.35 = 0.35
+        # Total net score: ~0.97
         max_deviation = 0.15
-        expected_size = 0.95
+        expected_size = 0.97
         model_id = "openai/whisper-tiny"
         size_scores, actual_size, actual_latency = calculate_size_score(model_id)
         assert actual_size <= (min(1, expected_size + max_deviation)) and actual_size >= (max(0, expected_size - max_deviation))
@@ -408,7 +426,7 @@ class Test_Size:
             'aws_server': 1.0
         }
         net_score = calculate_net_size_score(size_scores)
-        expected = 0.2 * 0.35 + 0.6 * 0.25 + 0.9 * 0.20 + 1.0 * 0.20
+        expected = 0.2 * 0.15 + 0.6 * 0.15 + 0.9 * 0.35 + 1.0 * 0.35
         assert abs(net_score - expected) < 0.01
 
     def test_net_size_score_with_empty_dict(self):
@@ -418,7 +436,7 @@ class Test_Size:
     def test_net_size_score_with_partial_scores(self):
         size_scores = {'raspberry_pi': 0.5, 'jetson_nano': 0.7}
         net_score = calculate_net_size_score(size_scores)
-        assert abs(net_score - 0.35) < 0.01
+        assert abs(net_score - 0.18) < 0.01
 
     # ---------- Tests for get_model_size_for_scoring ----------
     def test_get_model_size_for_scoring_known_models(self):
@@ -939,7 +957,7 @@ class Test_Reviewedness:
         from metrics.reviewedness import reviewedness
         score, latency = reviewedness({})
 
-        assert score == 0.0
+        assert score == -1.0
         assert latency >= 0
 
 

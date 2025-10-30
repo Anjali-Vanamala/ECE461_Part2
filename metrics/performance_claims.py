@@ -159,7 +159,7 @@ def performance_claims(model_url: str) -> tuple[float, float]:
             # Maximum number of attempts
             max_attempts = 4  # Try twice with current model, then return 0.5
             attempt = 0
-            
+
             while attempt < max_attempts:
                 try:
                     llm_score_str = query_genai_studio(prompt)
@@ -172,7 +172,7 @@ def performance_claims(model_url: str) -> tuple[float, float]:
                         logger.debug(f"Invalid score range: {llm_score}. Attempt {attempt + 1}/{max_attempts}")
                 except Exception as e:
                     logger.debug(f"Error processing LLM output: {str(e)}. Attempt {attempt + 1}/{max_attempts}")
-                
+
                 attempt += 1
             if attempt >= max_attempts:
                 logger.info("Max attempts reached. Returning default score 0.5")

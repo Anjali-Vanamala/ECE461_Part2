@@ -156,19 +156,27 @@ def performance_claims(model_url: str) -> tuple[float, float]:
             else:
                 score = 0.5
         else:
-            valid_llm_output = False
-            while valid_llm_output is False:
-                llm_score_str = query_genai_studio(prompt)
-                # Get float score from string
+            # Maximum number of attempts
+            max_attempts = 4  # Try twice with current model, then return 0.5
+            attempt = 0
+
+            while attempt < max_attempts:
                 try:
+                    llm_score_str = query_genai_studio(prompt)
                     llm_score = float(llm_score_str.strip())
-                    if (llm_score >= 0) and (llm_score <= 1):
-                        valid_llm_output = True
+                    if 0 <= llm_score <= 1:
                         score = llm_score
+                        logger.info("Got performance claims score from GenAI Studio.")
+                        break
                     else:
-                        logger.debug("Invalid llm output. Retrying.")
-                except Exception:
-                    logger.debug("Invalid llm output. Retrying.")
+                        logger.debug(f"Invalid score range: {llm_score}. Attempt {attempt + 1}/{max_attempts}")
+                except Exception as e:
+                    logger.debug(f"Error processing LLM output: {str(e)}. Attempt {attempt + 1}/{max_attempts}")
+
+                attempt += 1
+            if attempt >= max_attempts:
+                logger.info("Max attempts reached. Returning default score 0.5")
+                score = 0.5
 
     end = time.time()
     latency = end - start

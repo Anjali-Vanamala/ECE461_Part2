@@ -59,7 +59,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/github-actions-deploy-role
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
           role-session-name: gha-deploy
 
       - name: Login to Amazon ECR

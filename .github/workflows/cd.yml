@@ -1,14 +1,16 @@
-name: CD - Deploy Lambda Container (API Gateway integration manual)
+name: CD - Deploy FastAPI to ECS/Fargate (MVP)
 
-# TODO: Replace <ACCOUNT_ID> placeholder with actual AWS account ID [MVP]
-# TODO: Create ECR repository: ece461-part2 in us-east-1 [MVP]
-# TODO: Create Lambda function: ece461-part2-lambda with container image configuration [MVP]
-# TODO: Set Lambda environment variables: LOG_LEVEL=1, LOG_FILE=/tmp/error_logs.log [MVP]
-# TODO: Create API Gateway HTTP API with routes: GET /health and POST /rate → Lambda [MVP]
-# TODO: Create GitHub OIDC role: github-actions-deploy-role with ECR and Lambda permissions [MVP]
-# TODO: Configure GitHub OIDC provider in AWS IAM for this repository [MVP]
-# TODO: Test end-to-end: push to main, verify Lambda deploys, test /health and /rate endpoints [MVP]
-# TODO: Add monitoring dashboard and CloudWatch metrics
+# MVP Requirements:
+# - Automated deployment to AWS upon merge to main
+# - Backend accessible for autograder
+# 
+# Prerequisites (manual setup required):
+# - ECR repository: ece461-part2 in us-east-1
+# - ECS cluster: ece461-part2-cluster in us-east-1  
+# - ECS task definition: ece461-part2-task (created once manually)
+# - ECS service: ece461-part2-service (created once manually)
+# - GitHub OIDC role with ECR/ECS permissions
+# - CloudWatch log group: /ecs/ece461-part2-task
 
 on:
   push:
@@ -27,7 +29,10 @@ permissions:
 env:
   AWS_REGION: us-east-1
   ECR_REPO: ece461-part2
-  LAMBDA_FUNCTION_NAME: ece461-part2-lambda
+  ECS_CLUSTER: ece461-part2-cluster
+  ECS_SERVICE: ece461-part2-service
+  ECS_TASK_DEFINITION: ece461-part2-task
+  CONTAINER_NAME: fastapi-app
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -69,13 +74,42 @@ jobs:
           docker push $ECR_REGISTRY/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
           echo "IMAGE_URI=$ECR_REGISTRY/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
 
-      - name: Update Lambda to new image
+      - name: Update task definition with new image
         run: |
-          aws lambda update-function-code \
-            --function-name "${{ env.LAMBDA_FUNCTION_NAME }}" \
-            --image-uri "$IMAGE_URI" >/dev/null
+          # Download current task definition
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --query taskDefinition > task-definition.json
+          
+          # Update image URI using jq (pre-installed in GitHub Actions)
+          jq --arg IMAGE "$IMAGE_URI" \
+            '.containerDefinitions[0].image = $IMAGE' \
+            task-definition.json > task-definition-updated.json
+          
+          # Remove fields that can't be specified on register
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)' \
+            task-definition-updated.json > task-definition-final.json
 
-      - name: Output deployed image uri
-        run: echo "Deployed $IMAGE_URI to $LAMBDA_FUNCTION_NAME in $AWS_REGION"
+      - name: Register new task definition revision
+        run: |
+          aws ecs register-task-definition \
+            --cli-input-json file://task-definition-final.json \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Update ECS service with new deployment
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Output deployment info
+        run: |
+          echo "✅ MVP Deployment Complete"
+          echo "Image: $IMAGE_URI"
+          echo "Service: ${{ env.ECS_SERVICE }}"
+          echo "Cluster: ${{ env.ECS_CLUSTER }}"
 
 

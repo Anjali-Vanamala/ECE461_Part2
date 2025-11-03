@@ -63,4 +63,3 @@ def get_total_count(name_filter: Optional[str] = None, category_filter: Optional
     if category_filter:
         result = [p for p in result if p.category == category_filter]
     return len(result)
-

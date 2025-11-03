@@ -2,16 +2,13 @@
 Service to calculate package metrics using Phase 1 metrics.
 Integrates with metric_concurrent and ingestion.
 """
-import os
 import re
-import sys
 from typing import Any, Dict
 from urllib.parse import urlparse
 
 import requests as rq
 
 import logger
-import metric_concurrent
 from backend.models.package import PackageModel
 
 
@@ -21,14 +18,11 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
     Returns a PackageModel with all scores and latencies.
     """
     model_readme = ""
-    dataset_readme = ""
     code_readme = ""
     model_info: Dict[str, Any] = {}
     code_info: Dict[str, Any] = {}
-    seen_datasets: set[str] = set()
 
     logger.debug(f"\nBegin processing model URL: {model_url}")
-    
     # Parse model URL
     parsed_model = urlparse(model_url)
     model_path = parsed_model.path.strip('/')
@@ -46,7 +40,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
     except Exception as e:
         logger.debug(f"Failed to get model info: {e}")
         model_info = {}
-    
+
     # Get model README
     model_rm_url = f"https://huggingface.co/{model_path}/raw/main/README.md"
     try:
@@ -56,7 +50,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
     except Exception as e:
         logger.debug(f"Failed to get model README: {e}")
         model_readme = ""
-    
+
     # Extract model ID and name
     model_id = model_info.get("id", model_path.split("/")[-1] if "/" in model_path else model_path)
     model_name = model_id.split("/")[-1] if "/" in model_id else model_id

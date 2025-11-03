@@ -19,7 +19,7 @@ def create_package_from_url(url: str) -> PackageModel:
 
     # Store in memory
     create_package(package)
-    
+
     return package
 
 
@@ -36,11 +36,11 @@ def update_package_by_id(package_id: str, updates: PackageUpdate) -> Optional[Pa
     existing_package = get_package(package_id)
     if not existing_package:
         return None
-    
+
     # Create updated package with only changed fields
     update_dict = updates.dict(exclude_unset=True)
     updated_package = existing_package.model_copy(update=update_dict)
-    
+
     return update_package(package_id, updated_package)
 
 
@@ -61,6 +61,5 @@ def list_packages_with_filters(
     """
     packages_list = list_packages(offset, limit, name, category)
     total = get_total_count(name, category)
-    
-    return packages_list, total
 
+    return packages_list, total

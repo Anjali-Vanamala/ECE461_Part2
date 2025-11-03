@@ -14,7 +14,7 @@ name: CD - Deploy FastAPI to ECS/Fargate (MVP)
 
 on:
   push:
-    branches: [ main, '9-deploy-mv-p-system-to-aws-via-github-actions-cd-pipeline-for-delivery-1' ]
+    branches: [ 'main' ]
   workflow_dispatch:
     inputs:
       reason:

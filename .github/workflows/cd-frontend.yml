@@ -68,13 +68,11 @@ jobs:
           role-session-name: gha-frontend-deploy
 
       - name: Deploy to S3
-        uses: jakejarvis/s3-sync-action@v0.5.1
-        with:
-          args: --acl public-read --delete
-        env:
-          AWS_S3_BUCKET: ${{ env.S3_BUCKET }}
-          AWS_REGION: ${{ env.AWS_REGION }}
-          SOURCE_DIR: ${{ env.BUILD_DIR }}
+        run: |
+          aws s3 sync ${{ env.BUILD_DIR }} s3://${{ env.S3_BUCKET }} \
+            --region ${{ env.AWS_REGION }} \
+            --acl public-read \
+            --delete
 
       - name: Output deployment info
         run: |

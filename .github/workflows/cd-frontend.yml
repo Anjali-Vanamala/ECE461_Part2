@@ -71,7 +71,6 @@ jobs:
         run: |
           aws s3 sync ${{ env.BUILD_DIR }} s3://${{ env.S3_BUCKET }} \
             --region ${{ env.AWS_REGION }} \
-            --acl public-read \
             --delete
 
       - name: Output deployment info

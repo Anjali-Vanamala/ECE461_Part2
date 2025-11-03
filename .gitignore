@@ -7,3 +7,4 @@ test.log
 temp_log.txt
 .mypy_cache/
 venv
+tmp/

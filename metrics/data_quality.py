@@ -180,7 +180,7 @@ relevance_score : int
 def relevance_checker(api_info: Dict[str, Any]) -> float:
     from datetime import date
 
-    from dateutil import parser
+    from dateutil import parser  # type: ignore[import-untyped]
 
     logger.debug("Starting relevance check")
 

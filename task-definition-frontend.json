@@ -4,11 +4,11 @@
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
   "memory": "512",
-  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::978794836526:role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {
       "name": "frontend-app",
-      "image": "<ACCOUNT_ID>.dkr.ecr.us-east-2.amazonaws.com/ece461-frontend:latest",
+      "image": "978794836526.dkr.ecr.us-east-2.amazonaws.com/ece461-frontend:latest",
       "essential": true,
       "portMappings": [
         {

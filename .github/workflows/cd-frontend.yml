@@ -1,9 +1,23 @@
 name: CD - Deploy Frontend to S3
 
+# MVP Requirements:
+# - Automated deployment to AWS S3 upon merge to main
+# - Frontend accessible via S3 static website hosting
+# 
+# Prerequisites (manual setup required):
+# - S3 bucket: ece461-frontend in us-east-2
+# - S3 bucket configured for static website hosting
+# - GitHub OIDC role with S3 permissions (reused from backend + S3 access)
+
 on:
   push:
     branches: [ 'main' ]
   workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deploy'
+        required: false
+        default: 'manual'
 
 permissions:
   id-token: write
@@ -15,7 +29,7 @@ env:
   BUILD_DIR: frontend/dist
 
 jobs:
-  deploy:
+  build-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,8 +43,22 @@ jobs:
       - name: Build frontend
         run: |
           cd frontend
-          npm ci
-          npm run build
+          # If package.json exists, build. Otherwise, just prepare static files
+          if [ -f package.json ]; then
+            npm ci
+            npm run build
+          else
+            # For simple HTML, create dist directory with files
+            mkdir -p dist
+            cp *.html dist/ 2>/dev/null || true
+            cp *.css dist/ 2>/dev/null || true
+            cp *.js dist/ 2>/dev/null || true
+            [ -d assets ] && cp -r assets dist/ || true
+            # Create index.html from main.html if needed
+            if [ -f main.html ] && [ ! -f dist/index.html ]; then
+              cp main.html dist/index.html
+            fi
+          fi
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -47,3 +75,9 @@ jobs:
           AWS_S3_BUCKET: ${{ env.S3_BUCKET }}
           AWS_REGION: ${{ env.AWS_REGION }}
           SOURCE_DIR: ${{ env.BUILD_DIR }}
+
+      - name: Output deployment info
+        run: |
+          echo "✅ Frontend Deployment Complete"
+          echo "Bucket: ${{ env.S3_BUCKET }}"
+          echo "Region: ${{ env.AWS_REGION }}"

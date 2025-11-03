@@ -1,0 +1,30 @@
+{
+  "family": "ece461-frontend-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::978794836526:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "frontend-app",
+      "image": "978794836526.dkr.ecr.us-east-2.amazonaws.com/ece461-frontend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ece461-frontend-task",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
+

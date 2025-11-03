@@ -1,7 +1,7 @@
-from fastapi import APIRouter, HTTPException, status  # pyright: ignore[reportMissingImports]
-from pydantic import BaseModel, Field
-
 import ingestion
+from fastapi import APIRouter  # pyright: ignore[reportMissingImports]
+from fastapi import HTTPException, status
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -26,7 +26,7 @@ def ingest_package(request: IngestRequest):
     """
     try:
         result = ingestion.ingest(request.URL)
-        
+
         # ingestion.ingest returns True/False or None on error
         if result is True:
             return IngestResponse(

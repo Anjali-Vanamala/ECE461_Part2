@@ -136,12 +136,12 @@ def ingest(arg):
 
         # ----- METRICS -----
         metrics = metric_concurrent.main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_dataset_url)
-        
+
         # Handle None return from metric_concurrent
         if metrics is None:
             logger.debug("metric_concurrent.main() returned None")
             return False
-        
+
         key = ["net_size_score",
                "license_score",
                "ramp_score",
@@ -153,16 +153,16 @@ def ingest(arg):
                "repro_score",
                "review_score",
                "tree_score"]
-        
+
         # Check if metrics is iterable and has the expected length
         if not isinstance(metrics, (list, tuple)) or len(metrics) != len(key):
             logger.debug(f"Invalid metrics format: {metrics}")
             return False
-        
+
         # Lower threshold for demo purposes (originally 0.5)
         # Set to 0.0 to accept any non-negative score
         threshold = 0.0
-        
+
         for i, value in enumerate(metrics):
             try:
                 if float(value) < threshold and float(value) != -1.0:

@@ -1,5 +1,6 @@
+from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
 
 
 class SizeScore(BaseModel):
@@ -28,7 +29,7 @@ class PackageModel(BaseModel):
     category: str = Field(default="MODEL", description="Package category")
     URL: str = Field(..., description="Original URL")
     description: Optional[str] = Field(None, description="Package description")
-    
+
     # Metric scores (0-1 range)
     net_score: float = Field(..., ge=0, le=1, description="Overall net score")
     ramp_up_time: float = Field(..., ge=0, le=1)
@@ -42,7 +43,7 @@ class PackageModel(BaseModel):
     reviewedness: float = Field(..., ge=0, le=1)
     treescore: float = Field(..., ge=0, le=1)
     size_score: Dict[str, Any] = Field(..., description="Size score dictionary with value and unit")
-    
+
     # Latencies (milliseconds)
     net_score_latency: int = Field(..., ge=0)
     ramp_up_time_latency: int = Field(..., ge=0)
@@ -56,7 +57,7 @@ class PackageModel(BaseModel):
     reproducibility_latency: int = Field(..., ge=0)
     reviewedness_latency: int = Field(..., ge=0)
     treescore_latency: int = Field(..., ge=0)
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -77,4 +78,3 @@ class PackageListResponse(BaseModel):
     total: int
     offset: int
     limit: int
-

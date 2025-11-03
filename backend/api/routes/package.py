@@ -1,14 +1,15 @@
-from fastapi import APIRouter, HTTPException, status, Query  # pyright: ignore[reportMissingImports]
 from typing import Optional
 
-from backend.models.package import PackageCreate, PackageModel, PackageUpdate, PackageListResponse
-from backend.services.package_service import (
-    create_package_from_url,
-    get_package_by_id,
-    update_package_by_id,
-    delete_package_by_id,
-    list_packages_with_filters
-)
+from fastapi import APIRouter  # pyright: ignore[reportMissingImports]
+from fastapi import HTTPException, Query, status
+
+from backend.models.package import (PackageCreate, PackageListResponse,
+                                    PackageModel, PackageUpdate)
+from backend.services.package_service import (create_package_from_url,
+                                              delete_package_by_id,
+                                              get_package_by_id,
+                                              list_packages_with_filters,
+                                              update_package_by_id)
 
 router = APIRouter(prefix="/package", tags=["packages"])
 
@@ -41,7 +42,7 @@ def list_packages(
     LIST endpoint - List packages with pagination and optional filters.
     """
     packages_list, total = list_packages_with_filters(skip, limit, name, category)
-    
+
     return PackageListResponse(
         items=packages_list,
         total=total,
@@ -105,7 +106,7 @@ def download_package(model_id: str, content: str = Query("full", description="Co
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Package with ID '{model_id}' not found"
         )
-    
+
     if content == "metadata":
         return {
             "id": package.id,

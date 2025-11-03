@@ -5,8 +5,8 @@ Integrates with metric_concurrent and ingestion.
 import os
 import re
 import sys
+from typing import Any, Dict
 from urllib.parse import urlparse
-from typing import Dict, Any
 
 import requests as rq
 
@@ -25,8 +25,8 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
     code_readme = ""
     model_info: Dict[str, Any] = {}
     code_info: Dict[str, Any] = {}
-    seen_datasets = set()
-    
+    seen_datasets: set[str] = set()
+
     logger.debug(f"\nBegin processing model URL: {model_url}")
     
     # Parse model URL
@@ -80,9 +80,9 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             except Exception:
                 code_info = {}
             try:
-                code_readme = rq.get(f"{code_url}/readme", headers={'Accept': 'application/vnd.github.v3.raw'})
-                if code_readme.status_code == 200:
-                    code_readme = code_readme.text.lower()
+                code_readme_response = rq.get(f"{code_url}/readme", headers={'Accept': 'application/vnd.github.v3.raw'})
+                if code_readme_response.status_code == 200:
+                    code_readme = code_readme_response.text.lower()
             except Exception:
                 code_readme = ""
     
@@ -90,6 +90,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
     # We'll extract the data by calling the internal logic directly
     import time
     from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+
     from metrics.bus_factor import bus_factor
     from metrics.code_quality import code_quality
     from metrics.data_quality import data_quality
@@ -108,7 +109,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
     results: Dict[str, Any] = {}
     
     with ThreadPoolExecutor() as executor:
-        future_to_metric: Dict[Future, str] = {
+        future_to_metric: Dict[Future, str] = {  # type: ignore[type-arg]
             executor.submit(data_quality, model_info, model_readme): "data_quality",
             executor.submit(code_quality, model_info, code_info, model_readme, code_readme): "code_quality",
             executor.submit(dataset_and_code_score, code_info, raw_dataset_url, model_readme): "dc_score",

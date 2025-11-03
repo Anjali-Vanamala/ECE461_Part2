@@ -2,16 +2,12 @@
 Service layer for package CRUD operations.
 """
 from typing import Optional
+
 from backend.models.package import PackageModel, PackageUpdate
-from backend.storage.memory import (
-    get_package,
-    create_package,
-    update_package,
-    delete_package,
-    list_packages,
-    get_total_count
-)
 from backend.services.rating_service import calculate_package_metrics
+from backend.storage.memory import (create_package, delete_package,
+                                    get_package, get_total_count,
+                                    list_packages, update_package)
 
 
 def create_package_from_url(url: str) -> PackageModel:
@@ -20,7 +16,7 @@ def create_package_from_url(url: str) -> PackageModel:
     """
     # Calculate all metrics
     package = calculate_package_metrics(url)
-    
+
     # Store in memory
     create_package(package)
     

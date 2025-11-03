@@ -3,6 +3,7 @@ In-memory storage for packages (Phase 2).
 This will be replaced with DynamoDB in Phase 3.
 """
 from typing import Dict, Optional
+
 from backend.models.package import PackageModel
 
 # In-memory dictionary: key = package_id, value = PackageModel

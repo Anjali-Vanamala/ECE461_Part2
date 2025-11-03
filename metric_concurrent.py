@@ -87,7 +87,7 @@ def main(
             data_quality_score, dq_latency = result_data_quality
         except (TypeError, ValueError):
             data_quality_score, dq_latency = 0.0, 0
-    
+
     result_code_quality = results.get("code_quality")
     if result_code_quality is None:
         code_quality_score, cq_latency = 0.0, 0
@@ -96,7 +96,7 @@ def main(
             code_quality_score, cq_latency = result_code_quality
         except (TypeError, ValueError):
             code_quality_score, cq_latency = 0.0, 0
-    
+
     result_dc_score = results.get("dc_score")
     if result_dc_score is None:
         dc_score, dc_latency = 0.0, 0
@@ -105,7 +105,7 @@ def main(
             dc_score, dc_latency = result_dc_score
         except (TypeError, ValueError):
             dc_score, dc_latency = 0.0, 0
-    
+
     result_perf = results.get("performance_claims")
     if result_perf is None:
         perf_score, perf_latency = 0.0, 0
@@ -115,7 +115,7 @@ def main(
         except (TypeError, ValueError):
             logger.debug("GenAI query failed to produce a result")
             perf_score, perf_latency = 0.0, 0
-    
+
     result_size = results.get("size_score")
     if result_size is None:
         size_scores, net_size_score, size_latency = {}, 0.0, 0
@@ -124,7 +124,7 @@ def main(
             size_scores, net_size_score, size_latency = result_size
         except (TypeError, ValueError):
             size_scores, net_size_score, size_latency = {}, 0.0, 0
-    
+
     result_license = results.get("license_score")
     if result_license is None:
         license_score, license_latency = 0.0, 0
@@ -133,7 +133,7 @@ def main(
             license_score, license_latency = result_license
         except (TypeError, ValueError):
             license_score, license_latency = 0.0, 0
-    
+
     result_bus = results.get("bus_factor")
     if result_bus is None:
         bus_score, bus_latency = 0.0, 0
@@ -142,7 +142,7 @@ def main(
             bus_score, bus_latency = result_bus
         except (TypeError, ValueError):
             bus_score, bus_latency = 0.0, 0
-    
+
     result_ramp = results.get("ramp_up_time")
     if result_ramp is None:
         ramp_score, ramp_latency = 0.0, 0
@@ -151,7 +151,7 @@ def main(
             ramp_score, ramp_latency = result_ramp
         except (TypeError, ValueError):
             ramp_score, ramp_latency = 0.0, 0
-    
+
     result_repro = results.get("reproducibility")
     if result_repro is None:
         repro_score, repro_latency = 0.0, 0
@@ -160,7 +160,7 @@ def main(
             repro_score, repro_latency = result_repro
         except (TypeError, ValueError):
             repro_score, repro_latency = 0.0, 0
-    
+
     result_review = results.get("reviewedness")
     if result_review is None:
         review_score, review_latency = 0.0, 0
@@ -170,7 +170,7 @@ def main(
             review_score = max(0.0, review_score)
         except (TypeError, ValueError):
             review_score, review_latency = 0.0, 0
-    
+
     result_tree = results.get("treescore")
     if result_tree is None:
         tree_score, tree_latency = 0.0, 0

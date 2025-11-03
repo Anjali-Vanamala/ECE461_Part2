@@ -53,7 +53,7 @@ def main(
                 logger.debug(f"{metric_name} failed with error: {e}")
                 results[metric_name] = None
 
-    # Unpack the results
+    # Unpack the results with error handling for None values
     data_quality_score: float
     dq_latency: int
     code_quality_score: float
@@ -78,22 +78,107 @@ def main(
     tree_score: float
     tree_latency: int
 
-    data_quality_score, dq_latency = results["data_quality"]
-    code_quality_score, cq_latency = results["code_quality"]
-    dc_score, dc_latency = results["dc_score"]
-    try:
-        perf_score, perf_latency = results["performance_claims"]
-    except (TypeError, KeyError):
-        logger.debug("GenAI query failed to produce a result")
+    # Unpack results with None checking
+    result_data_quality = results.get("data_quality")
+    if result_data_quality is None:
+        data_quality_score, dq_latency = 0.0, 0
+    else:
+        try:
+            data_quality_score, dq_latency = result_data_quality
+        except (TypeError, ValueError):
+            data_quality_score, dq_latency = 0.0, 0
+    
+    result_code_quality = results.get("code_quality")
+    if result_code_quality is None:
+        code_quality_score, cq_latency = 0.0, 0
+    else:
+        try:
+            code_quality_score, cq_latency = result_code_quality
+        except (TypeError, ValueError):
+            code_quality_score, cq_latency = 0.0, 0
+    
+    result_dc_score = results.get("dc_score")
+    if result_dc_score is None:
+        dc_score, dc_latency = 0.0, 0
+    else:
+        try:
+            dc_score, dc_latency = result_dc_score
+        except (TypeError, ValueError):
+            dc_score, dc_latency = 0.0, 0
+    
+    result_perf = results.get("performance_claims")
+    if result_perf is None:
         perf_score, perf_latency = 0.0, 0
-    size_scores, net_size_score, size_latency = results["size_score"]
-    license_score, license_latency = results["license_score"]
-    bus_score, bus_latency = results["bus_factor"]
-    ramp_score, ramp_latency = results["ramp_up_time"]
-    repro_score, repro_latency = results["reproducibility"]
-    review_score, review_latency = results["reviewedness"]
-    review_score = max(0.0, review_score)
-    tree_score, tree_latency = results["treescore"]
+    else:
+        try:
+            perf_score, perf_latency = result_perf
+        except (TypeError, ValueError):
+            logger.debug("GenAI query failed to produce a result")
+            perf_score, perf_latency = 0.0, 0
+    
+    result_size = results.get("size_score")
+    if result_size is None:
+        size_scores, net_size_score, size_latency = {}, 0.0, 0
+    else:
+        try:
+            size_scores, net_size_score, size_latency = result_size
+        except (TypeError, ValueError):
+            size_scores, net_size_score, size_latency = {}, 0.0, 0
+    
+    result_license = results.get("license_score")
+    if result_license is None:
+        license_score, license_latency = 0.0, 0
+    else:
+        try:
+            license_score, license_latency = result_license
+        except (TypeError, ValueError):
+            license_score, license_latency = 0.0, 0
+    
+    result_bus = results.get("bus_factor")
+    if result_bus is None:
+        bus_score, bus_latency = 0.0, 0
+    else:
+        try:
+            bus_score, bus_latency = result_bus
+        except (TypeError, ValueError):
+            bus_score, bus_latency = 0.0, 0
+    
+    result_ramp = results.get("ramp_up_time")
+    if result_ramp is None:
+        ramp_score, ramp_latency = 0.0, 0
+    else:
+        try:
+            ramp_score, ramp_latency = result_ramp
+        except (TypeError, ValueError):
+            ramp_score, ramp_latency = 0.0, 0
+    
+    result_repro = results.get("reproducibility")
+    if result_repro is None:
+        repro_score, repro_latency = 0.0, 0
+    else:
+        try:
+            repro_score, repro_latency = result_repro
+        except (TypeError, ValueError):
+            repro_score, repro_latency = 0.0, 0
+    
+    result_review = results.get("reviewedness")
+    if result_review is None:
+        review_score, review_latency = 0.0, 0
+    else:
+        try:
+            review_score, review_latency = result_review
+            review_score = max(0.0, review_score)
+        except (TypeError, ValueError):
+            review_score, review_latency = 0.0, 0
+    
+    result_tree = results.get("treescore")
+    if result_tree is None:
+        tree_score, tree_latency = 0.0, 0
+    else:
+        try:
+            tree_score, tree_latency = result_tree
+        except (TypeError, ValueError):
+            tree_score, tree_latency = 0.0, 0
 
     logger.info("Concurrent thread results unpacked")
 

@@ -30,7 +30,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
     if "tree" in parts:
         tree_index = parts.index("tree")
         model_path = "/".join(parts[:tree_index])
-    
+
     # Get model info from API
     model_api_url = f'https://huggingface.co/api/models/{model_path}'
     try:
@@ -54,12 +54,12 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
     # Extract model ID and name
     model_id = model_info.get("id", model_path.split("/")[-1] if "/" in model_path else model_path)
     model_name = model_id.split("/")[-1] if "/" in model_id else model_id
-    
+
     # For now, we'll use empty dataset and code URLs
     # In a full implementation, these could be passed as parameters
     raw_dataset_url = ""
     raw_code_url = ""
-    
+
     # Get code info if code URL provided (for future enhancement)
     if raw_code_url:
         match = re.search(r'github\.com/([^/]+)/([^/]+)', raw_code_url)
@@ -79,7 +79,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
                     code_readme = code_readme_response.text.lower()
             except Exception:
                 code_readme = ""
-    
+
     # Calculate all metrics using metric_concurrent
     # We'll extract the data by calling the internal logic directly
     import time
@@ -96,27 +96,27 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
     from metrics.reviewedness import reviewedness
     from metrics.size import calculate_size_score
     from metrics.treescore import treescore
-    
+
     start = time.time()
     logger.info("Begin processing metrics.")
-    
+
     results: Dict[str, Any] = {}
-    
+
     with ThreadPoolExecutor() as executor:
-        future_to_metric: Dict[Future, str] = {  # type: ignore[type-arg]
-            executor.submit(data_quality, model_info, model_readme): "data_quality",
-            executor.submit(code_quality, model_info, code_info, model_readme, code_readme): "code_quality",
-            executor.submit(dataset_and_code_score, code_info, raw_dataset_url, model_readme): "dc_score",
-            executor.submit(performance_claims, model_url): "performance_claims",
-            executor.submit(calculate_size_score, model_url): "size_score",
-            executor.submit(get_license_score, model_url): "license_score",
-            executor.submit(bus_factor, model_info): "bus_factor",
-            executor.submit(ramp_up_time, model_info): "ramp_up_time",
-            executor.submit(reproducibility, model_info, code_info, model_readme): "reproducibility",
-            executor.submit(reviewedness, code_info): "reviewedness",
-            executor.submit(treescore, model_info): "treescore",
+        future_to_metric: Dict[Future, str] = {  # type: ignore[type-arg,arg-type]
+            executor.submit(data_quality, model_info, model_readme): "data_quality",  # type: ignore[arg-type]
+            executor.submit(code_quality, model_info, code_info, model_readme, code_readme): "code_quality",  # type: ignore[arg-type]
+            executor.submit(dataset_and_code_score, code_info, raw_dataset_url, model_readme): "dc_score",  # type: ignore[arg-type]
+            executor.submit(performance_claims, model_url): "performance_claims",  # type: ignore[arg-type]
+            executor.submit(calculate_size_score, model_url): "size_score",  # type: ignore[arg-type]
+            executor.submit(get_license_score, model_url): "license_score",  # type: ignore[arg-type]
+            executor.submit(bus_factor, model_info): "bus_factor",  # type: ignore[arg-type]
+            executor.submit(ramp_up_time, model_info): "ramp_up_time",  # type: ignore[arg-type]
+            executor.submit(reproducibility, model_info, code_info, model_readme): "reproducibility",  # type: ignore[arg-type]
+            executor.submit(reviewedness, code_info): "reviewedness",  # type: ignore[arg-type]
+            executor.submit(treescore, model_info): "treescore",  # type: ignore[arg-type]
         }
-        
+
         for future in as_completed(future_to_metric):
             metric_name: str = future_to_metric[future]
             try:
@@ -124,7 +124,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             except Exception as e:
                 logger.debug(f"{metric_name} failed with error: {e}")
                 results[metric_name] = None
-    
+
     # Helper function to convert latency to milliseconds (integer)
     def to_ms(latency):
         """Convert latency to milliseconds as integer"""
@@ -136,7 +136,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             return int(latency * 1000)
         else:  # Already in milliseconds or large value
             return int(latency)
-    
+
     # Unpack the results with error handling
     try:
         result = results.get("data_quality")
@@ -147,7 +147,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             dq_latency = to_ms(dq_latency_raw)
     except (TypeError, ValueError, AttributeError):
         data_quality_score, dq_latency = 0.0, 0
-    
+
     try:
         result = results.get("code_quality")
         if result is None:
@@ -157,7 +157,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             cq_latency = to_ms(cq_latency_raw)
     except (TypeError, ValueError, AttributeError):
         code_quality_score, cq_latency = 0.0, 0
-    
+
     try:
         result = results.get("dc_score")
         if result is None:
@@ -168,7 +168,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             dc_latency = int(dc_latency_raw) if dc_latency_raw else 0
     except (TypeError, ValueError, AttributeError):
         dc_score, dc_latency = 0.0, 0
-    
+
     try:
         result = results.get("performance_claims")
         if result is None:
@@ -179,7 +179,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             perf_latency = int(perf_latency_raw) if perf_latency_raw else 0
     except (TypeError, ValueError, AttributeError):
         perf_score, perf_latency = 0.0, 0
-    
+
     try:
         result = results.get("size_score")
         if result is None:
@@ -189,7 +189,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             size_latency = to_ms(size_latency_raw)
     except (TypeError, ValueError, AttributeError):
         size_scores, net_size_score, size_latency = {}, 0.0, 0
-    
+
     try:
         result = results.get("license_score")
         if result is None:
@@ -199,7 +199,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             license_latency = to_ms(license_latency_raw)
     except (TypeError, ValueError, AttributeError):
         license_score, license_latency = 0.0, 0
-    
+
     try:
         result = results.get("bus_factor")
         if result is None:
@@ -209,7 +209,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             bus_latency = to_ms(bus_latency_raw)
     except (TypeError, ValueError, AttributeError):
         bus_score, bus_latency = 0.0, 0
-    
+
     try:
         result = results.get("ramp_up_time")
         if result is None:
@@ -219,7 +219,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             ramp_latency = to_ms(ramp_latency_raw)
     except (TypeError, ValueError, AttributeError):
         ramp_score, ramp_latency = 0.0, 0
-    
+
     try:
         result = results.get("reproducibility")
         if result is None:
@@ -229,7 +229,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             repro_latency = to_ms(repro_latency_raw)
     except (TypeError, ValueError, AttributeError):
         repro_score, repro_latency = 0.0, 0
-    
+
     try:
         result = results.get("reviewedness")
         if result is None:
@@ -240,7 +240,7 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             review_latency = to_ms(review_latency_raw)
     except (TypeError, ValueError, AttributeError):
         review_score, review_latency = 0.0, 0
-    
+
     try:
         result = results.get("treescore")
         if result is None:
@@ -250,24 +250,19 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
             tree_latency = to_ms(tree_latency_raw)
     except (TypeError, ValueError, AttributeError):
         tree_score, tree_latency = 0.0, 0
-    
+
     # Calculate net score
-    net_score: float = (
-        0.09 * license_score + 0.10 * ramp_score + 0.11 * net_size_score +
-        0.13 * data_quality_score + 0.10 * bus_score + 0.13 * dc_score +
-        0.10 * code_quality_score + 0.09 * perf_score + 0.05 * repro_score +
-        0.05 * review_score + 0.05 * tree_score
-    )
-    
+    net_score: float = (0.09 * license_score + 0.10 * ramp_score + 0.11 * net_size_score + 0.13 * data_quality_score + 0.10 * bus_score + 0.13 * dc_score + 0.10 * code_quality_score + 0.09 * perf_score + 0.05 * repro_score + 0.05 * review_score + 0.05 * tree_score)
+
     end = time.time()
     net_latency: int = int((end - start) * 1000)
-    
+
     # Handle size_score format - convert dict to expected format
     if isinstance(size_scores, dict):
         size_score_dict = size_scores
     else:
         size_score_dict = {"value": net_size_score, "unit": "MB"}
-    
+
     # Create package model with all metrics
     package = PackageModel(
         id=model_id,
@@ -300,6 +295,5 @@ def calculate_package_metrics(model_url: str) -> PackageModel:
         reviewedness_latency=review_latency,
         treescore_latency=tree_latency
     )
-    
-    return package
 
+    return package

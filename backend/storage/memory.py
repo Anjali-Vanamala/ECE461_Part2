@@ -40,14 +40,14 @@ def delete_package(package_id: str) -> bool:
 def list_packages(offset: int = 0, limit: int = 100, name_filter: Optional[str] = None, category_filter: Optional[str] = None) -> list[PackageModel]:
     """List packages with optional filters"""
     result = list(packages.values())
-    
+
     # Apply filters
     if name_filter:
         result = [p for p in result if name_filter.lower() in p.name.lower()]
-    
+
     if category_filter:
         result = [p for p in result if p.category == category_filter]
-    
+
     # Pagination
     return result[offset:offset + limit]
 
@@ -56,7 +56,7 @@ def get_total_count(name_filter: Optional[str] = None, category_filter: Optional
     """Get total count of packages after applying filters"""
     if not name_filter and not category_filter:
         return len(packages)
-    
+
     result = list(packages.values())
     if name_filter:
         result = [p for p in result if name_filter.lower() in p.name.lower()]

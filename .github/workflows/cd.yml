@@ -5,16 +5,16 @@ name: CD - Deploy FastAPI to ECS/Fargate (MVP)
 # - Backend accessible for autograder
 # 
 # Prerequisites (manual setup required):
-# - ECR repository: ece461-part2 in us-east-1
-# - ECS cluster: ece461-part2-cluster in us-east-1  
-# - ECS task definition: ece461-part2-task (created once manually)
-# - ECS service: ece461-part2-service (created once manually)
+# - ECR repository: ece461-backend in us-east-2
+# - ECS cluster: ece461-backend-cluster in us-east-2  
+# - ECS task definition: ece461-backend-task (created once manually)
+# - ECS service: ece461-backend-service (created once manually)
 # - GitHub OIDC role with ECR/ECS permissions
-# - CloudWatch log group: /ecs/ece461-part2-task
+# - CloudWatch log group: /ecs/ece461-backend-task
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, '9-deploy-mv-p-system-to-aws-via-github-actions-cd-pipeline-for-delivery-1' ]
   workflow_dispatch:
     inputs:
       reason:
@@ -27,11 +27,11 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REPO: ece461-part2
-  ECS_CLUSTER: ece461-part2-cluster
-  ECS_SERVICE: ece461-part2-service
-  ECS_TASK_DEFINITION: ece461-part2-task
+  AWS_REGION: us-east-2
+  ECR_REPO: ece461-backend
+  ECS_CLUSTER: ece461-backend-cluster
+  ECS_SERVICE: ece461-backend-service
+  ECS_TASK_DEFINITION: ece461-backend-task
   CONTAINER_NAME: fastapi-app
   IMAGE_TAG: ${{ github.sha }}
 

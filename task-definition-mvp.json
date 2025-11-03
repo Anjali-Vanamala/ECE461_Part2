@@ -1,5 +1,5 @@
 {
-  "family": "ece461-part2-task",
+  "family": "ece461-backend-task",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "512",
@@ -8,7 +8,7 @@
   "containerDefinitions": [
     {
       "name": "fastapi-app",
-      "image": "<ECR_REGISTRY>/ece461-part2:latest",
+      "image": "<ACCOUNT_ID>.dkr.ecr.us-east-2.amazonaws.com/ece461-backend:latest",
       "essential": true,
       "portMappings": [
         {
@@ -29,8 +29,8 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/ece461-part2-task",
-          "awslogs-region": "us-east-1",
+          "awslogs-group": "/ecs/ece461-backend-task",
+          "awslogs-region": "us-east-2",
           "awslogs-stream-prefix": "ecs"
         }
       }

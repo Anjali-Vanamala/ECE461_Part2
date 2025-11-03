@@ -1,7 +1,7 @@
-import ingestion
-from fastapi import APIRouter  # pyright: ignore[reportMissingImports]
-from fastapi import HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
+
+import ingestion
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 

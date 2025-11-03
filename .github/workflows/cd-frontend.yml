@@ -11,7 +11,7 @@ name: CD - Deploy Frontend to S3
 
 on:
   push:
-    branches: [ '40-frontend-deploy' ]
+    branches: [ 'main' ]
   workflow_dispatch:
     inputs:
       reason:

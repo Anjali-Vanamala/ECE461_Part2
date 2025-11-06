@@ -1,7 +1,7 @@
 from typing import Optional
 
-from fastapi import (APIRouter,  # pyright: ignore[reportMissingImports]
-                     HTTPException, Path, Query, status)
+from fastapi import APIRouter  # pyright: ignore[reportMissingImports]
+from fastapi import HTTPException, Path, Query, status
 
 from backend.models.package import (PackageCreate, PackageListResponse,
                                     PackageModel, PackageUpdate)

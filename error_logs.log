@@ -1,0 +1,45 @@
+Debug:
+Begin processing model URL: https://huggingface.co/gpt2
+Info:Begin processing metrics.
+Info:Calculating code_quality metric
+Info:Calculating data_quality metric
+Info:Calculating performance_claims metric
+Debug:Documentation length: 1142, Reusability score: 1.0
+Info:Error getting model size for https://huggingface.co/gpt2: Repo id must be in the form 'repo_name' or 'namespace/repo_name': 'https://huggingface.co/gpt2'. Use `repo_type` argument if needed.
+Debug:Starting completeness check
+Info:Calculating dataset_and_score metric
+Info:Calculating license score for: https://huggingface.co/gpt2
+Info:Completeness keywords found: 9
+Debug:Model downloads: 11527857, Reliability score: 1.0
+Info: Calculating bus factor metric
+Info:Model: https://huggingface.co/gpt2
+Debug:Found 4 code blocks in README
+Info: Calculating ramp up time metric
+Info:Pattern-adjusted size: 0.50 GB
+Info:Calculating reviewedness metric
+Debug:Test mentions: 2, Testability score: 0.4
+Info:Calculating treescore metric
+Info:Calculating reproducibility metric
+Info:  raspberry_pi: 0.75
+Info:Final code quality score: 0.8800000000000001
+Debug:No GitHub repository information
+Info:  jetson_nano: 0.88
+Debug:Found 4 code blocks in README
+Info:No GitHub repo - score: -1.0
+Debug:Starting correctness check
+Info:No parent models found - score: 0.0
+Debug:Found valid Python code with imports
+Info:  desktop_pc: 0.97
+Info:Treescore: 0.0, latency: 1ms
+Info:Reviewedness score: -1.0, latency: 1ms
+Info:eval ments found: 3
+Info:Example code found - score: 1.0
+Info:  aws_server: 1.0
+Info:accuracy: 2.0
+Info:Reproducibility score: 1.0, latency: 3ms
+Info:Net size score: 0.93
+Debug:Starting coverage check
+Info:Size calculation latency: 5 ms
+Debug:Starting relevance check
+Info:README not found for https://huggingface.co/gpt2
+Info:No README found for https://huggingface.co/gpt2 - returning 0.0

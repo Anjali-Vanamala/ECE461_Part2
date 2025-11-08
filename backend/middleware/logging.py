@@ -74,7 +74,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
     def _log_debug(self, log_type, method, path, status_or_error, latency_ms, client_ip, error_msg=None):
         # Use integer comparison, consistent with logger.py
-        if LOG_LEVEL != 2:
+        if LOG_LEVEL < 2:
             return
 
         data = {

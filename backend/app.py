@@ -1,6 +1,7 @@
 import fastapi  # pyright: ignore[reportMissingImports]
 
 from backend.api.routes import health, ingest, package
+from backend.middleware.logging import LoggingMiddleware
 
 app = fastapi.FastAPI(
     title="Model Registry API",
@@ -11,6 +12,9 @@ app = fastapi.FastAPI(
         "url": "https://opensource.org/licenses/MIT",
     }
 )
+
+# Add logging middleware for request/error logging and CloudWatch metrics
+app.add_middleware(LoggingMiddleware)
 
 app.include_router(health.router)
 app.include_router(package.router, prefix="/api/v1")

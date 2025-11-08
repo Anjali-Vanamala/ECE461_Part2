@@ -1063,7 +1063,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
             middleware.cloudwatch = mock_cloudwatch
         try:
             await middleware.dispatch(mock_request, mock_call_next)
-            assert False
+            self.fail("Expected ValueError to be raised")
         except ValueError:
             pass
 

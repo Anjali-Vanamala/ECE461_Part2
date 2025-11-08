@@ -28,8 +28,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                     'cloudwatch',
                     region_name=os.environ.get('AWS_REGION', 'us-east-2')
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Could not initialize CloudWatch client: {type(e).__name__}: {e}")
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         start_time = time.time()

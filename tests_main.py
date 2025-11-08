@@ -10,6 +10,8 @@ import ingestion
 import input
 import metrics.code_quality
 import metrics.data_quality
+# Import middleware.logging module so patches can find it
+from backend.middleware import logging as middleware_logging  # noqa: F401
 from input import find_dataset, main
 from metrics.bus_factor import bus_factor
 from metrics.dataset_and_code_score import dataset_and_code_score

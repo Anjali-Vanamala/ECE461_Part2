@@ -997,6 +997,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_successful_request_logging(self):
         """Test that successful requests are logged and metrics sent"""
         from fastapi import Request, Response
+
         import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
@@ -1033,6 +1034,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_error_request_logging(self):
         """Test that errors are logged and error metrics sent"""
         from fastapi import Request
+
         import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
@@ -1071,6 +1073,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_no_logging_when_log_level_0(self):
         """Test that no logs are written when LOG_LEVEL=0 (silent mode)"""
         from fastapi import Request, Response
+
         import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
@@ -1102,6 +1105,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_debug_logging_when_log_level_2(self):
         """Test that debug JSON is logged when LOG_LEVEL=2"""
         from fastapi import Request, Response
+
         import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
@@ -1133,6 +1137,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_cloudwatch_unavailable_graceful_fallback(self):
         """Test graceful fallback when CloudWatch is unavailable"""
         from fastapi import Request, Response
+
         import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
@@ -1161,6 +1166,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_cloudwatch_metrics_failure_graceful(self):
         """Test that CloudWatch failures don't break requests"""
         from fastapi import Request, Response
+
         import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \

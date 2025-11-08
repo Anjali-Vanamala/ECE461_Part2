@@ -997,16 +997,13 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_successful_request_logging(self):
         """Test that successful requests are logged and metrics sent"""
         from fastapi import Request, Response
-
-        # Import LoggingMiddleware - this also loads the module for patching
-        from backend.middleware.logging import LoggingMiddleware
+        import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
              patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
              patch('backend.middleware.logging.logger') as mock_logger, \
-             patch('os.environ.get') as mock_env_get:
+             patch.object(logging_module, 'LOG_LEVEL', 1):
 
-            mock_env_get.side_effect = lambda key, default=None: '1' if key == 'LOG_LEVEL' else (default if key != 'AWS_REGION' else 'us-east-2')
             mock_cloudwatch = MagicMock()
             mock_boto3.client.return_value = mock_cloudwatch
 
@@ -1020,6 +1017,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
             async def mock_call_next(request):
                 return mock_response
 
+            from backend.middleware.logging import LoggingMiddleware
             middleware = LoggingMiddleware(MagicMock())
             result = await middleware.dispatch(mock_request, mock_call_next)
 
@@ -1035,16 +1033,13 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_error_request_logging(self):
         """Test that errors are logged and error metrics sent"""
         from fastapi import Request
-
-        # Import LoggingMiddleware - this also loads the module for patching
-        from backend.middleware.logging import LoggingMiddleware
+        import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
              patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
              patch('backend.middleware.logging.logger') as mock_logger, \
-             patch('os.environ.get') as mock_env_get:
+             patch.object(logging_module, 'LOG_LEVEL', 1):
 
-            mock_env_get.side_effect = lambda key, default=None: '1' if key == 'LOG_LEVEL' else (default if key != 'AWS_REGION' else 'us-east-2')
             mock_cloudwatch = MagicMock()
             mock_boto3.client.return_value = mock_cloudwatch
 
@@ -1058,6 +1053,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
             async def mock_call_next(request):
                 raise test_error
 
+            from backend.middleware.logging import LoggingMiddleware
             middleware = LoggingMiddleware(MagicMock())
             try:
                 await middleware.dispatch(mock_request, mock_call_next)
@@ -1072,19 +1068,16 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
 
             mock_cloudwatch.put_metric_data.assert_called_once()
 
-    async def test_debug_logging_when_log_level_2(self):
-        """Test that debug JSON is logged when LOG_LEVEL=2"""
+    async def test_no_logging_when_log_level_0(self):
+        """Test that no logs are written when LOG_LEVEL=0 (silent mode)"""
         from fastapi import Request, Response
-
-        # Import LoggingMiddleware - this also loads the module for patching
-        from backend.middleware.logging import LoggingMiddleware
+        import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
              patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
              patch('backend.middleware.logging.logger') as mock_logger, \
-             patch('os.environ.get') as mock_env_get:
+             patch.object(logging_module, 'LOG_LEVEL', 0):
 
-            mock_env_get.side_effect = lambda key, default=None: '2' if key == 'LOG_LEVEL' else (default if key != 'AWS_REGION' else 'us-east-2')
             mock_cloudwatch = MagicMock()
             mock_boto3.client.return_value = mock_cloudwatch
 
@@ -1096,9 +1089,42 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
             async def mock_call_next(request):
                 return Response(status_code=200)
 
+            from backend.middleware.logging import LoggingMiddleware
+            middleware = LoggingMiddleware(MagicMock())
+            result = await middleware.dispatch(mock_request, mock_call_next)
+
+            assert result.status_code == 200
+            mock_logger.info.assert_not_called()
+            mock_logger.debug.assert_not_called()
+            # Metrics should still be sent (not affected by LOG_LEVEL)
+            mock_cloudwatch.put_metric_data.assert_called_once()
+
+    async def test_debug_logging_when_log_level_2(self):
+        """Test that debug JSON is logged when LOG_LEVEL=2"""
+        from fastapi import Request, Response
+        import backend.middleware.logging as logging_module
+
+        with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
+             patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
+             patch('backend.middleware.logging.logger') as mock_logger, \
+             patch.object(logging_module, 'LOG_LEVEL', 2):
+
+            mock_cloudwatch = MagicMock()
+            mock_boto3.client.return_value = mock_cloudwatch
+
+            mock_request = MagicMock(spec=Request)
+            mock_request.method = "GET"
+            mock_request.url.path = "/health"
+            mock_request.client.host = "127.0.0.1"
+
+            async def mock_call_next(request):
+                return Response(status_code=200)
+
+            from backend.middleware.logging import LoggingMiddleware
             middleware = LoggingMiddleware(MagicMock())
             await middleware.dispatch(mock_request, mock_call_next)
 
+            assert mock_logger.info.called
             assert mock_logger.debug.called
             debug_data = json.loads(mock_logger.debug.call_args[0][0])
             assert debug_data['type'] == 'request'
@@ -1107,16 +1133,13 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_cloudwatch_unavailable_graceful_fallback(self):
         """Test graceful fallback when CloudWatch is unavailable"""
         from fastapi import Request, Response
-
-        # Import LoggingMiddleware - this also loads the module for patching
-        from backend.middleware.logging import LoggingMiddleware
+        import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
              patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
              patch('backend.middleware.logging.logger') as mock_logger, \
-             patch('os.environ.get') as mock_env_get:
+             patch.object(logging_module, 'LOG_LEVEL', 1):
 
-            mock_env_get.side_effect = lambda key, default=None: '1' if key == 'LOG_LEVEL' else (default if key != 'AWS_REGION' else 'us-east-2')
             mock_boto3.client.side_effect = Exception("CloudWatch unavailable")
 
             mock_request = MagicMock(spec=Request)
@@ -1127,6 +1150,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
             async def mock_call_next(request):
                 return Response(status_code=200)
 
+            from backend.middleware.logging import LoggingMiddleware
             middleware = LoggingMiddleware(MagicMock())
             result = await middleware.dispatch(mock_request, mock_call_next)
 
@@ -1137,16 +1161,13 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
     async def test_cloudwatch_metrics_failure_graceful(self):
         """Test that CloudWatch failures don't break requests"""
         from fastapi import Request, Response
-
-        # Import LoggingMiddleware - this also loads the module for patching
-        from backend.middleware.logging import LoggingMiddleware
+        import backend.middleware.logging as logging_module
 
         with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
              patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
              patch('backend.middleware.logging.logger') as mock_logger, \
-             patch('os.environ.get') as mock_env_get:
+             patch.object(logging_module, 'LOG_LEVEL', 1):
 
-            mock_env_get.side_effect = lambda key, default=None: '1' if key == 'LOG_LEVEL' else (default if key != 'AWS_REGION' else 'us-east-2')
             mock_cloudwatch = MagicMock()
             mock_cloudwatch.put_metric_data.side_effect = Exception("CloudWatch error")
             mock_boto3.client.return_value = mock_cloudwatch
@@ -1159,6 +1180,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
             async def mock_call_next(request):
                 return Response(status_code=200)
 
+            from backend.middleware.logging import LoggingMiddleware
             middleware = LoggingMiddleware(MagicMock())
             result = await middleware.dispatch(mock_request, mock_call_next)
 

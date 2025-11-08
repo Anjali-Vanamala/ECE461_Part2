@@ -15,6 +15,9 @@ try:
 except ImportError:
     CLOUDWATCH_AVAILABLE = False
 
+# Read LOG_LEVEL once at module level, consistent with logger.py
+LOG_LEVEL = int(os.environ.get('LOG_LEVEL', 0))
+
 
 class LoggingMiddleware(BaseHTTPMiddleware):
     """Logs requests/errors and publishes CloudWatch metrics."""
@@ -42,10 +45,12 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             latency_ms = round((time.time() - start_time) * 1000, 2)
 
-            logger.info(
-                f"Request: {method} {path} | Status: {response.status_code} | "
-                f"Latency: {latency_ms}ms | IP: {client_ip}"
-            )
+            # Only log if LOG_LEVEL >= 1 (consistent with logger.py)
+            if LOG_LEVEL >= 1:
+                logger.info(
+                    f"Request: {method} {path} | Status: {response.status_code} | "
+                    f"Latency: {latency_ms}ms | IP: {client_ip}"
+                )
 
             self._log_debug("request", method, path, response.status_code, latency_ms, client_ip)
             self._send_metrics(method, path, latency_ms, status_code=response.status_code)
@@ -55,10 +60,12 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             latency_ms = round((time.time() - start_time) * 1000, 2)
 
-            logger.info(
-                f"Error: {method} {path} | {str(e)} | Type: {type(e).__name__} | "
-                f"Latency: {latency_ms}ms | IP: {client_ip}"
-            )
+            # Only log if LOG_LEVEL >= 1 (consistent with logger.py)
+            if LOG_LEVEL >= 1:
+                logger.info(
+                    f"Error: {method} {path} | {str(e)} | Type: {type(e).__name__} | "
+                    f"Latency: {latency_ms}ms | IP: {client_ip}"
+                )
 
             self._log_debug("error", method, path, type(e).__name__, latency_ms, client_ip, str(e))
             self._send_metrics(method, path, latency_ms, error_type=type(e).__name__)
@@ -66,7 +73,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             raise
 
     def _log_debug(self, log_type, method, path, status_or_error, latency_ms, client_ip, error_msg=None):
-        if os.environ.get('LOG_LEVEL') != '2':
+        # Use integer comparison, consistent with logger.py
+        if LOG_LEVEL != 2:
             return
 
         data = {

@@ -123,5 +123,5 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 })
 
             self.cloudwatch.put_metric_data(Namespace='ECE461/API', MetricData=metrics)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to send metrics to CloudWatch: {e} ({type(e).__name__})")

@@ -16,6 +16,9 @@ ENV LOG_FILE=/tmp/error_logs.log
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
+# Create log file (required by logger.py)
+RUN touch /tmp/error_logs.log
+
 # Expose port for FastAPI
 EXPOSE 8000
 

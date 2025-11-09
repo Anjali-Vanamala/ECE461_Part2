@@ -1,5 +1,7 @@
 # import parse_categories
+import json
 from datetime import datetime, timedelta
+from unittest import IsolatedAsyncioTestCase
 from unittest.mock import MagicMock, mock_open, patch
 
 import requests as rq
@@ -987,3 +989,206 @@ class Test_Treescore:
 
         assert score == 0.0
         assert latency >= 0
+
+
+class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
+    """Tests for backend.middleware.logging.LoggingMiddleware"""
+
+    async def test_successful_request_logging(self):
+        """Test that successful requests are logged and metrics sent"""
+        from fastapi import Request, Response
+
+        import backend.middleware.logging as logging_module
+
+        with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
+             patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
+             patch('backend.middleware.logging.logger') as mock_logger, \
+             patch.object(logging_module, 'LOG_LEVEL', 1):
+
+            mock_cloudwatch = MagicMock()
+            mock_boto3.client.return_value = mock_cloudwatch
+
+            mock_request = MagicMock(spec=Request)
+            mock_request.method = "GET"
+            mock_request.url.path = "/api/v1/package/"
+            mock_request.client.host = "127.0.0.1"
+
+            mock_response = Response(status_code=200)
+
+            async def mock_call_next(request):
+                return mock_response
+
+            from backend.middleware.logging import LoggingMiddleware
+            middleware = LoggingMiddleware(MagicMock())
+            result = await middleware.dispatch(mock_request, mock_call_next)
+
+            assert result == mock_response
+            mock_logger.info.assert_called_once()
+            log_msg = mock_logger.info.call_args[0][0]
+            assert "Request: GET /api/v1/package/" in log_msg
+            assert "Status: 200" in log_msg
+
+            mock_cloudwatch.put_metric_data.assert_called_once()
+            assert mock_cloudwatch.put_metric_data.call_args[1]['Namespace'] == 'ECE461/API'
+
+    async def test_error_request_logging(self):
+        """Test that errors are logged and error metrics sent"""
+        from fastapi import Request
+
+        import backend.middleware.logging as logging_module
+
+        with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
+             patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
+             patch('backend.middleware.logging.logger') as mock_logger, \
+             patch.object(logging_module, 'LOG_LEVEL', 1):
+
+            mock_cloudwatch = MagicMock()
+            mock_boto3.client.return_value = mock_cloudwatch
+
+            mock_request = MagicMock(spec=Request)
+            mock_request.method = "POST"
+            mock_request.url.path = "/api/v1/ingest/"
+            mock_request.client.host = "10.0.1.5"
+
+            test_error = ValueError("Test error")
+
+            async def mock_call_next(request):
+                raise test_error
+
+            from backend.middleware.logging import LoggingMiddleware
+            middleware = LoggingMiddleware(MagicMock())
+            try:
+                await middleware.dispatch(mock_request, mock_call_next)
+                self.fail("Expected ValueError to be raised")
+            except ValueError:
+                pass
+
+            mock_logger.info.assert_called_once()
+            log_msg = mock_logger.info.call_args[0][0]
+            assert "Error: POST /api/v1/ingest/" in log_msg
+            assert "Test error" in log_msg
+
+            mock_cloudwatch.put_metric_data.assert_called_once()
+
+    async def test_no_logging_when_log_level_0(self):
+        """Test that no logs are written when LOG_LEVEL=0 (silent mode)"""
+        from fastapi import Request, Response
+
+        import backend.middleware.logging as logging_module
+
+        with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
+             patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
+             patch('backend.middleware.logging.logger') as mock_logger, \
+             patch.object(logging_module, 'LOG_LEVEL', 0):
+
+            mock_cloudwatch = MagicMock()
+            mock_boto3.client.return_value = mock_cloudwatch
+
+            mock_request = MagicMock(spec=Request)
+            mock_request.method = "GET"
+            mock_request.url.path = "/health"
+            mock_request.client.host = "127.0.0.1"
+
+            async def mock_call_next(request):
+                return Response(status_code=200)
+
+            from backend.middleware.logging import LoggingMiddleware
+            middleware = LoggingMiddleware(MagicMock())
+            result = await middleware.dispatch(mock_request, mock_call_next)
+
+            assert result.status_code == 200
+            mock_logger.info.assert_not_called()
+            mock_logger.debug.assert_not_called()
+            # Metrics should still be sent (not affected by LOG_LEVEL)
+            mock_cloudwatch.put_metric_data.assert_called_once()
+
+    async def test_debug_logging_when_log_level_2(self):
+        """Test that debug JSON is logged when LOG_LEVEL=2"""
+        from fastapi import Request, Response
+
+        import backend.middleware.logging as logging_module
+
+        with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
+             patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
+             patch('backend.middleware.logging.logger') as mock_logger, \
+             patch.object(logging_module, 'LOG_LEVEL', 2):
+
+            mock_cloudwatch = MagicMock()
+            mock_boto3.client.return_value = mock_cloudwatch
+
+            mock_request = MagicMock(spec=Request)
+            mock_request.method = "GET"
+            mock_request.url.path = "/health"
+            mock_request.client.host = "127.0.0.1"
+
+            async def mock_call_next(request):
+                return Response(status_code=200)
+
+            from backend.middleware.logging import LoggingMiddleware
+            middleware = LoggingMiddleware(MagicMock())
+            await middleware.dispatch(mock_request, mock_call_next)
+
+            assert mock_logger.info.called
+            assert mock_logger.debug.called
+            debug_data = json.loads(mock_logger.debug.call_args[0][0])
+            assert debug_data['type'] == 'request'
+            assert debug_data['method'] == 'GET'
+
+    async def test_cloudwatch_unavailable_graceful_fallback(self):
+        """Test graceful fallback when CloudWatch is unavailable"""
+        from fastapi import Request, Response
+
+        import backend.middleware.logging as logging_module
+
+        with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
+             patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
+             patch('backend.middleware.logging.logger') as mock_logger, \
+             patch.object(logging_module, 'LOG_LEVEL', 1):
+
+            mock_boto3.client.side_effect = Exception("CloudWatch unavailable")
+
+            mock_request = MagicMock(spec=Request)
+            mock_request.method = "GET"
+            mock_request.url.path = "/health"
+            mock_request.client.host = "127.0.0.1"
+
+            async def mock_call_next(request):
+                return Response(status_code=200)
+
+            from backend.middleware.logging import LoggingMiddleware
+            middleware = LoggingMiddleware(MagicMock())
+            result = await middleware.dispatch(mock_request, mock_call_next)
+
+            assert result.status_code == 200
+            assert mock_logger.info.called
+            assert middleware.cloudwatch is None
+
+    async def test_cloudwatch_metrics_failure_graceful(self):
+        """Test that CloudWatch failures don't break requests"""
+        from fastapi import Request, Response
+
+        import backend.middleware.logging as logging_module
+
+        with patch('backend.middleware.logging.boto3', create=True) as mock_boto3, \
+             patch('backend.middleware.logging.CLOUDWATCH_AVAILABLE', True), \
+             patch('backend.middleware.logging.logger') as mock_logger, \
+             patch.object(logging_module, 'LOG_LEVEL', 1):
+
+            mock_cloudwatch = MagicMock()
+            mock_cloudwatch.put_metric_data.side_effect = Exception("CloudWatch error")
+            mock_boto3.client.return_value = mock_cloudwatch
+
+            mock_request = MagicMock(spec=Request)
+            mock_request.method = "GET"
+            mock_request.url.path = "/health"
+            mock_request.client.host = "127.0.0.1"
+
+            async def mock_call_next(request):
+                return Response(status_code=200)
+
+            from backend.middleware.logging import LoggingMiddleware
+            middleware = LoggingMiddleware(MagicMock())
+            result = await middleware.dispatch(mock_request, mock_call_next)
+
+            assert result.status_code == 200
+            assert mock_logger.info.called

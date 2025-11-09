@@ -1,0 +1,80 @@
+name: CD - Deploy Frontend to S3
+
+# MVP Requirements:
+# - Automated deployment to AWS S3 upon merge to main
+# - Frontend accessible via S3 static website hosting
+# 
+# Prerequisites (manual setup required):
+# - S3 bucket: ece461-frontend in us-east-2
+# - S3 bucket configured for static website hosting
+# - GitHub OIDC role with S3 permissions (reused from backend + S3 access)
+
+on:
+  push:
+    branches: [ 'main' ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deploy'
+        required: false
+        default: 'manual'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-2
+  S3_BUCKET: ece461-frontend
+  BUILD_DIR: frontend/dist
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          # If package.json exists, build. Otherwise, just prepare static files
+          if [ -f package.json ]; then
+            npm ci
+            npm run build
+          else
+            # For simple HTML, create dist directory with files
+            mkdir -p dist
+            cp *.html dist/ 2>/dev/null || true
+            cp *.css dist/ 2>/dev/null || true
+            cp *.js dist/ 2>/dev/null || true
+            [ -d assets ] && cp -r assets dist/ || true
+            # Create index.html from main.html if needed
+            if [ -f main.html ] && [ ! -f dist/index.html ]; then
+              cp main.html dist/index.html
+            fi
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          role-session-name: gha-frontend-deploy
+
+      - name: Deploy to S3
+        run: |
+          aws s3 sync ${{ env.BUILD_DIR }} s3://${{ env.S3_BUCKET }} \
+            --region ${{ env.AWS_REGION }} \
+            --delete
+
+      - name: Output deployment info
+        run: |
+          echo "✅ Frontend Deployment Complete"
+          echo "Bucket: ${{ env.S3_BUCKET }}"
+          echo "Region: ${{ env.AWS_REGION }}"

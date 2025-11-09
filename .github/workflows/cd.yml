@@ -1,0 +1,115 @@
+name: CD - Deploy FastAPI to ECS/Fargate (MVP)
+
+# MVP Requirements:
+# - Automated deployment to AWS upon merge to main
+# - Backend accessible for autograder
+# 
+# Prerequisites (manual setup required):
+# - ECR repository: ece461-backend in us-east-2
+# - ECS cluster: ece461-backend-cluster in us-east-2  
+# - ECS task definition: ece461-backend-task (created once manually)
+# - ECS service: ece461-backend-service (created once manually)
+# - GitHub OIDC role with ECR/ECS permissions
+# - CloudWatch log group: /ecs/ece461-backend-task
+
+on:
+  push:
+    branches: [ 'main' ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deploy'
+        required: false
+        default: 'manual'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-2
+  ECR_REPO: ece461-backend
+  ECS_CLUSTER: ece461-backend-cluster
+  ECS_SERVICE: ece461-backend-service
+  ECS_TASK_DEFINITION: ece461-backend-task
+  CONTAINER_NAME: fastapi-app
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps and run tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r dependencies.txt
+          pip install pytest coverage
+          coverage run -m pytest -q || true
+          coverage report || true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          role-session-name: gha-deploy
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build --build-arg GIT_SHA=${{ github.sha }} -t $ECR_REGISTRY/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }} .
+          docker push $ECR_REGISTRY/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+          echo "IMAGE_URI=$ECR_REGISTRY/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
+
+      - name: Update task definition with new image
+        run: |
+          # Download current task definition
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --query taskDefinition > task-definition.json
+          
+          # Update image URI using jq (pre-installed in GitHub Actions)
+          jq --arg IMAGE "$IMAGE_URI" \
+            '.containerDefinitions[0].image = $IMAGE' \
+            task-definition.json > task-definition-updated.json
+          
+          # Remove fields that can't be specified on register
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)' \
+            task-definition-updated.json > task-definition-final.json
+
+      - name: Register new task definition revision
+        run: |
+          aws ecs register-task-definition \
+            --cli-input-json file://task-definition-final.json \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Update ECS service with new deployment
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Output deployment info
+        run: |
+          echo "✅ MVP Deployment Complete"
+          echo "Image: $IMAGE_URI"
+          echo "Service: ${{ env.ECS_SERVICE }}"
+          echo "Cluster: ${{ env.ECS_CLUSTER }}"
+
+

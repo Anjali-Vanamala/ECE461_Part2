@@ -1,6 +1,7 @@
 import fastapi  # pyright: ignore[reportMissingImports]
 
-from backend.api.routes import health, ingest, package
+from backend.api.routes import (health, ingest, license_compat, package,
+                                size_cost)
 
 app = fastapi.FastAPI(
     title="Model Registry API",
@@ -15,6 +16,8 @@ app = fastapi.FastAPI(
 app.include_router(health.router)
 app.include_router(package.router, prefix="/api/v1")
 app.include_router(ingest.router, prefix="/api/v1")
+app.include_router(size_cost.router, prefix="/api/v1")
+app.include_router(license_compat.router, prefix="/api/v1")
 
 
 @app.get("/")

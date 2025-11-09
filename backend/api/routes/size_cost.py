@@ -1,9 +1,10 @@
 """
 Size-cost analysis endpoints.
 """
+# pyright: reportMissingImports=false
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, Path, status  # pyright: ignore[reportMissingImports]
+from fastapi import APIRouter, HTTPException, Path, status
 
 import logger
 from backend.models.size_cost import SizeCostRequest, SizeCostResponse

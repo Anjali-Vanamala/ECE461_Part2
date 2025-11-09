@@ -1,9 +1,10 @@
 """
 License compatibility check endpoints.
 """
+# pyright: reportMissingImports=false
 from typing import Any, Tuple
 
-from fastapi import APIRouter, HTTPException, Path, status  # pyright: ignore[reportMissingImports]
+from fastapi import APIRouter, HTTPException, Path, status
 
 import logger
 from backend.models.license_compat import (LicenseCompatRequest,

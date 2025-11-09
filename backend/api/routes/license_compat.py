@@ -7,17 +7,12 @@ from typing import Any, Tuple
 from fastapi import APIRouter, HTTPException, Path, status
 
 import logger
-from backend.models.license_compat import (
-    LicenseCompatRequest,
-    LicenseCompatResponse,
-)
+from backend.models.license_compat import (LicenseCompatRequest,
+                                           LicenseCompatResponse)
 from backend.services.package_service import get_package_by_id
-from metrics.license import (
-    download_readme_directly,
-    extract_license_section,
-    extract_model_id_from_url,
-    get_license_score_cached,
-)
+from metrics.license import (download_readme_directly, extract_license_section,
+                             extract_model_id_from_url,
+                             get_license_score_cached)
 
 router = APIRouter(prefix="/license-compatibility", tags=["license-compatibility"])
 

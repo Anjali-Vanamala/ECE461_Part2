@@ -111,4 +111,3 @@ def _get_size_scores(package: Any) -> Dict[str, float]:
         return stored_scores
 
     return {}
-

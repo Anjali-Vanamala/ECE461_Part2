@@ -3,7 +3,7 @@ License compatibility check endpoints.
 """
 from typing import Any, Tuple
 
-from fastapi import APIRouter, HTTPException, Path, status
+from fastapi import APIRouter, HTTPException, Path, status  # pyright: ignore[reportMissingImports]
 
 import logger
 from backend.models.license_compat import (LicenseCompatRequest,
@@ -88,7 +88,6 @@ def check_license_compatibility(request: LicenseCompatRequest):
     # Determine package license (from license score)
     # In Phase 1, license score of 0.0 means no/unknown license, 1.0 means has license
     license_score, license_latency, package_license = _get_license_details(package)
-    package_has_license = license_score > 0.0
     logger.debug(
         f"License metrics for {package.id}: score={license_score}, latency={license_latency}ms, inferred={package_license}"
     )
@@ -203,4 +202,3 @@ def _get_license_recommendation(pkg_license: str, target_license: str, score: fl
         return f"Conditionally compatible. {pkg_license} may be used with {target_license}, but review license terms carefully."
     else:
         return f"Incompatible. {pkg_license} cannot be legally combined with {target_license} projects."
-

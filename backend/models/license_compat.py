@@ -21,5 +21,3 @@ class LicenseCompatResponse(BaseModel):
     threshold: float
     is_compatible: bool
     recommendation: str
-
-

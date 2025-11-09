@@ -20,5 +20,3 @@ class SizeCostResponse(BaseModel):
     threshold: float
     meets_requirement: bool
     recommendation: str
-
-

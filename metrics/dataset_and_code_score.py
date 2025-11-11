@@ -3,7 +3,7 @@
 import os
 import re
 import time
-from typing import Tuple
+from typing import Optional, Tuple
 
 import requests
 
@@ -95,7 +95,13 @@ float
 """
 
 
-def dataset_and_code_score(code_url: str, dataset_url: str, readme: str) -> Tuple[float, float]:
+def dataset_and_code_score(
+    code_info: dict | None,
+    dataset_url: str,
+    readme: str,
+    *,
+    dataset_name: Optional[str] = None
+) -> Tuple[float, float]:
     # start latency timer
     start = time.time()
     logger.info("Calculating dataset_and_score metric")
@@ -109,16 +115,33 @@ def dataset_and_code_score(code_url: str, dataset_url: str, readme: str) -> Tupl
     if extract_and_validate_readme_code(readme):
         score += 0.5
 
+    # Give partial credit if a code repository was supplied
+    if code_info:
+        repo_url = code_info.get("html_url") if isinstance(code_info, dict) else None
+        if repo_url:
+            logger.debug(f"Detected linked code repository: {repo_url}")
+            score += 0.1
+        stars = code_info.get("stargazers_count", 0) if isinstance(code_info, dict) else 0
+        if stars and stars > 0:
+            score += 0.1
+
+    # Backend should have already resolved the dataset URL before calling metrics
+    effective_dataset_url = dataset_url
+
+    if dataset_name and not effective_dataset_url:
+        # Still provide a small bump if we at least know the dataset name
+        score += 0.05
+
     # Use AI to parse Dataset url based on this Piazza post:
     #   "Yes you are suppose to use GenAI to help parse the information from the dataset link"
-    if dataset_url:
+    if effective_dataset_url:
         score += .1  # add score for just having a dataset
 
         # now use AI since the dataset could be huggingface or not
         prompt = (f"Analyze the following dataset url to measure if the dataset used for training"
                   f"and benchmarking is well documented. This is a dataset used for a huggingface model."
                   f"If it is a widely used dataset such as bookcorpus you can assume it is very good."
-                  f"Dataset URL:\n{dataset_url}"
+                  f"Dataset URL:\n{effective_dataset_url}"
                   f"Return a score between 0 and 1. I am using this in code, so do not return ANYTHING"
                   f"but the float score. NO EXPLANATION. NOTHING BUT A FLOAT BETWEEN 0 AND 1.")
         valid_llm_output = False
@@ -137,6 +160,7 @@ def dataset_and_code_score(code_url: str, dataset_url: str, readme: str) -> Tupl
 
     end = time.time()
     latency: float = end - start
+    score = min(score, 1.0)
     return score, latency * 1000
 
 # UNIT TEST

@@ -1,65 +1,210 @@
-"""
-In-memory storage for packages (Phase 2).
-This will be replaced with DynamoDB in Phase 3.
-"""
-from typing import Dict, Optional
+from __future__ import annotations
 
-from backend.models.package import PackageModel
+import uuid
+from typing import Dict, Iterable, List, Optional
 
-# In-memory dictionary: key = package_id, value = PackageModel
-packages: Dict[str, PackageModel] = {}
+from backend.models import (
+    Artifact,
+    ArtifactID,
+    ArtifactMetadata,
+    ArtifactQuery,
+    ArtifactType,
+    ModelRating,
+)
+from backend.storage.records import CodeRecord, DatasetRecord, ModelRecord
+
+# ---------------------------------------------------------------------------
+# In-memory stores separated by artifact type
+# ---------------------------------------------------------------------------
+
+_MODELS: Dict[ArtifactID, ModelRecord] = {}
+_DATASETS: Dict[ArtifactID, DatasetRecord] = {}
+_CODES: Dict[ArtifactID, CodeRecord] = {}
+
+_TYPE_TO_STORE = {
+    ArtifactType.MODEL: _MODELS,
+    ArtifactType.DATASET: _DATASETS,
+    ArtifactType.CODE: _CODES,
+}
 
 
-def get_package(package_id: str) -> Optional[PackageModel]:
-    """Get a package by ID"""
-    return packages.get(package_id)
+# ---------------------------------------------------------------------------
+# Internal utilities
+# ---------------------------------------------------------------------------
+
+def generate_artifact_id() -> ArtifactID:
+    return str(uuid.uuid4())
 
 
-def create_package(package: PackageModel) -> PackageModel:
-    """Store a new package"""
-    packages[package.id] = package
-    return package
+def _get_store(artifact_type: ArtifactType):
+    return _TYPE_TO_STORE[artifact_type]
 
 
-def update_package(package_id: str, package: PackageModel) -> Optional[PackageModel]:
-    """Update an existing package"""
-    if package_id not in packages:
+def _find_by_url(artifact_type: ArtifactType, url: str) -> Optional[ArtifactID]:
+    store = _get_store(artifact_type)
+    for artifact_id, record in store.items():
+        if record.artifact.data.url == url:
+            return artifact_id
+    return None
+
+
+def _normalized(name: Optional[str]) -> Optional[str]:
+    return name.strip().lower() if isinstance(name, str) else None
+
+
+def _link_dataset_code(model_record: ModelRecord) -> None:
+    dataset_name = _normalized(model_record.dataset_name)
+    if model_record.dataset_id is None and dataset_name:
+        for dataset_id, record in _DATASETS.items():
+            if _normalized(record.artifact.metadata.name) == dataset_name:
+                model_record.dataset_id = dataset_id
+                model_record.dataset_url = record.artifact.data.url
+                break
+
+    code_name = _normalized(model_record.code_name)
+    if model_record.code_id is None and code_name:
+        for code_id, record in _CODES.items():
+            if _normalized(record.artifact.metadata.name) == code_name:
+                model_record.code_id = code_id
+                model_record.code_url = record.artifact.data.url
+                break
+
+
+
+
+# ---------------------------------------------------------------------------
+# CRUD helpers
+# ---------------------------------------------------------------------------
+
+def save_artifact(
+    artifact: Artifact,
+    *,
+    rating: Optional[ModelRating] = None,
+    dataset_name: Optional[str] = None,
+    dataset_url: Optional[str] = None,
+    code_name: Optional[str] = None,
+    code_url: Optional[str] = None,
+) -> Artifact:
+    """Insert or update an artifact entry in the appropriate store."""
+    if artifact.metadata.type == ArtifactType.MODEL:
+        record = _MODELS.get(artifact.metadata.id)
+        if record:
+            record.artifact = artifact
+            record.rating = rating or record.rating
+            record.dataset_name = dataset_name or record.dataset_name
+            record.dataset_url = dataset_url or record.dataset_url
+            record.code_name = code_name or record.code_name
+            record.code_url = code_url or record.code_url
+        else:
+            record = ModelRecord(
+                artifact=artifact,
+                rating=rating,
+                dataset_name=dataset_name,
+                dataset_url=dataset_url,
+                code_name=code_name,
+                code_url=code_url,
+            )
+            _MODELS[artifact.metadata.id] = record
+        _link_dataset_code(record)
+    elif artifact.metadata.type == ArtifactType.DATASET:
+        _DATASETS[artifact.metadata.id] = DatasetRecord(artifact=artifact)
+        dataset_name_normalized = _normalized(artifact.metadata.name)
+        for model_record in _MODELS.values():
+            if model_record.dataset_id is None and _normalized(model_record.dataset_name) == dataset_name_normalized:
+                model_record.dataset_id = artifact.metadata.id
+                model_record.dataset_url = artifact.data.url
+    elif artifact.metadata.type == ArtifactType.CODE:
+        _CODES[artifact.metadata.id] = CodeRecord(artifact=artifact)
+        code_name_normalized = _normalized(artifact.metadata.name)
+        for model_record in _MODELS.values():
+            if model_record.code_id is None and _normalized(model_record.code_name) == code_name_normalized:
+                model_record.code_id = artifact.metadata.id
+                model_record.code_url = artifact.data.url
+    else:
+        raise ValueError(f"Unsupported artifact type: {artifact.metadata.type}")
+    return artifact
+
+
+def get_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> Optional[Artifact]:
+    record = _get_store(artifact_type).get(artifact_id)
+    if not record:
         return None
-    packages[package_id] = package
-    return package
+    return record.artifact
 
 
-def delete_package(package_id: str) -> bool:
-    """Delete a package by ID"""
-    if package_id in packages:
-        del packages[package_id]
-        return True
-    return False
+def delete_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> bool:
+    store = _get_store(artifact_type)
+    if artifact_id not in store:
+        return False
+
+    if artifact_type == ArtifactType.DATASET:
+        for model_record in _MODELS.values():
+            if model_record.dataset_id == artifact_id:
+                model_record.dataset_id = None
+                model_record.dataset_url = None
+    elif artifact_type == ArtifactType.CODE:
+        for model_record in _MODELS.values():
+            if model_record.code_id == artifact_id:
+                model_record.code_id = None
+                model_record.code_url = None
+
+    del store[artifact_id]
+    return True
 
 
-def list_packages(offset: int = 0, limit: int = 100, name_filter: Optional[str] = None, category_filter: Optional[str] = None) -> list[PackageModel]:
-    """List packages with optional filters"""
-    result = list(packages.values())
-
-    # Apply filters
-    if name_filter:
-        result = [p for p in result if name_filter.lower() in p.name.lower()]
-
-    if category_filter:
-        result = [p for p in result if p.category == category_filter]
-
-    # Pagination
-    return result[offset:offset + limit]
+def list_metadata(artifact_type: ArtifactType) -> List[ArtifactMetadata]:
+    return [record.artifact.metadata for record in _get_store(artifact_type).values()]
 
 
-def get_total_count(name_filter: Optional[str] = None, category_filter: Optional[str] = None) -> int:
-    """Get total count of packages after applying filters"""
-    if not name_filter and not category_filter:
-        return len(packages)
+def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
+    results: Dict[str, ArtifactMetadata] = {}
+    for query in queries:
+        types = query.types or list(_TYPE_TO_STORE.keys())
+        for artifact_type in types:
+            for record in _get_store(artifact_type).values():
+                metadata = record.artifact.metadata
+                if query.name == "*" or query.name.lower() in metadata.name.lower():
+                    results[f"{metadata.type}:{metadata.id}"] = metadata
+    return list(results.values())
 
-    result = list(packages.values())
-    if name_filter:
-        result = [p for p in result if name_filter.lower() in p.name.lower()]
-    if category_filter:
-        result = [p for p in result if p.category == category_filter]
-    return len(result)
+
+def reset() -> None:
+    for store in _TYPE_TO_STORE.values():
+        store.clear()
+
+
+# ---------------------------------------------------------------------------
+# Additional helpers for registration workflow
+# ---------------------------------------------------------------------------
+
+def artifact_exists(artifact_type: ArtifactType, url: str) -> bool:
+    return _find_by_url(artifact_type, url) is not None
+
+
+def save_model_rating(artifact_id: ArtifactID, rating: ModelRating) -> None:
+    if artifact_id in _MODELS:
+        record = _MODELS[artifact_id]
+        record.rating = rating
+
+
+def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
+    record = _MODELS.get(artifact_id)
+    if not record:
+        return None
+    return record.rating
+
+
+def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
+    normalized = _normalized(name)
+    for record in _DATASETS.values():
+        if _normalized(record.artifact.metadata.name) == normalized:
+            return record
+    return None
+
+
+def find_code_by_name(name: str) -> Optional[CodeRecord]:
+    normalized = _normalized(name)
+    for record in _CODES.values():
+        if _normalized(record.artifact.metadata.name) == normalized:
+            return record
+    return None

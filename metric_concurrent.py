@@ -23,10 +23,17 @@ def main(
     raw_model_url: str,
     code_info: Any,
     code_readme: Any,
-    raw_dataset_url: str
+    raw_dataset_url: str,
+    *,
+    dataset_name: str | None = None,
+    code_name: str | None = None
 ) -> list[float]:
     start = time.time()
     logger.info("Begin processing metrics.")
+    if dataset_name:
+        logger.debug(f"Dataset hint supplied to metrics: {dataset_name}")
+    if code_name:
+        logger.debug(f"Code hint supplied to metrics: {code_name}")
 
     results: Dict[str, Any] = {}
 
@@ -34,7 +41,13 @@ def main(
         future_to_metric: Dict[Future, str] = {
             executor.submit(data_quality, model_info, model_readme): "data_quality",
             executor.submit(code_quality, model_info, code_info, model_readme, code_readme): "code_quality",
-            executor.submit(dataset_and_code_score, code_info, raw_dataset_url, model_readme): "dc_score",
+            executor.submit(
+                dataset_and_code_score,
+                code_info,
+                raw_dataset_url,
+                model_readme,
+                dataset_name=dataset_name
+            ): "dc_score",
             executor.submit(performance_claims, raw_model_url): "performance_claims",
             executor.submit(calculate_size_score, raw_model_url): "size_score",
             executor.submit(get_license_score, raw_model_url): "license_score",

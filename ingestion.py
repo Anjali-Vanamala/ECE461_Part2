@@ -1,12 +1,22 @@
 import os
 import re
 import sys
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 import requests as rq
 
 import logger
 import metric_concurrent
+from backend.models.artifact import ArtifactReference
+from backend.storage import memory
+
+
+def _derive_name_from_url(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+    trimmed = url.rstrip("/").split("/")[-1]
+    return trimmed or None
 
 
 def find_dataset(model_readme: str, seen_datasets: set) -> str:
@@ -32,7 +42,52 @@ def find_dataset(model_readme: str, seen_datasets: set) -> str:
     return ""  # None found
 
 
-def ingest(arg):
+def _build_entry_list(
+    arg: str,
+    dataset_url: Optional[str],
+    dataset_name: Optional[str],
+    code_url: Optional[str],
+    code_name: Optional[str]
+) -> List[Dict[str, Optional[str]]]:
+    """Normalize ingest inputs (file or direct URL) into a list of entries."""
+    if os.path.exists(arg):
+        with open(arg, "r", encoding="ascii") as input_file:
+            lines = input_file.readlines()
+        entries = []
+        for line in lines:
+            urls = [url.strip() for url in line.split(',')]
+            while len(urls) < 3:
+                urls.append("")
+            entries.append(
+                {
+                    "code_url": urls[0] or None,
+                    "dataset_url": urls[1] or None,
+                    "model_url": urls[2] or None,
+                    "dataset_name": None,
+                    "code_name": None,
+                }
+            )
+        return entries
+
+    return [
+        {
+            "code_url": code_url,
+            "dataset_url": dataset_url,
+            "model_url": arg,
+            "dataset_name": dataset_name,
+            "code_name": code_name,
+        }
+    ]
+
+
+def ingest(
+    arg,
+    *,
+    dataset_url: str | None = None,
+    dataset_name: str | None = None,
+    code_url: str | None = None,
+    code_name: str | None = None
+):
     """Main function to get & condition the user input url."""
     model_readme = ""
     dataset_readme = ""
@@ -44,26 +99,16 @@ def ingest(arg):
 
     seen_datasets = set()
 
-    input_lines = []
-    if os.path.exists(arg):
-        # Treat as a file
-        with open(arg, "r", encoding="ascii") as input_file:
-            input_lines = input_file.readlines()
-    else:
-        # Treat as a direct model URL (simulate ", ,model_url")
-        input_lines = [f", ,{arg}\n"]
+    entries = _build_entry_list(arg, dataset_url, dataset_name, code_url, code_name)
 
-    # loop for reading each line:
-    for line in input_lines:
-        urls = [url.strip() for url in line.split(',')]
+    # loop for reading each entry:
+    for entry in entries:
+        raw_code_url = entry.get("code_url") or ""
+        raw_dataset_url = entry.get("dataset_url") or ""
+        raw_model_url = entry.get("model_url") or ""
 
-        # Handle cases with fewer than 3 URLs
-        while len(urls) < 3:
-            urls.append("")
-
-        raw_code_url = urls[0]
-        raw_dataset_url = urls[1]
-        raw_model_url = urls[2]
+        inferred_dataset_name = entry.get("dataset_name")
+        inferred_code_name = entry.get("code_name")
 
         logger.info(f"Raw code url:{raw_code_url}\nRaw dataset url: {raw_dataset_url}\nRaw model url: {raw_model_url}")
 
@@ -92,8 +137,15 @@ def ingest(arg):
             model_readme = ""
 
         # ----- DATASET -----
+        if inferred_dataset_name is None and raw_dataset_url:
+            inferred_dataset_name = raw_dataset_url.split("/")[-1] or None
         parsed_dataset = urlparse(raw_dataset_url)
         dataset_path = parsed_dataset.path.strip('/')
+        if not raw_dataset_url and inferred_dataset_name:
+            existing_dataset = memory.find_dataset_by_name(inferred_dataset_name)
+            if existing_dataset and existing_dataset.url:
+                raw_dataset_url = existing_dataset.url
+
         if raw_dataset_url:
             seen_datasets.add(raw_dataset_url)
         else:
@@ -116,6 +168,13 @@ def ingest(arg):
             dataset_readme = ""
 
         # ----- CODE -----
+        if inferred_code_name is None and raw_code_url:
+            inferred_code_name = raw_code_url.rstrip("/").split("/")[-1] or None
+        if not raw_code_url and inferred_code_name:
+            existing_code = memory.find_code_by_name(inferred_code_name)
+            if existing_code and existing_code.url:
+                raw_code_url = existing_code.url
+
         match = re.search(r'github\.com/([^/]+)/([^/]+)', raw_code_url)
         if match:
             owner, repo = match.groups()
@@ -135,7 +194,16 @@ def ingest(arg):
                 code_readme = ""
 
         # ----- METRICS -----
-        metrics = metric_concurrent.main(model_info, model_readme, raw_model_url, code_info, code_readme, raw_dataset_url)
+        metrics = metric_concurrent.main(
+            model_info,
+            model_readme,
+            raw_model_url,
+            code_info,
+            code_readme,
+            raw_dataset_url,
+            dataset_name=inferred_dataset_name,
+            code_name=inferred_code_name
+        )
 
         # Handle None return from metric_concurrent
         if metrics is None:
@@ -172,6 +240,26 @@ def ingest(arg):
             except (ValueError, TypeError):
                 logger.debug(f"Skipping non-numeric metric {value}")
                 continue
+
+        # Record dataset/code hints for later reconciliation
+        if raw_dataset_url or inferred_dataset_name:
+            memory.upsert_dataset(
+                ArtifactReference(
+                    id=None,
+                    name=inferred_dataset_name or _derive_name_from_url(raw_dataset_url),
+                    type="dataset",
+                    url=raw_dataset_url or None,
+                )
+            )
+        if raw_code_url or inferred_code_name:
+            memory.upsert_code(
+                ArtifactReference(
+                    id=None,
+                    name=inferred_code_name or _derive_name_from_url(raw_code_url),
+                    type="code",
+                    url=raw_code_url or None,
+                )
+            )
         return True
 
 

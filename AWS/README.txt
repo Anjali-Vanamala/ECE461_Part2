@@ -3,7 +3,7 @@
 
 **Current Deployment Status:** ✅ Active (8 Docker images, 1 running task)  
 **Region:** us-east-2 (Ohio)  
-**Account ID:** 978794836526
+**Account ID:** [REDACTED]
 
 ## Quick Reference
 

@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import requests as rq
 
-import ingestion
 import input
 import metrics.code_quality
 import metrics.data_quality

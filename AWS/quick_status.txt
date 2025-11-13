@@ -116,14 +116,29 @@ printf "GitHub OIDC Provider:    "
 aws iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[?contains(Arn, `token.actions.githubusercontent.com`)] | [0].Arn' --output text 2>/dev/null || echo "❌ NOT FOUND"
 
 echo ""
+SG_NAME="ece461-backend-sg"
+SG_ID=$(aws ec2 describe-security-groups --region us-east-2 --filters Name=group-name,Values="$SG_NAME" --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null)
+
 printf "Security Group:          "
-aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].GroupName' --output text 2>/dev/null || echo "❌ NOT FOUND"
+if [ "$SG_ID" = "None" ] || [ -z "$SG_ID" ]; then
+  echo "❌ NOT FOUND"
+else
+  aws ec2 describe-security-groups --group-ids "$SG_ID" --region us-east-2 --query 'SecurityGroups[0].GroupName' --output text 2>/dev/null
+fi
 
 printf "  Group ID:              "
-aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "N/A"
+if [ "$SG_ID" = "None" ] || [ -z "$SG_ID" ]; then
+  echo "N/A"
+else
+  echo "$SG_ID"
+fi
 
 printf "  VPC:                   "
-aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].VpcId' --output text 2>/dev/null || echo "N/A"
+if [ "$SG_ID" = "None" ] || [ -z "$SG_ID" ]; then
+  echo "N/A"
+else
+  aws ec2 describe-security-groups --group-ids "$SG_ID" --region us-east-2 --query 'SecurityGroups[0].VpcId' --output text 2>/dev/null
+fi
 
 echo ""
 echo ""

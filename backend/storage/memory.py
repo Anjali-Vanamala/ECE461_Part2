@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, cast
 
 from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
                             ArtifactQuery, ArtifactType, ModelRating)
@@ -49,18 +49,18 @@ def _normalized(name: Optional[str]) -> Optional[str]:
 def _link_dataset_code(model_record: ModelRecord) -> None:
     dataset_name = _normalized(model_record.dataset_name)
     if model_record.dataset_id is None and dataset_name:
-        for dataset_id, record in _DATASETS.items():
-            if _normalized(record.artifact.metadata.name) == dataset_name:
+        for dataset_id, dataset_record in _DATASETS.items():
+            if _normalized(dataset_record.artifact.metadata.name) == dataset_name:
                 model_record.dataset_id = dataset_id
-                model_record.dataset_url = record.artifact.data.url
+                model_record.dataset_url = dataset_record.artifact.data.url
                 break
 
     code_name = _normalized(model_record.code_name)
     if model_record.code_id is None and code_name:
-        for code_id, record in _CODES.items():
-            if _normalized(record.artifact.metadata.name) == code_name:
+        for code_id, code_record in _CODES.items():
+            if _normalized(code_record.artifact.metadata.name) == code_name:
                 model_record.code_id = code_id
-                model_record.code_url = record.artifact.data.url
+                model_record.code_url = code_record.artifact.data.url
                 break
 
 
@@ -163,6 +163,7 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
 
 def reset() -> None:
     for store in _TYPE_TO_STORE.values():
+        store = cast(dict[ArtifactID, object], store)
         store.clear()
 
 

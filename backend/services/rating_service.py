@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 from urllib.parse import urlparse
 
 import requests as rq
 from huggingface_hub import HfApi, hf_hub_url
 
 from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
-                            ArtifactType, ModelRating)
+                            ArtifactType, ModelRating, SizeScore)
 from backend.storage import memory
 from metric_concurrent import main as run_metrics
 from metrics.size import calculate_size_score
@@ -200,8 +200,8 @@ def compute_model_artifact(
 
     code_url = None
     code_name = None
-    code_info = {}
-    code_readme = ""
+    code_info: dict[str, Any] = {}
+    code_readme: str = ""
     if code_name_hint:
         code_record = memory.find_code_by_name(code_name_hint)
         if code_record:
@@ -289,7 +289,7 @@ def compute_model_artifact(
         reviewedness_latency=0.0,
         tree_score=tree_score,
         tree_score_latency=0.0,
-        size_score=size_scores,
+        size_score=SizeScore(**size_scores),
         size_score_latency=0.0,
     )
 

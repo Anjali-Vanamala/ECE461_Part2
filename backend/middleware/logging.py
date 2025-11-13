@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import MutableMapping
+from typing import MutableMapping, Optional, cast
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -29,11 +29,11 @@ class LoggingMiddleware:
         method = scope.get("method", "")
         path = scope.get("path", "")
         start = time.perf_counter()
-        status_holder: dict[str, int | None] = {"status": None}
+        status_holder: dict[str, Optional[int]] = {"status": None}
 
         async def send_wrapper(message: MutableMapping[str, object]) -> None:
             if message.get("type") == "http.response.start":
-                status_holder["status"] = message.get("status")
+                status_holder["status"] = cast(Optional[int], message.get("status"))
             await send(message)
 
         await self.app(scope, receive, send_wrapper)

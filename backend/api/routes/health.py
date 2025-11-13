@@ -5,7 +5,8 @@ from fastapi import APIRouter, Query
 from backend.models import (HealthComponentBrief, HealthComponentCollection,
                             HealthComponentDetail, HealthIssue,
                             HealthLogReference, HealthRequestSummary,
-                            HealthStatus, HealthSummaryResponse)
+                            HealthStatus, HealthSummaryResponse,
+                            HealthTimelineEntry)
 
 router = APIRouter(tags=["health"])
 
@@ -30,8 +31,10 @@ async def health_summary() -> HealthSummaryResponse:
         components=[
             HealthComponentBrief(
                 id="api",
-                display_name="API",
                 status=HealthStatus.OK,
+                display_name="API Service",
+                issue_count=0,
+                last_event_at=now,
             )
         ],
         logs=[],
@@ -50,29 +53,25 @@ async def health_components(
     now = datetime.now(timezone.utc)
     detail = HealthComponentDetail(
         id="api",
-        display_name="API",
+        display_name="API Service",
         status=HealthStatus.OK,
         observed_at=now,
-        description="FastAPI application",
-        metrics={
-            "uptime_seconds": 0,
-        },
+        description="Main API service handling requests.",
+        metrics={"requests_per_minute": 10},
         issues=[
-            HealthIssue(code="none", severity="info", summary="No issues")
+            HealthIssue(code="none", severity="info", summary="No issues", details=None),
         ],
         timeline=[
-            {
-                "bucket": now - timedelta(minutes=window_minutes),
-                "value": 0.0,
-                "unit": "requests/minute",
-            }
+            HealthTimelineEntry(bucket=now, value=10, unit="req/min")
         ]
         if include_timeline
-        else None,
+        else [],
         logs=[
             HealthLogReference(
-                label="api-log",
-                url="https://example.com/logs/api",
+                label="API Access",
+                url="http://example.com/logs/api_access",
+                tail_available=True,
+                last_updated_at=now,
             )
         ],
     )

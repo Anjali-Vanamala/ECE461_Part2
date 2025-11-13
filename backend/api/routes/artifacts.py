@@ -58,8 +58,8 @@ async def reset_registry() -> dict[str, str]:
     summary="Register a new artifact. (BASELINE)",
 )
 async def register_artifact(
+    payload: ArtifactData,
     artifact_type: ArtifactType = Path(..., description="Type of artifact being ingested."),
-    payload: ArtifactData = ...,
 ) -> Artifact:
     if memory.artifact_exists(artifact_type, payload.url):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Artifact exists already")
@@ -116,18 +116,18 @@ async def get_artifact(
     summary="Update this content of the artifact. (BASELINE)",
 )
 async def update_artifact(
-    artifact_type: ArtifactType = Path(..., description="Artifact type"),
-    artifact_id: ArtifactID = Path(..., description="Artifact id"),
-    payload: Artifact = ...,
+    payload: Artifact,
+    artifact_type: ArtifactType = Path(..., description="Type of artifact to update"),
+    id: ArtifactID = Path(..., description="artifact id"),
 ) -> Artifact:
-    if payload.metadata.id != artifact_id or payload.metadata.type != artifact_type:
+    if payload.metadata.id != id or payload.metadata.type != artifact_type:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Metadata does not match path parameters")
 
     if artifact_type == ArtifactType.MODEL:
         try:
             artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(
                 payload.data.url,
-                artifact_id=artifact_id,
+                artifact_id=id,
                 name_override=payload.metadata.name,
             )
         except ValueError as exc:
@@ -142,10 +142,10 @@ async def update_artifact(
             code_url=code_url,
         )
         if rating:
-            memory.save_model_rating(artifact_id, rating)
+            memory.save_model_rating(id, rating)
         return artifact
 
-    existing = memory.get_artifact(artifact_type, artifact_id)
+    existing = memory.get_artifact(artifact_type, id)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
 
@@ -199,8 +199,10 @@ async def get_artifact_cost(
         rating = memory.get_model_rating(artifact_id)
         if not rating:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cost unavailable until model is rated.")
-        size_score = rating.size_score.get("raspberry_pi", 0.0)
-        total_cost = max(0.0, round((1.0 - size_score) * 1000, 1))
+        total_cost = max(
+            0.0,
+            round((1.0 - rating.size_score.raspberry_pi) * 1000, 1),
+        )
         entry = ArtifactCostEntry(standalone_cost=total_cost, total_cost=total_cost)
     else:
         entry = ArtifactCostEntry(standalone_cost=0.0, total_cost=0.0)

@@ -329,22 +329,23 @@ echo "SECURITY GROUP & NETWORKING"
 echo "================================================================================"
 echo ""
 
+SG_ID="sg-0a84d66f656c7bf66"
 echo "Security Group:"
 printf "  Group Name:            "
-aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].GroupName' --output text 2>/dev/null || echo "❌ NOT FOUND"
+aws ec2 describe-security-groups --group-ids "$SG_ID" --region us-east-2 --query 'SecurityGroups[0].GroupName' --output text 2>/dev/null || echo "❌ NOT FOUND"
 
 printf "  Group ID:              "
-aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "N/A"
+aws ec2 describe-security-groups --group-ids "$SG_ID" --region us-east-2 --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "N/A"
 
 printf "  VPC ID:                "
-aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].VpcId' --output text 2>/dev/null || echo "N/A"
+aws ec2 describe-security-groups --group-ids "$SG_ID" --region us-east-2 --query 'SecurityGroups[0].VpcId' --output text 2>/dev/null || echo "N/A"
 
 printf "  Description:           "
-aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].Description' --output text 2>/dev/null || echo "N/A"
+aws ec2 describe-security-groups --group-ids "$SG_ID" --region us-east-2 --query 'SecurityGroups[0].Description' --output text 2>/dev/null || echo "N/A"
 
 echo ""
 echo "  Inbound Rules:"
-aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].IpPermissions[].[IpProtocol,FromPort,ToPort,IpRanges[0].CidrIp]' --output text 2>/dev/null | awk '{print "    • " $1 " port " $2 "-" $3 " from " $4}' || echo "    None"
+aws ec2 describe-security-groups --group-ids "$SG_ID" --region us-east-2 --query 'SecurityGroups[0].IpPermissions[].[IpProtocol,FromPort,ToPort,IpRanges[0].CidrIp]' --output text 2>/dev/null | awk '{print "    • " $1 " port " $2 "-" $3 " from " $4}' || echo "    None"
 
 echo ""
 VPC_ID=$(aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].VpcId' --output text 2>/dev/null)

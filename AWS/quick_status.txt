@@ -1,0 +1,239 @@
+# ============================================================================
+# AWS QUICK STATUS CHECK - ECE461 Part 2 - Team 4
+# 
+# INSTRUCTIONS:
+# 1. Copy everything from the opening "(" below to the closing ")"
+# 2. Paste into AWS CloudShell
+# 3. Press Enter
+# 
+# This queries AWS and shows ACTUAL resource names/values, not hardcoded text
+# ============================================================================
+
+(
+clear
+echo "================================================================================"
+echo "                   AWS DEPLOYMENT STATUS - ECE461 Part 2"
+echo "                              Region: us-east-2"
+echo "================================================================================"
+echo ""
+echo "📦 BACKEND INFRASTRUCTURE"
+echo "--------------------------------------------------------------------------------"
+
+printf "ECR Repository:          "
+aws ecr describe-repositories --repository-names ece461-backend --region us-east-2 --query 'repositories[0].repositoryName' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+printf "  Repository URI:        "
+aws ecr describe-repositories --repository-names ece461-backend --region us-east-2 --query 'repositories[0].repositoryUri' --output text 2>/dev/null || echo "N/A"
+
+echo ""
+printf "ECS Cluster:             "
+aws ecs describe-clusters --clusters ece461-backend-cluster --region us-east-2 --query 'clusters[0].clusterName' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+printf "  Status:                "
+aws ecs describe-clusters --clusters ece461-backend-cluster --region us-east-2 --query 'clusters[0].status' --output text 2>/dev/null || echo "N/A"
+
+printf "  Running Tasks:         "
+aws ecs describe-clusters --clusters ece461-backend-cluster --region us-east-2 --query 'clusters[0].runningTasksCount' --output text 2>/dev/null || echo "0"
+
+echo ""
+printf "ECS Service:             "
+aws ecs describe-services --cluster ece461-backend-cluster --services ece461-backend-service --region us-east-2 --query 'services[0].serviceName' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+printf "  Status:                "
+aws ecs describe-services --cluster ece461-backend-cluster --services ece461-backend-service --region us-east-2 --query 'services[0].status' --output text 2>/dev/null || echo "N/A"
+
+printf "  Desired Tasks:         "
+aws ecs describe-services --cluster ece461-backend-cluster --services ece461-backend-service --region us-east-2 --query 'services[0].desiredCount' --output text 2>/dev/null || echo "0"
+
+printf "  Running Tasks:         "
+aws ecs describe-services --cluster ece461-backend-cluster --services ece461-backend-service --region us-east-2 --query 'services[0].runningCount' --output text 2>/dev/null || echo "0"
+
+echo ""
+printf "Task Definition:         "
+aws ecs describe-task-definition --task-definition ece461-backend-task --region us-east-2 --query 'taskDefinition.family' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+printf "  Revision:              "
+aws ecs describe-task-definition --task-definition ece461-backend-task --region us-east-2 --query 'taskDefinition.revision' --output text 2>/dev/null || echo "N/A"
+
+printf "  CPU:                   "
+aws ecs describe-task-definition --task-definition ece461-backend-task --region us-east-2 --query 'taskDefinition.cpu' --output text 2>/dev/null || echo "N/A"
+
+printf "  Memory:                "
+aws ecs describe-task-definition --task-definition ece461-backend-task --region us-east-2 --query 'taskDefinition.memory' --output text 2>/dev/null || echo "N/A"
+
+echo ""
+printf "CloudWatch Log Group:    "
+aws logs describe-log-groups --log-group-name-prefix "/ecs/ece461-backend-task" --region us-east-2 --query 'logGroups[0].logGroupName' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+printf "  Stored Bytes:          "
+aws logs describe-log-groups --log-group-name-prefix "/ecs/ece461-backend-task" --region us-east-2 --query 'logGroups[0].storedBytes' --output text 2>/dev/null | awk '{printf "%.2f MB\n", $1/1024/1024}' || echo "N/A"
+
+echo ""
+echo ""
+echo "🌐 FRONTEND INFRASTRUCTURE"
+echo "--------------------------------------------------------------------------------"
+
+printf "S3 Bucket:               "
+aws s3api head-bucket --bucket ece461-frontend --region us-east-2 2>/dev/null && echo "ece461-frontend" || echo "❌ NOT FOUND"
+
+if aws s3api head-bucket --bucket ece461-frontend --region us-east-2 2>/dev/null; then
+  printf "  Website Index:         "
+  aws s3api get-bucket-website --bucket ece461-frontend --region us-east-2 --query 'IndexDocument.Suffix' --output text 2>/dev/null || echo "Not configured"
+  
+  printf "  Files in Bucket:       "
+  aws s3 ls s3://ece461-frontend/ --region us-east-2 2>/dev/null | wc -l || echo "0"
+  
+  echo "  Website URL:           http://ece461-frontend.s3-website.us-east-2.amazonaws.com"
+fi
+
+echo ""
+echo ""
+echo "🔐 IAM & SECURITY"
+echo "--------------------------------------------------------------------------------"
+
+printf "GitHub Actions Role:     "
+aws iam get-role --role-name github-actions-deploy-role --query 'Role.RoleName' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+if aws iam get-role --role-name github-actions-deploy-role 2>/dev/null >/dev/null; then
+  printf "  Role ARN:              "
+  aws iam get-role --role-name github-actions-deploy-role --query 'Role.Arn' --output text 2>/dev/null
+  
+  printf "  Inline Policies:       "
+  aws iam list-role-policies --role-name github-actions-deploy-role --query 'length(PolicyNames)' --output text 2>/dev/null || echo "0"
+fi
+
+echo ""
+printf "ECS Execution Role:      "
+aws iam get-role --role-name ecsTaskExecutionRole --query 'Role.RoleName' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+if aws iam get-role --role-name ecsTaskExecutionRole 2>/dev/null >/dev/null; then
+  printf "  Role ARN:              "
+  aws iam get-role --role-name ecsTaskExecutionRole --query 'Role.Arn' --output text 2>/dev/null
+fi
+
+echo ""
+printf "GitHub OIDC Provider:    "
+aws iam list-open-id-connect-providers --query 'OpenIDConnectProviderList[?contains(Arn, `token.actions.githubusercontent.com`)] | [0].Arn' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+echo ""
+printf "Security Group:          "
+aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].GroupName' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+printf "  Group ID:              "
+aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "N/A"
+
+printf "  VPC:                   "
+aws ec2 describe-security-groups --group-ids sg-0a84d66f656c7bf66 --region us-east-2 --query 'SecurityGroups[0].VpcId' --output text 2>/dev/null || echo "N/A"
+
+echo ""
+echo ""
+echo "🌍 NETWORKING"
+echo "--------------------------------------------------------------------------------"
+
+VPC_ID=$(aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].VpcId' --output text 2>/dev/null)
+printf "VPC ID:                  "
+echo "${VPC_ID:-❌ NOT FOUND}"
+
+if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+  printf "  CIDR Block:            "
+  aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --region us-east-2 --query 'Vpcs[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
+fi
+
+echo ""
+printf "Subnet 1:                "
+aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+printf "  Availability Zone:     "
+aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].AvailabilityZone' --output text 2>/dev/null || echo "N/A"
+
+printf "  CIDR:                  "
+aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
+
+echo ""
+printf "Subnet 2:                "
+aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "❌ NOT FOUND"
+
+printf "  Availability Zone:     "
+aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].AvailabilityZone' --output text 2>/dev/null || echo "N/A"
+
+printf "  CIDR:                  "
+aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
+
+echo ""
+echo ""
+echo "📊 RECENT DEPLOYMENTS"
+echo "--------------------------------------------------------------------------------"
+
+echo "Latest Docker Images in ECR:"
+IMAGE_COUNT=$(aws ecr list-images --repository-name ece461-backend --region us-east-2 --query 'length(imageIds)' --output text 2>/dev/null)
+if [ -n "$IMAGE_COUNT" ] && [ "$IMAGE_COUNT" -gt 0 ]; then
+  aws ecr describe-images --repository-name ece461-backend --region us-east-2 --query 'sort_by(imageDetails,&imagePushedAt)[-3:].imageTags[0]' --output text 2>/dev/null | tr '\t' '\n' | sed 's/^/  • Git commit: /'
+  echo "  Total images: $IMAGE_COUNT"
+else
+  echo "  ❌ No images found"
+fi
+
+echo ""
+printf "Latest Deployment:       "
+aws ecs describe-services --cluster ece461-backend-cluster --services ece461-backend-service --region us-east-2 --query 'services[0].deployments[0].updatedAt' --output text 2>/dev/null || echo "N/A"
+
+echo ""
+echo ""
+echo "🔗 ACCESS YOUR APPLICATION"
+echo "--------------------------------------------------------------------------------"
+
+TASK_ARN=$(aws ecs list-tasks --cluster ece461-backend-cluster --service-name ece461-backend-service --region us-east-2 --query 'taskArns[0]' --output text 2>/dev/null)
+
+if [ -n "$TASK_ARN" ] && [ "$TASK_ARN" != "None" ]; then
+  echo "Running Task:"
+  printf "  • Task ARN:            "
+  echo "${TASK_ARN##*/}"
+  
+  printf "  • Task Status:         "
+  aws ecs describe-tasks --cluster ece461-backend-cluster --tasks "$TASK_ARN" --region us-east-2 --query 'tasks[0].lastStatus' --output text 2>/dev/null || echo "N/A"
+  
+  printf "  • Started At:          "
+  aws ecs describe-tasks --cluster ece461-backend-cluster --tasks "$TASK_ARN" --region us-east-2 --query 'tasks[0].startedAt' --output text 2>/dev/null || echo "N/A"
+  
+  API_IP=$(aws ecs describe-tasks --cluster ece461-backend-cluster --tasks "$TASK_ARN" --region us-east-2 --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text 2>/dev/null | xargs -I {} aws ec2 describe-network-interfaces --network-interface-ids {} --region us-east-2 --query 'NetworkInterfaces[0].Association.PublicIp' --output text 2>/dev/null)
+  
+  if [ -n "$API_IP" ]; then
+    echo ""
+    echo "Backend API Endpoints:"
+    echo "  • Public IP:           $API_IP"
+    echo "  • Health Check:        http://$API_IP:8000/health"
+    echo "  • API Documentation:   http://$API_IP:8000/docs"
+    echo "  • Root Endpoint:       http://$API_IP:8000/"
+  else
+    echo "  • Public IP:           ❌ Not found"
+  fi
+else
+  echo "Running Task:            ❌ No running task found"
+fi
+
+echo ""
+echo "Frontend Website:"
+echo "  • URL:                 http://ece461-frontend.s3-website.us-east-2.amazonaws.com"
+
+echo ""
+echo "================================================================================"
+echo "                           ✅ Verification Complete!"
+echo "================================================================================"
+echo ""
+echo "💡 COPY THESE NAMES TO SEARCH IN AWS CONSOLE:"
+echo ""
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
+echo "   AWS Account ID:        ${ACCOUNT_ID:-Unknown}"
+echo "   Region:                us-east-2"
+echo ""
+echo "   Resources to search:"
+echo "   • ECR Repository:      ece461-backend"
+echo "   • ECS Cluster:         ece461-backend-cluster"
+echo "   • ECS Service:         ece461-backend-service"
+echo "   • Task Definition:     ece461-backend-task"
+echo "   • S3 Bucket:           ece461-frontend"
+echo "   • Security Group:      sg-0a84d66f656c7bf66"
+echo "   • CloudWatch Logs:     /ecs/ece461-backend-task"
+echo "   • IAM Roles:           github-actions-deploy-role, ecsTaskExecutionRole"
+echo ""
+)

@@ -3,7 +3,7 @@
 **Team:** ECE30861 Team 4  
 **Last Updated:** November 13, 2025  
 **Region:** us-east-2 (Ohio)  
-**AWS Account:** 978794836526
+**AWS Account:** <YOUR_AWS_ACCOUNT_ID>
 
 > 💡 **Quick Start:** See `README.txt` in this folder for links to all AWS verification commands
 

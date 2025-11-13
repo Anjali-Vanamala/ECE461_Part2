@@ -252,20 +252,19 @@ def compute_model_artifact(
         tree_score,
     ) = metrics
 
-    net_score = round(
-        0.09 * license_score +
-        0.10 * ramp_score +
-        0.11 * net_size_score_metric +
-        0.13 * data_quality_score +
-        0.10 * bus_score +
-        0.13 * dc_score +
-        0.10 * code_quality_score +
-        0.09 * perf_score +
-        0.05 * repro_score +
-        0.05 * review_score +
-        0.05 * tree_score,
-        2,
-    )
+    net_score = round((
+        0.09 * license_score
+        + 0.10 * ramp_score
+        + 0.11 * net_size_score_metric
+        + 0.13 * data_quality_score
+        + 0.10 * bus_score
+        + 0.13 * dc_score
+        + 0.10 * code_quality_score
+        + 0.09 * perf_score
+        + 0.05 * repro_score
+        + 0.05 * review_score
+        + 0.05 * tree_score
+    ), 2)
 
     rating = ModelRating(
         name=name,

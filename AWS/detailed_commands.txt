@@ -373,22 +373,26 @@ aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-
 printf "  CIDR Block:            "
 aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
 
+# Dynamically retrieve subnet IDs by tag
+SUBNET1_ID=$(aws ec2 describe-subnets --region us-east-2 --filters "Name=tag:Name,Values=ece461-subnet-1" --query "Subnets[0].SubnetId" --output text 2>/dev/null)
+SUBNET2_ID=$(aws ec2 describe-subnets --region us-east-2 --filters "Name=tag:Name,Values=ece461-subnet-2" --query "Subnets[0].SubnetId" --output text 2>/dev/null)
+
 printf "  Available IPs:         "
-aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].AvailableIpAddressCount' --output text 2>/dev/null || echo "N/A"
+aws ec2 describe-subnets --subnet-ids $SUBNET1_ID --region us-east-2 --query 'Subnets[0].AvailableIpAddressCount' --output text 2>/dev/null || echo "N/A"
 
 echo ""
 echo "Subnet 2:"
 printf "  Subnet ID:             "
-aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "❌ NOT FOUND"
+aws ec2 describe-subnets --subnet-ids $SUBNET2_ID --region us-east-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "❌ NOT FOUND"
 
 printf "  Availability Zone:     "
-aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].AvailabilityZone' --output text 2>/dev/null || echo "N/A"
+aws ec2 describe-subnets --subnet-ids $SUBNET2_ID --region us-east-2 --query 'Subnets[0].AvailabilityZone' --output text 2>/dev/null || echo "N/A"
 
 printf "  CIDR Block:            "
-aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
+aws ec2 describe-subnets --subnet-ids $SUBNET2_ID --region us-east-2 --query 'Subnets[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
 
 printf "  Available IPs:         "
-aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].AvailableIpAddressCount' --output text 2>/dev/null || echo "N/A"
+aws ec2 describe-subnets --subnet-ids $SUBNET2_ID --region us-east-2 --query 'Subnets[0].AvailableIpAddressCount' --output text 2>/dev/null || echo "N/A"
 
 echo ""
 )

@@ -64,7 +64,7 @@ def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
         card_data = getattr(model_info_obj, "cardData", {}) or {}
         if isinstance(card_data, dict) and "datasets" in card_data:
             model_info["datasets"] = card_data.get("datasets")
-        
+
         # Also check tags for dataset references
         tags = getattr(model_info_obj, "tags", [])
         dataset_tags = [tag.replace("dataset:", "") for tag in tags if tag.startswith("dataset:")]
@@ -186,12 +186,12 @@ def compute_model_artifact(
     # Fetch model info to extract dataset/code names from README
     # We'll use these names to link to already-registered artifacts
     model_info, readme_text = _fetch_model_info(url)
-    
+
     # Extract dataset and code names from the model card
     dataset_name_hint = _extract_dataset_name(model_info, readme_text)
     code_repo_hint = _extract_code_repo(model_info, readme_text)
     code_name_hint = _derive_name_from_url(code_repo_hint).lower() if code_repo_hint else None
-    
+
     # Now look up registered artifacts by these names
     dataset_url = None
     dataset_name = None
@@ -202,7 +202,7 @@ def compute_model_artifact(
             dataset_name = dataset_record.artifact.metadata.name
         else:
             dataset_name = dataset_name_hint  # Store the name for future linking
-    
+
     code_url = None
     code_name = None
     code_info = {}
@@ -217,11 +217,11 @@ def compute_model_artifact(
             # Try using the hint URL directly if it's a valid GitHub URL
             if code_repo_hint and 'github.com' in code_repo_hint:
                 code_url = code_repo_hint
-    
+
     # Fetch code metadata if we have a URL
     if code_url:
         code_info, code_readme = _fetch_code_metadata(code_url)
-    
+
     metrics = run_metrics(
         model_info,
         readme_text,
@@ -253,17 +253,17 @@ def compute_model_artifact(
     ) = metrics
 
     net_score = round(
-        0.09 * license_score
-        + 0.10 * ramp_score
-        + 0.11 * net_size_score_metric
-        + 0.13 * data_quality_score
-        + 0.10 * bus_score
-        + 0.13 * dc_score
-        + 0.10 * code_quality_score
-        + 0.09 * perf_score
-        + 0.05 * repro_score
-        + 0.05 * review_score
-        + 0.05 * tree_score,
+        0.09 * license_score +
+        0.10 * ramp_score +
+        0.11 * net_size_score_metric +
+        0.13 * data_quality_score +
+        0.10 * bus_score +
+        0.13 * dc_score +
+        0.10 * code_quality_score +
+        0.09 * perf_score +
+        0.05 * repro_score +
+        0.05 * review_score +
+        0.05 * tree_score,
         2,
     )
 

@@ -70,11 +70,10 @@ def _link_dataset_code(model_record: ModelRecord) -> None:
                 break
 
 
-
-
 # ---------------------------------------------------------------------------
 # CRUD helpers
 # ---------------------------------------------------------------------------
+
 
 def save_artifact(
     artifact: Artifact,

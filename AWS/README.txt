@@ -54,9 +54,9 @@ Open `detailed_commands.txt`, find the section you need (e.g., "SECTION 6: Cloud
 **Security & Networking:**
 - IAM Roles: github-actions-deploy-role, ecsTaskExecutionRole
 - OIDC Provider: token.actions.githubusercontent.com (for GitHub Actions)
-- Security Group: ece461-backend-ecs-sg (sg-0a84d66f656c7bf66)
-- VPC: vpc-044c2485fbca6f3bc (172.31.0.0/16)
-- Subnets: subnet-0b38e3a84d56d67df (us-east-2c), subnet-0049c81939aca1fe5 (us-east-2a)
+- Security Group: ece461-backend-ecs-sg (sg-xxxxxxxxxxxxxxxxx)
+- VPC: vpc-xxxxxxxxxxxxxxxxx (172.31.0.0/16)
+- Subnets: subnet-xxxxxxxxxxxxxxxxx (us-east-2c), subnet-xxxxxxxxxxxxxxxxx (us-east-2a)
 
 ## Files in ../setup_instrucs/ (for reference)
 

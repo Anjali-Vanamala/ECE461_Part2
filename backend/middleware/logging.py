@@ -45,4 +45,7 @@ class LoggingMiddleware:
 def setup_logging(app: ASGIApp) -> ASGIApp:
     """Convenience helper mirroring the previous middleware interface."""
 
-    return LoggingMiddleware(app)
+            self.cloudwatch.put_metric_data(Namespace='ECE461/API', MetricData=metrics)
+        except Exception as e:
+            logger.debug(f"CloudWatch put_metric_data failed: {e}")
+            # Silently fail - CloudWatch metrics are non-critical

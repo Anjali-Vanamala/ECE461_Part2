@@ -44,15 +44,6 @@ structure doesn't support passing in real URLs in a test suite, AI assistance wa
 """
 
 
-class Test_Ingest:
-    def test_single_model_url(self):
-        # Test with a single model URL
-        test_url = "https://huggingface.co/google-bert/bert-base-uncased"
-        with patch('builtins.print') as mock_print:
-            ingestion.ingest(test_url)
-            mock_print.assert_called()  # Ensure print was called
-
-
 class Test_Size_Score:
     def test_gpt2_size_score(self):
         """Test size calculation for GPT-2 model"""

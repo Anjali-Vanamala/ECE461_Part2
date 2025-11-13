@@ -158,21 +158,52 @@ echo ""
 printf "Subnet 1:                "
 aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "❌ NOT FOUND"
 
+# Dynamically retrieve subnet IDs by tag
+SUBNET1_ID=$(aws ec2 describe-subnets --region us-east-2 --filters "Name=tag:Name,Values=ece461-subnet-1" --query 'Subnets[0].SubnetId' --output text 2>/dev/null)
+SUBNET2_ID=$(aws ec2 describe-subnets --region us-east-2 --filters "Name=tag:Name,Values=ece461-subnet-2" --query 'Subnets[0].SubnetId' --output text 2>/dev/null)
+
+printf "Subnet 1:                "
+if [ "$SUBNET1_ID" != "None" ] && [ -n "$SUBNET1_ID" ]; then
+  echo "$SUBNET1_ID"
+else
+  echo "❌ NOT FOUND"
+fi
+
 printf "  Availability Zone:     "
-aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].AvailabilityZone' --output text 2>/dev/null || echo "N/A"
+if [ "$SUBNET1_ID" != "None" ] && [ -n "$SUBNET1_ID" ]; then
+  aws ec2 describe-subnets --subnet-ids "$SUBNET1_ID" --region us-east-2 --query 'Subnets[0].AvailabilityZone' --output text 2>/dev/null || echo "N/A"
+else
+  echo "N/A"
+fi
 
 printf "  CIDR:                  "
-aws ec2 describe-subnets --subnet-ids subnet-0b38e3a84d56d67df --region us-east-2 --query 'Subnets[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
+if [ "$SUBNET1_ID" != "None" ] && [ -n "$SUBNET1_ID" ]; then
+  aws ec2 describe-subnets --subnet-ids "$SUBNET1_ID" --region us-east-2 --query 'Subnets[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
+else
+  echo "N/A"
+fi
 
 echo ""
 printf "Subnet 2:                "
-aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].SubnetId' --output text 2>/dev/null || echo "❌ NOT FOUND"
+if [ "$SUBNET2_ID" != "None" ] && [ -n "$SUBNET2_ID" ]; then
+  echo "$SUBNET2_ID"
+else
+  echo "❌ NOT FOUND"
+fi
 
 printf "  Availability Zone:     "
-aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].AvailabilityZone' --output text 2>/dev/null || echo "N/A"
+if [ "$SUBNET2_ID" != "None" ] && [ -n "$SUBNET2_ID" ]; then
+  aws ec2 describe-subnets --subnet-ids "$SUBNET2_ID" --region us-east-2 --query 'Subnets[0].AvailabilityZone' --output text 2>/dev/null || echo "N/A"
+else
+  echo "N/A"
+fi
 
 printf "  CIDR:                  "
-aws ec2 describe-subnets --subnet-ids subnet-0049c81939aca1fe5 --region us-east-2 --query 'Subnets[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
+if [ "$SUBNET2_ID" != "None" ] && [ -n "$SUBNET2_ID" ]; then
+  aws ec2 describe-subnets --subnet-ids "$SUBNET2_ID" --region us-east-2 --query 'Subnets[0].CidrBlock' --output text 2>/dev/null || echo "N/A"
+else
+  echo "N/A"
+fi
 
 echo ""
 echo ""

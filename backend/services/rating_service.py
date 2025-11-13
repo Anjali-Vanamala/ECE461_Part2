@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Tuple, Any
+from typing import Any, Optional, Tuple
 from urllib.parse import urlparse
 
 import requests as rq

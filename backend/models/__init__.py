@@ -3,8 +3,7 @@ from .artifact import (Artifact, ArtifactAuditEntry, ArtifactCost,
                        ArtifactLineageEdge, ArtifactLineageGraph,
                        ArtifactLineageNode, ArtifactMetadata, ArtifactName,
                        ArtifactQuery, ArtifactRegEx, ArtifactType, ModelRating,
-                       SizeScore,
-                       SimpleLicenseCheckRequest)
+                       SimpleLicenseCheckRequest, SizeScore)
 from .health import (HealthComponentBrief, HealthComponentCollection,
                      HealthComponentDetail, HealthIssue, HealthLogReference,
                      HealthMetricMap, HealthMetricValue, HealthRequestSummary,

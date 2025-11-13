@@ -118,16 +118,16 @@ async def get_artifact(
 async def update_artifact(
     payload: Artifact,
     artifact_type: ArtifactType = Path(..., description="Type of artifact to update"),
-    id: ArtifactID = Path(..., description="artifact id"),
+    artifact_id: ArtifactID = Path(..., description="artifact id"),
 ) -> Artifact:
-    if payload.metadata.id != id or payload.metadata.type != artifact_type:
+    if payload.metadata.id != artifact_id or payload.metadata.type != artifact_type:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Metadata does not match path parameters")
 
     if artifact_type == ArtifactType.MODEL:
         try:
             artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(
                 payload.data.url,
-                artifact_id=id,
+                artifact_id=artifact_id,
                 name_override=payload.metadata.name,
             )
         except ValueError as exc:
@@ -142,10 +142,10 @@ async def update_artifact(
             code_url=code_url,
         )
         if rating:
-            memory.save_model_rating(id, rating)
+            memory.save_model_rating(artifact_id, rating)
         return artifact
 
-    existing = memory.get_artifact(artifact_type, id)
+    existing = memory.get_artifact(artifact_type, artifact_id)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
 

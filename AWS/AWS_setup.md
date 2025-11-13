@@ -58,7 +58,7 @@ GitHub Actions (push to main)
 - **What it is:** Docker image storage (like Docker Hub, but private)
 - **Name:** `ece461-backend`
 - **Purpose:** Stores our FastAPI backend Docker images
-- **Repository URI:** `978794836526.dkr.ecr.us-east-2.amazonaws.com/ece461-backend`
+- **Repository URI:** `<AWS_ACCOUNT_ID>.dkr.ecr.us-east-2.amazonaws.com/ece461-backend`
 - **Current Images:** 8 total (Git SHA-based tags)
 
 ### 2. **ECS Cluster (Elastic Container Service)**

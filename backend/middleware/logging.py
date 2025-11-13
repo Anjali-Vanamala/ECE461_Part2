@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Callable, Awaitable
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -31,7 +30,7 @@ class LoggingMiddleware:
         start = time.perf_counter()
         status_holder: dict[str, int | None] = {"status": None}
 
-        async def send_wrapper(message: dict) -> None:
+        async def send_wrapper(message: MutableMapping[str, object]) -> None:
             if message.get("type") == "http.response.start":
                 status_holder["status"] = message.get("status")
             await send(message)
@@ -44,8 +43,5 @@ class LoggingMiddleware:
 
 def setup_logging(app: ASGIApp) -> ASGIApp:
     """Convenience helper mirroring the previous middleware interface."""
-    try:
-        self.cloudwatch.put_metric_data(Namespace='ECE461/API', MetricData=metrics)
-    except Exception as e:
-        logger.debug(f"CloudWatch put_metric_data failed: {e}")
-            # Silently fail - CloudWatch metrics are non-critical
+
+    return LoggingMiddleware(app)

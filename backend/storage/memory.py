@@ -3,14 +3,8 @@ from __future__ import annotations
 import uuid
 from typing import Dict, Iterable, List, Optional
 
-from backend.models import (
-    Artifact,
-    ArtifactID,
-    ArtifactMetadata,
-    ArtifactQuery,
-    ArtifactType,
-    ModelRating,
-)
+from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
+                            ArtifactQuery, ArtifactType, ModelRating)
 from backend.storage.records import CodeRecord, DatasetRecord, ModelRecord
 
 # ---------------------------------------------------------------------------

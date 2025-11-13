@@ -4,17 +4,9 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, Path, Query, Response, status
 
-from backend.models import (
-    Artifact,
-    ArtifactCost,
-    ArtifactCostEntry,
-    ArtifactData,
-    ArtifactID,
-    ArtifactMetadata,
-    ArtifactQuery,
-    ArtifactType,
-    ModelRating,
-)
+from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
+                            ArtifactData, ArtifactID, ArtifactMetadata,
+                            ArtifactQuery, ArtifactType, ModelRating)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory
 

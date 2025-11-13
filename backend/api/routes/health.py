@@ -2,16 +2,10 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Query
 
-from backend.models import (
-    HealthComponentBrief,
-    HealthComponentCollection,
-    HealthComponentDetail,
-    HealthIssue,
-    HealthLogReference,
-    HealthRequestSummary,
-    HealthStatus,
-    HealthSummaryResponse,
-)
+from backend.models import (HealthComponentBrief, HealthComponentCollection,
+                            HealthComponentDetail, HealthIssue,
+                            HealthLogReference, HealthRequestSummary,
+                            HealthStatus, HealthSummaryResponse)
 
 router = APIRouter(tags=["health"])
 

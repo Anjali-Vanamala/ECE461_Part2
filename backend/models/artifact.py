@@ -6,8 +6,17 @@ from typing import Annotated, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, RootModel
 
-ArtifactID = Annotated[str, Field(pattern=r"^[a-zA-Z0-9\-]+$", description="Unique identifier for use with artifact endpoints")]
-ArtifactName = Annotated[str, Field(description="Name of the artifact")]
+ArtifactID = Annotated[
+    str,
+    Field(
+        pattern=r"^[a-zA-Z0-9\-]+$",
+        description="Unique identifier for use with artifact endpoints",
+    ),
+]
+ArtifactName = Annotated[
+    str,
+    Field(description="Name of the artifact"),
+]
 
 
 class ArtifactType(str, Enum):

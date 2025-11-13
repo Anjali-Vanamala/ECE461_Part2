@@ -5,15 +5,10 @@ from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 import requests as rq
-from huggingface_hub import hf_hub_url, HfApi
+from huggingface_hub import HfApi, hf_hub_url
 
-from backend.models import (
-    Artifact,
-    ArtifactData,
-    ArtifactMetadata,
-    ArtifactType,
-    ModelRating,
-)
+from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                            ArtifactType, ModelRating)
 from backend.storage import memory
 from metric_concurrent import main as run_metrics
 from metrics.size import calculate_size_score
@@ -45,7 +40,7 @@ def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
         # Convert to dict format expected by metrics
         model_info = {
             "id": model_info_obj.id,
-            "modelId": model_info_obj.modelId,
+            "modelId": getattr(model_info_obj, "modelId", None),
             "author": getattr(model_info_obj, "author", None),
             "sha": getattr(model_info_obj, "sha", None),
             "lastModified": str(getattr(model_info_obj, "lastModified", "")),
@@ -252,19 +247,22 @@ def compute_model_artifact(
         tree_score,
     ) = metrics
 
-    net_score = round((
-        0.09 * license_score
-        + 0.10 * ramp_score
-        + 0.11 * net_size_score_metric
-        + 0.13 * data_quality_score
-        + 0.10 * bus_score
-        + 0.13 * dc_score
-        + 0.10 * code_quality_score
-        + 0.09 * perf_score
-        + 0.05 * repro_score
-        + 0.05 * review_score
-        + 0.05 * tree_score
-    ), 2)
+    net_score = round(
+        sum([
+            0.09 * license_score,
+            0.10 * ramp_score,
+            0.11 * net_size_score_metric,
+            0.13 * data_quality_score,
+            0.10 * bus_score,
+            0.13 * dc_score,
+            0.10 * code_quality_score,
+            0.09 * perf_score,
+            0.05 * repro_score,
+            0.05 * review_score,
+            0.05 * tree_score,
+        ]),
+        2,
+    )
 
     rating = ModelRating(
         name=name,

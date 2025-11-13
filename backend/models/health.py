@@ -51,18 +51,37 @@ class HealthComponentDetail(BaseModel):
     status: HealthStatus = Field(..., description="Component status")
     observed_at: datetime = Field(..., description="Timestamp when data was last collected")
     description: Optional[str] = Field(None, description="Overview of the component's responsibility")
-    metrics: Optional[HealthMetricMap] = Field(None, description="Metric key/value pairs describing performance")
+    metrics: Optional[HealthMetricMap] = Field(
+        None,
+        description="Metric key/value pairs describing performance",
+    )
     issues: Optional[List[HealthIssue]] = Field(None, description="Outstanding issues or alerts")
-    timeline: Optional[List[HealthTimelineEntry]] = Field(None, description="Time-series datapoints for component metrics")
-    logs: Optional[List[HealthLogReference]] = Field(None, description="Relevant log references")
+    timeline: Optional[List[HealthTimelineEntry]] = Field(
+        None,
+        description="Time-series datapoints for component metrics",
+    )
+    logs: Optional[List[HealthLogReference]] = Field(
+        None,
+        description="Relevant log references",
+    )
 
 
 class HealthRequestSummary(BaseModel):
     window_start: datetime = Field(..., description="Beginning of the aggregation window (UTC)")
     window_end: datetime = Field(..., description="End of the aggregation window (UTC)")
-    total_requests: Optional[int] = Field(None, ge=0, description="Number of API requests served during the window")
-    per_route: Optional[Dict[str, int]] = Field(None, description="Request counts grouped by API route")
-    per_artifact_type: Optional[Dict[str, int]] = Field(None, description="Request counts grouped by artifact type")
+    total_requests: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Number of API requests served during the window",
+    )
+    per_route: Optional[Dict[str, int]] = Field(
+        None,
+        description="Request counts grouped by API route",
+    )
+    per_artifact_type: Optional[Dict[str, int]] = Field(
+        None,
+        description="Request counts grouped by artifact type",
+    )
     unique_clients: Optional[int] = Field(None, ge=0, description="Distinct API clients observed in the window")
 
 
@@ -78,9 +97,18 @@ class HealthSummaryResponse(BaseModel):
     window_minutes: int = Field(..., ge=5, description="Size of the trailing observation window in minutes")
     uptime_seconds: Optional[int] = Field(None, ge=0, description="Seconds the registry API has been running")
     version: Optional[str] = Field(None, description="Running service version or git SHA")
-    request_summary: Optional[HealthRequestSummary] = Field(None, description="Request activity observed within the window")
-    components: Optional[List[HealthComponentBrief]] = Field(None, description="Rollup of component status ordered by severity")
-    logs: Optional[List[HealthLogReference]] = Field(None, description="Quick links or descriptors for recent log files")
+    request_summary: Optional[HealthRequestSummary] = Field(
+        None,
+        description="Request activity observed within the window",
+    )
+    components: Optional[List[HealthComponentBrief]] = Field(
+        None,
+        description="Rollup of component status ordered by severity",
+    )
+    logs: Optional[List[HealthLogReference]] = Field(
+        None,
+        description="Quick links or descriptors for recent log files",
+    )
 
 
 __all__ = [

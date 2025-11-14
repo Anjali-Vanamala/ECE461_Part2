@@ -14,7 +14,7 @@ name: CD - Deploy FastAPI to ECS/Fargate (MVP)
 
 on:
   push:
-    branches: [ 'main' ]
+    branches: [ '51-deployment-error-fix' ]
   workflow_dispatch:
     inputs:
       reason:
@@ -93,7 +93,8 @@ jobs:
            task-definition.json > task-definition-updated.json
            
           # Remove fields that can't be specified on register
-          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)' \
+          # Also remove taskRoleArn if present (not needed - CloudWatch metrics have graceful fallback)
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy, .taskRoleArn)' \
             task-definition-updated.json > task-definition-final.json
 
       - name: Register new task definition revision

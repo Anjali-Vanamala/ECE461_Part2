@@ -97,47 +97,61 @@ async def register_artifact(
 
 
 @router.get(
-    "/artifacts/{artifact_type}/{artifact_id}",
+    "/artifacts/{artifact_type}/{artifact_id:path}",
     response_model=Artifact,
     summary="Interact with the artifact with this id. (BASELINE)",
     responses={
-        400: {"description": "Missing or invalid artifact_type or artifact_id"},
-        403: {"description": "Authentication failed"},
-        404: {"description": "Artifact does not exist"},
-        200: {"description": "Artifact retrieved successfully"}
+        400: {
+            "description": (
+                "There is missing field(s) in the artifact_type or artifact_id "
+                "or it is formed improperly, or is invalid."
+            )
+        },
+        403: {"description": "Authentication failed due to invalid or missing AuthenticationToken."},
+        404: {"description": "Artifact does not exist."},
+        200: {"description": "Artifact retrieved successfully."},
     }
 )
 async def get_artifact(
-    artifact_type: ArtifactType = Path(..., description="Artifact type"),
-    artifact_id: ArtifactID = Path(..., description="Artifact id"),
+    artifact_type: str = Path(...),
+    artifact_id: str = Path(...),
     authenticationtoken: str = Header(None, convert_underscores=False),
 ):
+    # 400 — invalid or missing type
+    try:
+        artifact_type_enum = ArtifactType(artifact_type)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="400: There is missing field(s) in the artifact_type or artifact_id or it is formed improperly, or is invalid."
+        )
 
-    # 403 – missing header
+    # 400 — invalid or malformed id (UUID)
+    import uuid
+    try:
+        uuid.UUID(str(artifact_id))
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="400: There is missing field(s) in the artifact_type or artifact_id or it is formed improperly, or is invalid."
+        )
+
+    # 403 — missing header
     if authenticationtoken is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Authentication failed due to invalid or missing AuthenticationToken."
+            status_code=403,
+            detail="403: Authentication failed due to invalid or missing AuthenticationToken."
         )
 
-    # 404 – not found
-    artifact = memory.get_artifact(artifact_type, artifact_id)
+    # 404 — not found
+    artifact = memory.get_artifact(artifact_type_enum, artifact_id)
     if not artifact:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Artifact does not exist."
+            status_code=404,
+            detail="404: Artifact does not exist."
         )
 
-    # 200 – OK
     return artifact
-
-
-@router.get("/artifacts/{rest:path}")
-async def catch_bad_artifact_paths(rest: str):
-    raise HTTPException(
-        status_code=400,
-        detail="Invalid artifact path. Expected format: /artifacts/{type}/{id}"
-    )
 
 
 @router.put(

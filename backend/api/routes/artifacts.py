@@ -100,17 +100,17 @@ async def register_artifact(
     "/artifacts/{artifact_type}/{artifact_id}",
     response_model=Artifact,
     summary="Interact with the artifact with this id. (BASELINE)",
-)
-async def get_artifact(
-    artifact_type: ArtifactType = Path(..., description="Artifact type"),
-    artifact_id: ArtifactID = Path(..., description="Artifact id"),
-    authenticationtoken: str = Header(None, convert_underscores=False),
     responses={
         400: {"description": "Missing or invalid artifact_type or artifact_id"},
         403: {"description": "Authentication failed"},
         404: {"description": "Artifact does not exist"},
         200: {"description": "Artifact retrieved successfully"}
     }
+)
+async def get_artifact(
+    artifact_type: ArtifactType = Path(..., description="Artifact type"),
+    artifact_id: ArtifactID = Path(..., description="Artifact id"),
+    authenticationtoken: str = Header(None, convert_underscores=False),
 ):
 
     # 403 – missing header

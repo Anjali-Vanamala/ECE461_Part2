@@ -15,20 +15,19 @@ load_dotenv()
 # read env vars once
 LOG_FILE = os.environ.get("LOG_FILE")
 LOG_LEVEL = int(os.environ.get("LOG_LEVEL", 0))  # default to 0
-
 # Handle invalid LOG_FILE input
 if LOG_FILE is None:
     sys.exit(1)
-if not os.path.isfile(LOG_FILE):
-    sys.exit(1)
 
+# Minimal fix: create the file if it doesn't exist
+if not os.path.isfile(LOG_FILE):
+    open(LOG_FILE, "w").close()
 # At this point LOG_FILE is guaranteed to be a str, narrow type for mypy
 assert LOG_FILE is not None
 LOG_FILE_PATH: str = LOG_FILE
 
 # Start with a blank log file each time
 open(LOG_FILE_PATH, "w").close()
-
 # Then open file in append mode and write message
 # LOG_LEVEL 1 informational messages
 

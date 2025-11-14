@@ -14,7 +14,7 @@ name: CD - Deploy FastAPI to ECS/Fargate (MVP)
 
 on:
   push:
-    branches: [ '51-deployment-fix' ]
+    branches: [ 'main' ]
   workflow_dispatch:
     inputs:
       reason:
@@ -76,6 +76,9 @@ jobs:
 
       - name: Update task definition with new image
         run: |
+          # Get account ID for role ARN
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          
           # Download current task definition
           aws ecs describe-task-definition \
             --task-definition ${{ env.ECS_TASK_DEFINITION }} \
@@ -92,9 +95,15 @@ jobs:
               ]' \
            task-definition.json > task-definition-updated.json
            
+          # Ensure taskRoleArn is present (service requires it)
+          # If it doesn't exist in current task definition, add it
+          jq --arg TASK_ROLE "arn:aws:iam::${ACCOUNT_ID}:role/ecs-backend-access-role" \
+           '.taskRoleArn = (if .taskRoleArn then .taskRoleArn else $TASK_ROLE end)' \
+           task-definition-updated.json > task-definition-with-role.json
+           
           # Remove fields that can't be specified on register
           jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)' \
-            task-definition-updated.json > task-definition-final.json
+            task-definition-with-role.json > task-definition-final.json
 
       - name: Register new task definition revision
         run: |

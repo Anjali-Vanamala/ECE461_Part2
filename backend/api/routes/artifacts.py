@@ -96,14 +96,6 @@ async def register_artifact(
     return artifact
 
 
-@router.get("/artifacts/{rest:path}")
-async def catch_bad_artifact_paths(rest: str):
-    raise HTTPException(
-        status_code=400,
-        detail="Invalid artifact path. Expected format: /artifacts/{type}/{id}"
-    )
-
-
 @router.get(
     "/artifacts/{artifact_type}/{artifact_id}",
     response_model=Artifact,
@@ -113,6 +105,12 @@ async def get_artifact(
     artifact_type: ArtifactType = Path(..., description="Artifact type"),
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
     authenticationtoken: str = Header(None, convert_underscores=False),
+    responses={
+        400: {"description": "Missing or invalid artifact_type or artifact_id"},
+        403: {"description": "Authentication failed"},
+        404: {"description": "Artifact does not exist"},
+        200: {"description": "Artifact retrieved successfully"}
+    }
 ):
 
     # 403 – missing header
@@ -132,6 +130,14 @@ async def get_artifact(
 
     # 200 – OK
     return artifact
+
+
+@router.get("/artifacts/{rest:path}")
+async def catch_bad_artifact_paths(rest: str):
+    raise HTTPException(
+        status_code=400,
+        detail="Invalid artifact path. Expected format: /artifacts/{type}/{id}"
+    )
 
 
 @router.put(

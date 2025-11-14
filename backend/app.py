@@ -3,7 +3,7 @@ from pathlib import Path
 
 import fastapi  # pyright: ignore[reportMissingImports]
 
-from backend.api.routes import artifacts, health, system
+from backend.api.routes import artifacts, health, system, tracks
 
 # Load .env file if it exists
 env_file = Path(__file__).parent.parent / ".env"
@@ -29,6 +29,7 @@ app = fastapi.FastAPI(
 app.include_router(health.router)
 app.include_router(artifacts.router)
 app.include_router(system.router)
+app.include_router(tracks.router)
 
 
 @app.get("/")

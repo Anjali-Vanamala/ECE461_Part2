@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Path, Query, Response, status
+from fastapi import (APIRouter, Header, HTTPException, Path, Query, Response,
+                     status)
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactMetadata,
@@ -95,6 +96,14 @@ async def register_artifact(
     return artifact
 
 
+@router.get("/artifacts/{rest:path}")
+async def catch_bad_artifact_paths(rest: str):
+    raise HTTPException(
+        status_code=400,
+        detail="Invalid artifact path. Expected format: /artifacts/{type}/{id}"
+    )
+
+
 @router.get(
     "/artifacts/{artifact_type}/{artifact_id}",
     response_model=Artifact,
@@ -103,10 +112,25 @@ async def register_artifact(
 async def get_artifact(
     artifact_type: ArtifactType = Path(..., description="Artifact type"),
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
-) -> Artifact:
+    authenticationtoken: str = Header(None, convert_underscores=False),
+):
+
+    # 403 – missing header
+    if authenticationtoken is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Authentication failed due to invalid or missing AuthenticationToken."
+        )
+
+    # 404 – not found
     artifact = memory.get_artifact(artifact_type, artifact_id)
     if not artifact:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artifact does not exist."
+        )
+
+    # 200 – OK
     return artifact
 
 

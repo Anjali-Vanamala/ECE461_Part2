@@ -90,7 +90,7 @@ jobs:
             | .containerDefinitions[0].secrets = [
                 {
                   "name": "GEN_AI_STUDIO_API_KEY",
-                  "valueFrom": "/myapp/GEN_AI_STUDIO_API_KEY"
+                  "valueFrom": "/ece461-backend/GEN_AI_STUDIO_API_KEY"
                 }
               ]' \
            task-definition.json > task-definition-updated.json

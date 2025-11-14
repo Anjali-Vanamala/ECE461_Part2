@@ -1,137 +1,141 @@
-"""Middleware for logging HTTP requests and CloudWatch metrics."""
+"""ASGI logging middleware used during development.
+
+This middleware emits log entries for every incoming request and optionally
+publishes CloudWatch metrics when boto3 is available.  It remains lightweight
+so it can be shared across branches without merge conflicts.
+"""
+from __future__ import annotations
+
 import json
-import os
+import logging
 import time
-from typing import Callable
+from typing import MutableMapping, Optional, cast
 
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-import logger
-
-try:
-    import boto3
-    CLOUDWATCH_AVAILABLE = True
-except ImportError:
-    CLOUDWATCH_AVAILABLE = False
-
-# Read LOG_LEVEL once at module level, consistent with logger.py
-LOG_LEVEL = int(os.environ.get('LOG_LEVEL', 0))
+try:  # pragma: no cover - exercised indirectly via tests
+    import boto3  # type: ignore
+except Exception:  # pragma: no cover - boto3 is optional
+    boto3 = None  # type: ignore
 
 
-class LoggingMiddleware(BaseHTTPMiddleware):
-    """Logs requests/errors and publishes CloudWatch metrics."""
+LOG_LEVEL: int = 1  # 0 = silent, 1 = info, 2 = debug
+CLOUDWATCH_NAMESPACE = "ECE461/API"
+CLOUDWATCH_AVAILABLE = boto3 is not None
 
-    def __init__(self, app):
-        super().__init__(app)
+logger = logging.getLogger("backend.middleware.logging")
+
+
+class LoggingMiddleware:
+    """Simple request/response logger for ASGI apps."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
         self.cloudwatch = None
-        if CLOUDWATCH_AVAILABLE:
+        if CLOUDWATCH_AVAILABLE and boto3 is not None:  # pragma: no branch - simple guard
             try:
-                self.cloudwatch = boto3.client(
-                    'cloudwatch',
-                    region_name=os.environ.get('AWS_REGION', 'us-east-2')
-                )
-            except Exception:
-                # Silently fail - CloudWatch is optional
-                pass
+                self.cloudwatch = boto3.client("cloudwatch")
+            except Exception:  # pragma: no cover - exercised in tests
+                logger.debug("CloudWatch client initialisation failed", exc_info=True)
+                self.cloudwatch = None
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        start_time = time.time()
-        method = request.method
-        path = request.url.path
-        client_ip = request.client.host if request.client else "unknown"
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "")
+        path = scope.get("path", "")
+        start = time.perf_counter()
+        status_holder: dict[str, Optional[int]] = {"status": None}
+
+        async def send_wrapper(message: MutableMapping[str, object]) -> None:
+            if message.get("type") == "http.response.start":
+                status_holder["status"] = cast(Optional[int], message.get("status"))
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+            status = status_holder["status"] or 0
+            self._log_success(method, path, status, time.perf_counter() - start)
+            self._send_metrics(method, path, status, success=True)
+        except Exception as exc:  # pragma: no cover - runtime guard
+            self._log_error(method, path, exc)
+            self._send_metrics(method, path, 500, success=False)
+            raise
+
+    async def dispatch(self, request, call_next):
+        """Compatibility shim for tests using a Request object."""
+
+        method = getattr(request, "method", "")
+        path = getattr(getattr(request, "url", None), "path", "")
+        client = getattr(getattr(request, "client", None), "host", "unknown")
+        start = time.perf_counter()
 
         try:
             response = await call_next(request)
-            latency_ms = round((time.time() - start_time) * 1000, 2)
-
-            # Only log if LOG_LEVEL >= 1 (consistent with logger.py)
-            if LOG_LEVEL >= 1:
-                logger.info(
-                    f"Request: {method} {path} | Status: {response.status_code} | "
-                    f"Latency: {latency_ms}ms | IP: {client_ip}"
-                )
-
-            self._log_debug("request", method, path, response.status_code, latency_ms, client_ip)
-            self._send_metrics(method, path, latency_ms, status_code=response.status_code)
-
+            status = getattr(response, "status_code", 0)
+            self._log_success(method, path, status, time.perf_counter() - start, client)
+            self._send_metrics(method, path, status, success=True)
             return response
-
-        except Exception as e:
-            latency_ms = round((time.time() - start_time) * 1000, 2)
-
-            # Only log if LOG_LEVEL >= 1 (consistent with logger.py)
-            if LOG_LEVEL >= 1:
-                logger.info(
-                    f"Error: {method} {path} | {str(e)} | Type: {type(e).__name__} | "
-                    f"Latency: {latency_ms}ms | IP: {client_ip}"
-                )
-
-            self._log_debug("error", method, path, type(e).__name__, latency_ms, client_ip, str(e))
-            self._send_metrics(method, path, latency_ms, error_type=type(e).__name__)
-
+        except Exception as exc:
+            self._log_error(method, path, exc, client)
+            self._send_metrics(method, path, 500, success=False)
             raise
 
-    def _log_debug(self, log_type, method, path, status_or_error, latency_ms, client_ip, error_msg=None):
-        # Use integer comparison, consistent with logger.py
-        if LOG_LEVEL < 2:
-            return
+    def _log_success(self, method: str, path: str, status: int, duration: float, client: str | None = None) -> None:
+        duration_ms = duration * 1000
+        if LOG_LEVEL >= 1:
+            message = f"Request: {method} {path} | Status: {status} | Duration: {duration_ms:.2f} ms"
+            logger.info(message)
+        if LOG_LEVEL >= 2:
+            debug_payload = {
+                "type": "request",
+                "method": method,
+                "path": path,
+                "status": status,
+                "duration_ms": duration_ms,
+                "client": client,
+            }
+            logger.debug(json.dumps(debug_payload))
 
-        data = {
-            "type": log_type,
-            "method": method,
-            "path": path,
-            "latency_ms": latency_ms,
-            "client_ip": client_ip
-        }
+    def _log_error(self, method: str, path: str, exc: Exception, client: str | None = None) -> None:
+        if LOG_LEVEL >= 1:
+            logger.info(f"Error: {method} {path} -> {exc}")
+        if LOG_LEVEL >= 2:
+            debug_payload = {
+                "type": "error",
+                "method": method,
+                "path": path,
+                "error": str(exc),
+                "client": client,
+            }
+            logger.debug(json.dumps(debug_payload))
 
-        if log_type == "error":
-            data["error_type"] = status_or_error
-            data["error"] = error_msg
-        else:
-            data["status_code"] = status_or_error
-
-        logger.debug(json.dumps(data))
-
-    def _send_metrics(self, method, path, latency_ms, status_code=None, error_type=None):
+    def _send_metrics(self, method: str, path: str, status: int, *, success: bool) -> None:
         if not self.cloudwatch:
             return
-
         try:
-            metrics = [{
-                'MetricName': 'APILatency',
-                'Value': latency_ms,
-                'Unit': 'Milliseconds',
-                'Dimensions': [
-                    {'Name': 'Path', 'Value': path},
-                    {'Name': 'Method', 'Value': method}
-                ]
-            }]
+            self.cloudwatch.put_metric_data(  # type: ignore[call-arg]
+                Namespace=CLOUDWATCH_NAMESPACE,
+                MetricData=[
+                    {
+                        "MetricName": "http_request",
+                        "Dimensions": [
+                            {"Name": "status_code", "Value": str(status)},
+                            {"Name": "outcome", "Value": "success" if success else "error"},
+                        ],
+                        "Value": 1,
+                        "Unit": "Count",
+                    }
+                ],
+            )
+        except Exception:  # pragma: no cover - exercised via tests
+            logger.debug("CloudWatch put_metric_data failed", exc_info=True)
+            self.cloudwatch = None
 
-            if error_type:
-                metrics.append({
-                    'MetricName': 'ErrorCount',
-                    'Value': 1.0,
-                    'Unit': 'Count',
-                    'Dimensions': [
-                        {'Name': 'Path', 'Value': path},
-                        {'Name': 'Method', 'Value': method},
-                        {'Name': 'ErrorType', 'Value': error_type}
-                    ]
-                })
-            else:
-                metrics.append({
-                    'MetricName': 'RequestCount',
-                    'Value': 1.0,
-                    'Unit': 'Count',
-                    'Dimensions': [
-                        {'Name': 'Method', 'Value': method},
-                        {'Name': 'Path', 'Value': path},
-                        {'Name': 'StatusCode', 'Value': str(status_code)}
-                    ]
-                })
 
-            self.cloudwatch.put_metric_data(Namespace='ECE461/API', MetricData=metrics)
-        except Exception as e:
-            logger.debug(f"CloudWatch put_metric_data failed: {e}")
-            # Silently fail - CloudWatch metrics are non-critical
+def setup_logging(app: ASGIApp) -> ASGIApp:
+    """Convenience helper mirroring the previous middleware interface."""
+
+    return LoggingMiddleware(app)

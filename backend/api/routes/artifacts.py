@@ -77,7 +77,7 @@ async def regex_artifact_search(
 
             # README match (if available)
             if artifact_type == ArtifactType.MODEL:
-                store = memory._TYPE_TO_STORE[artifact_type]  # type: ignore
+                store = memory._TYPE_TO_STORE[artifact_type]  # type: ignore[attr-defined]
                 record = store.get(meta.id)
                 if not record:
                     continue

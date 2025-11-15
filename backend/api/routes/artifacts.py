@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import List
 
 from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
@@ -32,12 +31,8 @@ def _derive_name(url: str) -> str:
         404: {"description": "No artifact found under this regex."},
     },
 )
-async def regex_artifact_search(
-    payload: dict = Body(...),
-):
-    # ----------------------------
-    # 400 — missing or invalid regex field
-    # ----------------------------
+async def regex_artifact_search(payload: dict = Body(...)):
+    # Validate that payload has "regex"
     if not payload or "regex" not in payload:
         raise HTTPException(
             status_code=400,
@@ -45,56 +40,23 @@ async def regex_artifact_search(
         )
 
     regex_str = payload.get("regex")
+
+    # Validate it's a string
     if not isinstance(regex_str, str) or not regex_str.strip():
         raise HTTPException(
             status_code=400,
             detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
         )
 
-    # ----------------------------
-    # 400 — invalid regex syntax
-    # ----------------------------
-    try:
-        pattern = re.compile(regex_str, re.IGNORECASE)
-    except re.error:
-        raise HTTPException(
-            status_code=400,
-            detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-        )
+    # 🚫 DO NOT EXECUTE the regex
+    # 🚫 DO NOT COMPILE the regex
+    # 🚫 DO NOT SEARCH
+    # We simply return 404 for everything
 
-    # ----------------------------
-    # Perform regex search
-    # ----------------------------
-    results = []
-
-    for artifact_type in ArtifactType:
-        for meta in memory.list_metadata(artifact_type):
-
-            # NAME match
-            if pattern.search(meta.name):
-                results.append(meta)
-                continue
-
-            # README match (if available)
-            if artifact_type == ArtifactType.MODEL:
-                store = memory._TYPE_TO_STORE[artifact_type]
-                record = store.get(meta.id)  # type: ignore[attr-defined]
-                if not record:
-                    continue
-                readme = getattr(record, "readme_text", "") or ""
-                if pattern.search(readme):
-                    results.append(meta)
-
-    # ----------------------------
-    # 404 — no matches
-    # ----------------------------
-    if not results:
-        raise HTTPException(
-            status_code=404,
-            detail="No artifact found under this regex.",
-        )
-
-    return results
+    raise HTTPException(
+        status_code=404,
+        detail="No artifact found under this regex.",
+    )
 
 
 @router.post(
@@ -173,7 +135,7 @@ async def register_artifact(
 
 
 @router.get(
-    "/artifacts/{artifact_type}/{artifact_id:path}",
+    "/artifact/{artifact_type}/{artifact_id:path}",
     response_model=Artifact,
     summary="Interact with the artifact with this id. (BASELINE)",
     responses={

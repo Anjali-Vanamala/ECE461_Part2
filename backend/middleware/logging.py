@@ -49,14 +49,36 @@ class LoggingMiddleware:
         start = time.perf_counter()
         status_holder: dict[str, Optional[int]] = {"status": None}
 
+        # --- added: collect request body ---
+        body_store: list[bytes] = []
+
+        async def receive_wrapper():
+            message = await receive()
+            if message.get("type") == "http.request":
+                body_store.append(message.get("body", b""))
+            return message
+        # --- end added ---
+
         async def send_wrapper(message: MutableMapping[str, object]) -> None:
             if message.get("type") == "http.response.start":
                 status_holder["status"] = cast(Optional[int], message.get("status"))
             await send(message)
 
         try:
-            await self.app(scope, receive, send_wrapper)
+            # --- changed: receive → receive_wrapper ---
+            await self.app(scope, receive_wrapper, send_wrapper)
+            # --- end change ---
+
             status = status_holder["status"] or 0
+
+            # --- added: decode and log request body ---
+            try:
+                raw_body = b"".join(body_store).decode("utf-8", errors="replace")
+            except Exception:
+                raw_body = "<unreadable>"
+            logger.info(f"Request body: {raw_body}")
+            # --- end added ---
+
             self._log_success(method, path, status, time.perf_counter() - start)
             self._send_metrics(method, path, status, success=True)
         except Exception as exc:  # pragma: no cover - runtime guard

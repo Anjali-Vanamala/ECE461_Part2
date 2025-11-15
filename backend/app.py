@@ -1,14 +1,14 @@
+import logging
 import os
 from pathlib import Path
 
 import fastapi  # pyright: ignore[reportMissingImports]
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi import Request
-from backend.middleware.logging import setup_logging
 
 from backend.api.routes import artifacts, health, system, tracks
-import logging
+from backend.middleware.logging import setup_logging
+
 logging.basicConfig(level=logging.INFO)
 # Load .env file if it exists
 env_file = Path(__file__).parent.parent / ".env"

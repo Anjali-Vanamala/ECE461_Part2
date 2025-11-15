@@ -3,10 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ECE461 Frontend</title>
+    <title>ECE461 Model Registry</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        #status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .loading { background: #d1ecf1; color: #0c5460; }
+    </style>
 </head>
 <body>
-    <h1>Hello World</h1>
+    <h1>ECE461 Model Registry</h1>
+    <div id="status" class="loading">Checking API health...</div>
+
+    <script>
+        // Update with your API Gateway URL
+        const API_GATEWAY_URL = 'https://YOUR_API_ID.execute-api.us-east-2.amazonaws.com/prod';
+        
+        async function checkHealth() {
+            const statusDiv = document.getElementById('status');
+            
+            if (API_GATEWAY_URL.includes('YOUR_API_ID')) {
+                statusDiv.className = 'error';
+                statusDiv.textContent = 'Error: API Gateway URL not configured';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_GATEWAY_URL}/health`);
+                const data = await response.json();
+                statusDiv.className = 'success';
+                statusDiv.textContent = `API Health: ${data.status || 'OK'}`;
+            } catch (error) {
+                statusDiv.className = 'error';
+                statusDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        checkHealth();
+    </script>
 </body>
 </html>
 

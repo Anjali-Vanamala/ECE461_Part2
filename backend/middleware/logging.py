@@ -1,7 +1,7 @@
 """ASGI logging middleware used during development.
 
 This middleware emits log entries for every incoming request and optionally
-publishes CloudWatch metrics when boto3 is available.  It remains lightweight
+publishes CloudWatch metrics when boto3 is available. It remains lightweight
 so it can be shared across branches without merge conflicts.
 """
 from __future__ import annotations
@@ -13,11 +13,10 @@ from typing import MutableMapping, Optional, cast
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-try:  # pragma: no cover - exercised indirectly via tests
+try:
     import boto3  # type: ignore
-except Exception:  # pragma: no cover - boto3 is optional
+except Exception:
     boto3 = None  # type: ignore
-
 
 LOG_LEVEL: int = 1  # 0 = silent, 1 = info, 2 = debug
 CLOUDWATCH_NAMESPACE = "ECE461/API"
@@ -32,11 +31,11 @@ class LoggingMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
         self.cloudwatch = None
-        if CLOUDWATCH_AVAILABLE and boto3 is not None:  # pragma: no branch - simple guard
+        if CLOUDWATCH_AVAILABLE and boto3 is not None:
             try:
                 self.cloudwatch = boto3.client("cloudwatch")
-            except Exception:  # pragma: no cover - exercised in tests
-                logger.debug("CloudWatch client initialisation failed", exc_info=True)
+            except Exception:
+                logger.debug("CloudWatch client initialization failed", exc_info=True)
                 self.cloudwatch = None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -49,7 +48,10 @@ class LoggingMiddleware:
         start = time.perf_counter()
         status_holder: dict[str, Optional[int]] = {"status": None}
 
-        # --- added: collect request body ---
+        # 🔥 LOG IMMEDIATELY WHEN REQUEST ARRIVES
+        logger.info(f"[ARRIVED] {method} {path}")
+
+        # Collect request body
         body_store: list[bytes] = []
 
         async def receive_wrapper():
@@ -57,7 +59,6 @@ class LoggingMiddleware:
             if message.get("type") == "http.request":
                 body_store.append(message.get("body", b""))
             return message
-        # --- end added ---
 
         async def send_wrapper(message: MutableMapping[str, object]) -> None:
             if message.get("type") == "http.response.start":
@@ -65,23 +66,21 @@ class LoggingMiddleware:
             await send(message)
 
         try:
-            # --- changed: receive → receive_wrapper ---
             await self.app(scope, receive_wrapper, send_wrapper)
-            # --- end change ---
 
             status = status_holder["status"] or 0
 
-            # --- added: decode and log request body ---
+            # Log full request body AFTER processing
             try:
                 raw_body = b"".join(body_store).decode("utf-8", errors="replace")
             except Exception:
                 raw_body = "<unreadable>"
             logger.info(f"Request body: {raw_body}")
-            # --- end added ---
 
             self._log_success(method, path, status, time.perf_counter() - start)
             self._send_metrics(method, path, status, success=True)
-        except Exception as exc:  # pragma: no cover - runtime guard
+
+        except Exception as exc:
             self._log_error(method, path, exc)
             self._send_metrics(method, path, 500, success=False)
             raise
@@ -108,8 +107,7 @@ class LoggingMiddleware:
     def _log_success(self, method: str, path: str, status: int, duration: float, client: str | None = None) -> None:
         duration_ms = duration * 1000
         if LOG_LEVEL >= 1:
-            message = f"Request: {method} {path} | Status: {status} | Duration: {duration_ms:.2f} ms"
-            logger.info(message)
+            logger.info(f"Request: {method} {path} | Status: {status} | Duration: {duration_ms:.2f} ms")
         if LOG_LEVEL >= 2:
             debug_payload = {
                 "type": "request",
@@ -138,7 +136,7 @@ class LoggingMiddleware:
         if not self.cloudwatch:
             return
         try:
-            self.cloudwatch.put_metric_data(  # type: ignore[call-arg]
+            self.cloudwatch.put_metric_data(
                 Namespace=CLOUDWATCH_NAMESPACE,
                 MetricData=[
                     {
@@ -152,12 +150,10 @@ class LoggingMiddleware:
                     }
                 ],
             )
-        except Exception:  # pragma: no cover - exercised via tests
+        except Exception:
             logger.debug("CloudWatch put_metric_data failed", exc_info=True)
             self.cloudwatch = None
 
 
 def setup_logging(app: ASGIApp) -> ASGIApp:
-    """Convenience helper mirroring the previous middleware interface."""
-
     return LoggingMiddleware(app)

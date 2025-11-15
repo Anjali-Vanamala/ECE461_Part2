@@ -50,4 +50,4 @@ def read_root():
     return {"message": "Hello, World!"}
 
 
-app = setup_logging(app)
+app = setup_logging(app)  # type: ignore[assignment]

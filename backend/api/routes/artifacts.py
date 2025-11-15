@@ -77,8 +77,8 @@ async def regex_artifact_search(
 
             # README match (if available)
             if artifact_type == ArtifactType.MODEL:
-                store = memory._TYPE_TO_STORE[artifact_type]  # type: ignore[attr-defined]
-                record = store.get(meta.id)
+                store = memory._TYPE_TO_STORE[artifact_type]  
+                record = store.get(meta.id)  # type: ignore[attr-defined]
                 if not record:
                     continue
                 readme = getattr(record, "readme_text", "") or ""

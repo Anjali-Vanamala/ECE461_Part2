@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import List
 
 from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
@@ -58,7 +57,6 @@ async def regex_artifact_search(payload: dict = Body(...)):
         status_code=404,
         detail="No artifact found under this regex.",
     )
-
 
 
 @router.post(
@@ -137,7 +135,7 @@ async def register_artifact(
 
 
 @router.get(
-    "/artifacts/{artifact_type}/{artifact_id:path}",
+    "/artifact/{artifact_type}/{artifact_id:path}",
     response_model=Artifact,
     summary="Interact with the artifact with this id. (BASELINE)",
     responses={

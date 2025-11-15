@@ -1,16 +1,19 @@
-name: CD - Deploy FastAPI to ECS/Fargate (MVP)
+name: CD - Deploy FastAPI to ECS/Fargate
 
-# MVP Requirements:
+# Requirements:
 # - Automated deployment to AWS upon merge to main
-# - Backend accessible for autograder
+# - Backend accessible via ALB and API Gateway
 # 
 # Prerequisites (manual setup required):
 # - ECR repository: ece461-backend in us-east-2
 # - ECS cluster: ece461-backend-cluster in us-east-2  
 # - ECS task definition: ece461-backend-task (created once manually)
-# - ECS service: ece461-backend-service (created once manually)
-# - GitHub OIDC role with ECR/ECS permissions
+# - ECS service: ece461-backend-service (created once manually, configured with ALB)
+# - Application Load Balancer (ALB) with target group
+# - API Gateway REST API (optional - workflow will detect if configured)
+# - GitHub OIDC role with ECR/ECS/ELB permissions
 # - CloudWatch log group: /ecs/ece461-backend-task
+# - GitHub secrets: AWS_IAM_ROLE_ARN, API_GATEWAY_ID (optional), API_GATEWAY_STAGE (optional)
 
 on:
   push:
@@ -120,11 +123,106 @@ jobs:
             --force-new-deployment \
             --region ${{ env.AWS_REGION }}
 
+      - name: Get ALB DNS name
+        id: get-alb
+        run: |
+          # Get target group ARN from ECS service
+          TARGET_GROUP_ARN=$(aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --query 'services[0].loadBalancers[0].targetGroupArn' \
+            --output text \
+            --region ${{ env.AWS_REGION }} || echo "")
+          
+          if [ -z "$TARGET_GROUP_ARN" ] || [ "$TARGET_GROUP_ARN" == "None" ]; then
+            echo "⚠️  No ALB configured - ECS service not using load balancer"
+            echo "ALB_DNS_NAME=" >> $GITHUB_OUTPUT
+            echo "ALB_AVAILABLE=false" >> $GITHUB_OUTPUT
+          else
+            # Get ALB ARN from target group
+            ALB_ARN=$(aws elbv2 describe-target-groups \
+              --target-group-arns "$TARGET_GROUP_ARN" \
+              --query 'TargetGroups[0].LoadBalancerArns[0]' \
+              --output text \
+              --region ${{ env.AWS_REGION }} || echo "")
+            
+            if [ -z "$ALB_ARN" ] || [ "$ALB_ARN" == "None" ]; then
+              echo "⚠️  Could not find ALB for target group"
+              echo "ALB_DNS_NAME=" >> $GITHUB_OUTPUT
+              echo "ALB_AVAILABLE=false" >> $GITHUB_OUTPUT
+            else
+              # Get ALB DNS name
+              ALB_DNS=$(aws elbv2 describe-load-balancers \
+                --load-balancer-arns "$ALB_ARN" \
+                --query 'LoadBalancers[0].DNSName' \
+                --output text \
+                --region ${{ env.AWS_REGION }} || echo "")
+              
+              if [ -n "$ALB_DNS" ] && [ "$ALB_DNS" != "None" ]; then
+                echo "✅ Found ALB: $ALB_DNS"
+                echo "ALB_DNS_NAME=$ALB_DNS" >> $GITHUB_OUTPUT
+                echo "ALB_AVAILABLE=true" >> $GITHUB_OUTPUT
+              else
+                echo "⚠️  ALB DNS name not available"
+                echo "ALB_DNS_NAME=" >> $GITHUB_OUTPUT
+                echo "ALB_AVAILABLE=false" >> $GITHUB_OUTPUT
+              fi
+            fi
+          fi
+
+      - name: Get API Gateway URL
+        id: get-api-gateway
+        if: steps.get-alb.outputs.ALB_AVAILABLE == 'true'
+        run: |
+          # Get API Gateway URL from secret if configured
+          if [ -n "${{ secrets.API_GATEWAY_ID }}" ]; then
+            API_ID="${{ secrets.API_GATEWAY_ID }}"
+            API_STAGE="${{ secrets.API_GATEWAY_STAGE }}"
+            if [ -z "$API_STAGE" ]; then
+              API_STAGE="prod"
+            fi
+            API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/${API_STAGE}"
+            echo "✅ API Gateway URL: $API_URL"
+            echo "API_GATEWAY_URL=$API_URL" >> $GITHUB_OUTPUT
+            echo "API_GATEWAY_AVAILABLE=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  API Gateway ID not configured in secrets"
+            echo "API_GATEWAY_URL=" >> $GITHUB_OUTPUT
+            echo "API_GATEWAY_AVAILABLE=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify ALB health
+        if: steps.get-alb.outputs.ALB_AVAILABLE == 'true'
+        run: |
+          echo "Checking ALB target health..."
+          TARGET_GROUP_ARN=$(aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --query 'services[0].loadBalancers[0].targetGroupArn' \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          HEALTH=$(aws elbv2 describe-target-health \
+            --target-group-arn "$TARGET_GROUP_ARN" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'TargetHealthDescriptions[*].[Target.Id,TargetHealth.State]' \
+            --output table || echo "Could not check target health")
+          
+          echo "$HEALTH"
+
       - name: Output deployment info
         run: |
-          echo "✅ MVP Deployment Complete"
+          echo "✅ Deployment Complete"
           echo "Image: $IMAGE_URI"
           echo "Service: ${{ env.ECS_SERVICE }}"
           echo "Cluster: ${{ env.ECS_CLUSTER }}"
+          if [ "${{ steps.get-alb.outputs.ALB_AVAILABLE }}" == "true" ]; then
+            echo "ALB DNS: ${{ steps.get-alb.outputs.ALB_DNS_NAME }}"
+            echo "ALB Health Check: http://${{ steps.get-alb.outputs.ALB_DNS_NAME }}/health"
+          fi
+          if [ "${{ steps.get-api-gateway.outputs.API_GATEWAY_AVAILABLE }}" == "true" ]; then
+            echo "API Gateway URL: ${{ steps.get-api-gateway.outputs.API_GATEWAY_URL }}"
+            echo "API Gateway Health: ${{ steps.get-api-gateway.outputs.API_GATEWAY_URL }}/health"
+          fi
 
 

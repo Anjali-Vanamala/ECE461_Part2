@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import re
 from typing import List
 
-from fastapi import (APIRouter, Header, HTTPException, Path, Query, Response,
-                     status)
+from fastapi import (APIRouter, Body, Header, HTTPException, Path, Query,
+                     Response, status)
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactMetadata,
@@ -19,6 +20,89 @@ def _derive_name(url: str) -> str:
     if not stripped:
         return "artifact"
     return stripped.split("/")[-1]
+
+
+@router.post(
+    "/artifact/byRegEx",
+    response_model=list[ArtifactMetadata],
+    summary="Get any artifacts fitting the regular expression (BASELINE).",
+    responses={
+        200: {"description": "Return a list of artifacts."},
+        400: {"description": "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid"},
+        403: {"description": "Authentication failed due to invalid or missing AuthenticationToken."},
+        404: {"description": "No artifact found under this regex."}
+    }
+)
+async def regex_artifact_search(
+    payload: dict = Body(...),
+    x_authorization: str | None = Header(default=None, alias="X-Authorization")
+):
+    # ----------------------------
+    # 403 — missing/invalid auth
+    # ----------------------------
+    if not x_authorization:
+        raise HTTPException(
+            status_code=403,
+            detail="Authentication failed due to invalid or missing AuthenticationToken."
+        )
+
+    # ----------------------------
+    # 400 — missing or invalid regex field
+    # ----------------------------
+    if not payload or "regex" not in payload:
+        raise HTTPException(
+            status_code=400,
+            detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid"
+        )
+
+    regex_str = payload.get("regex")
+    if not isinstance(regex_str, str) or not regex_str.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid"
+        )
+
+    # ----------------------------
+    # 400 — invalid regex syntax
+    # ----------------------------
+    try:
+        pattern = re.compile(regex_str, re.IGNORECASE)
+    except re.error:
+        raise HTTPException(
+            status_code=400,
+            detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid"
+        )
+
+    # ----------------------------
+    # Perform regex search
+    # ----------------------------
+    results = []
+
+    for artifact_type in ArtifactType:
+        for meta in memory.list_metadata(artifact_type):
+
+            # NAME match
+            if pattern.search(meta.name):
+                results.append(meta)
+                continue
+
+            # README match (if available)
+            if artifact_type == ArtifactType.MODEL:
+                record = memory._TYPE_TO_STORE[artifact_type].get(meta.id)  # type: ignore[attr-defined]
+                readme = getattr(record, "readme_text", "") or ""
+                if pattern.search(readme):
+                    results.append(meta)
+
+    # ----------------------------
+    # 404 — no matches
+    # ----------------------------
+    if not results:
+        raise HTTPException(
+            status_code=404,
+            detail="No artifact found under this regex."
+        )
+
+    return results
 
 
 @router.post(
@@ -96,41 +180,61 @@ async def register_artifact(
     return artifact
 
 
-@router.get("/artifacts/{rest:path}")
-async def catch_bad_artifact_paths(rest: str):
-    raise HTTPException(
-        status_code=400,
-        detail="Invalid artifact path. Expected format: /artifacts/{type}/{id}"
-    )
-
-
 @router.get(
-    "/artifacts/{artifact_type}/{artifact_id}",
+    "/artifacts/{artifact_type}/{artifact_id:path}",
     response_model=Artifact,
     summary="Interact with the artifact with this id. (BASELINE)",
+    responses={
+        400: {
+            "description": (
+                "There is missing field(s) in the artifact_type or artifact_id "
+                "or it is formed improperly, or is invalid."
+            )
+        },
+        403: {"description": "Authentication failed due to invalid or missing AuthenticationToken."},
+        404: {"description": "Artifact does not exist."},
+        200: {"description": "Artifact retrieved successfully."},
+    }
 )
 async def get_artifact(
-    artifact_type: ArtifactType = Path(..., description="Artifact type"),
-    artifact_id: ArtifactID = Path(..., description="Artifact id"),
+    artifact_type: str = Path(...),
+    artifact_id: str = Path(...),
     authenticationtoken: str = Header(None, convert_underscores=False),
 ):
+    # 400 — invalid or missing type
+    try:
+        artifact_type_enum = ArtifactType(artifact_type)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="400: There is missing field(s) in the artifact_type or artifact_id or it is formed improperly, or is invalid."
+        )
 
-    # 403 – missing header
+    # 400 — invalid or malformed id (UUID)
+    import uuid
+    try:
+        uuid.UUID(str(artifact_id))
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="400: There is missing field(s) in the artifact_type or artifact_id or it is formed improperly, or is invalid."
+        )
+
+    # 403 — missing header
     if authenticationtoken is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Authentication failed due to invalid or missing AuthenticationToken."
+            status_code=403,
+            detail="403: Authentication failed due to invalid or missing AuthenticationToken."
         )
 
-    # 404 – not found
-    artifact = memory.get_artifact(artifact_type, artifact_id)
+    # 404 — not found
+    artifact = memory.get_artifact(artifact_type_enum, artifact_id)
     if not artifact:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Artifact does not exist."
+            status_code=404,
+            detail="404: Artifact does not exist."
         )
 
-    # 200 – OK
     return artifact
 
 

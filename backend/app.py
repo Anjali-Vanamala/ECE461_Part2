@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 
 import fastapi  # pyright: ignore[reportMissingImports]
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from backend.api.routes import artifacts, health, system, tracks
 
@@ -24,6 +26,14 @@ app = fastapi.FastAPI(
         "url": "https://opensource.org/licenses/MIT",
     }
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": "400: Bad request. There are missing field(s), it is formed improperly, or is invalid.."}
+    )
 
 
 app.include_router(health.router)

@@ -51,13 +51,25 @@ class LoggingMiddleware:
         # 🔥 LOG IMMEDIATELY WHEN REQUEST ARRIVES
         logger.info(f"[ARRIVED] {method} {path}")
 
-        # Collect request body
+        # Collect body as it streams
         body_store: list[bytes] = []
 
         async def receive_wrapper():
             message = await receive()
+
             if message.get("type") == "http.request":
-                body_store.append(message.get("body", b""))
+                chunk = message.get("body", b"")
+                if chunk:
+                    body_store.append(chunk)
+
+                # 🔥 LOG THE BODY AS SOON AS COMPLETE (BEFORE handler runs)
+                if not message.get("more_body", False):
+                    try:
+                        raw_body = b"".join(body_store).decode("utf-8", errors="replace")
+                    except Exception:
+                        raw_body = "<unreadable>"
+                    logger.info(f"[ARRIVED BODY] {raw_body}")
+
             return message
 
         async def send_wrapper(message: MutableMapping[str, object]) -> None:
@@ -70,7 +82,7 @@ class LoggingMiddleware:
 
             status = status_holder["status"] or 0
 
-            # Log full request body AFTER processing
+            # Log again after handling (old behavior preserved)
             try:
                 raw_body = b"".join(body_store).decode("utf-8", errors="replace")
             except Exception:

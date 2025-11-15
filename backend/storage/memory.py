@@ -156,8 +156,11 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
         for artifact_type in types:
             for record in _get_store(artifact_type).values():
                 metadata = record.artifact.metadata
-                if query.name == "*" or query.name.lower() in metadata.name.lower():
+
+                # FIX: exact match except "*"
+                if query.name == "*" or query.name.lower() == metadata.name.lower():
                     results[f"{metadata.type}:{metadata.id}"] = metadata
+
     return list(results.values())
 
 

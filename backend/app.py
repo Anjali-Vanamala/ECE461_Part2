@@ -4,9 +4,12 @@ from pathlib import Path
 import fastapi  # pyright: ignore[reportMissingImports]
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi import Request
+from backend.middleware.logging import setup_logging
 
 from backend.api.routes import artifacts, health, system, tracks
-
+import logging
+logging.basicConfig(level=logging.INFO)
 # Load .env file if it exists
 env_file = Path(__file__).parent.parent / ".env"
 if env_file.exists():
@@ -45,3 +48,6 @@ app.include_router(tracks.router)
 @app.get("/")
 def read_root():
     return {"message": "Hello, World!"}
+
+
+app = setup_logging(app)

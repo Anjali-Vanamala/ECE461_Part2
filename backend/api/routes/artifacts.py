@@ -32,9 +32,8 @@ def _derive_name(url: str) -> str:
         404: {"description": "No artifact found under this regex."},
     },
 )
-async def regex_artifact_search(
-    payload: dict = Body(...),
-):
+async def regex_artifact_search(payload: dict = Body(...)):
+
     # ----------------------------
     # 400 — missing or invalid regex field
     # ----------------------------
@@ -52,35 +51,39 @@ async def regex_artifact_search(
         )
 
     # ----------------------------
-    # SAFETY CHECKS — prevent catastrophic regex
+    # SAFETY CHECKS — BLOCK CATASTROPHIC BACKTRACKING
     # ----------------------------
 
-    # Reject huge repetition {x, y} where y > 500 (autograder uses 99999)
-    m = re.search(r"\{\s*\d+\s*,\s*(\d+)\s*\}", regex_str)
-    if m:
-        upper = int(m.group(1))
-        if upper > 500:
-            raise HTTPException(
-                status_code=400,
-                detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-            )
+    # 1. Global cap
+    if len(regex_str) > 300:
+        raise HTTPException(status_code=400, detail="Regex too large or unsafe.")
 
-    # Reject nested quantifiers: (a+)+, (.*?)*, etc.
-    if re.search(r"\([^\)]*[+*][^\)]*\)[+*]", regex_str):
-        raise HTTPException(
-            status_code=400,
-            detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-        )
+    # 2. Large quantifiers like {1000} or {1,99999}
+    if re.search(r"\{[0-9]{4,}", regex_str):
+        raise HTTPException(status_code=400, detail="Regex too complex / unsafe.")
 
-    # Also reject extremely long patterns
-    if len(regex_str) > 2000:
-        raise HTTPException(
-            status_code=400,
-            detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-        )
+    # 3. Nested quantifiers: (a+)+, (.*)+
+    if re.search(r"\([^\)]*[\*\+\?]\)\s*[\*\+\?]", regex_str):
+        raise HTTPException(status_code=400, detail="Regex too complex / unsafe.")
+
+    # 4. Quantified group repeated: (a{1,100}){1,100}
+    if re.search(r"\([^\)]*\{[0-9,]+\}\)\s*\{[0-9,]+\}", regex_str):
+        raise HTTPException(status_code=400, detail="Regex too complex / unsafe.")
+
+    # 5. Adjacent quantified groups: (a+)(a+)(a+)
+    if re.search(r"\([^\)]*[\*\+\?]\)\s*\([^\)]*[\*\+\?]\)", regex_str):
+        raise HTTPException(status_code=400, detail="Regex too complex / unsafe.")
+
+    # 6. Dot-star repeated: (.*){10}
+    if re.search(r"\(\.\*.*\)\s*\{[0-9]+", regex_str):
+        raise HTTPException(status_code=400, detail="Regex too complex / unsafe.")
+
+    # 7. Multiple dot-stars: .*.*.*
+    if ".*.*" in regex_str or ".+.+." in regex_str:
+        raise HTTPException(status_code=400, detail="Regex too complex / unsafe.")
 
     # ----------------------------
-    # 400 — invalid regex syntax
+    # Now safe to compile
     # ----------------------------
     try:
         pattern = re.compile(regex_str, re.IGNORECASE)
@@ -103,19 +106,16 @@ async def regex_artifact_search(
                 results.append(meta)
                 continue
 
-            # README match (if available)
+            # README match (models only)
             if artifact_type == ArtifactType.MODEL:
                 store = memory._TYPE_TO_STORE[artifact_type]
-                record = store.get(meta.id)  # type: ignore[attr-defined]
+                record = store.get(meta.id)
                 if not record:
                     continue
                 readme = getattr(record, "readme_text", "") or ""
                 if pattern.search(readme):
                     results.append(meta)
 
-    # ----------------------------
-    # 404 — no matches
-    # ----------------------------
     if not results:
         raise HTTPException(
             status_code=404,
@@ -123,7 +123,6 @@ async def regex_artifact_search(
         )
 
     return results
-
 
 
 @router.post(

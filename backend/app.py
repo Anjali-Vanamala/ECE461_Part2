@@ -4,6 +4,7 @@ from pathlib import Path
 
 import fastapi  # pyright: ignore[reportMissingImports]
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.api.routes import artifacts, health, system, tracks
@@ -28,6 +29,15 @@ app = fastapi.FastAPI(
         "name": "MIT License",
         "url": "https://opensource.org/licenses/MIT",
     }
+)
+
+# Add CORS middleware to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins (e.g., S3 bucket URL)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, PUT, DELETE, OPTIONS, etc.)
+    allow_headers=["*"],  # Allows all headers
 )
 
 

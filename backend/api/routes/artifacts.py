@@ -158,11 +158,11 @@ async def get_artifact(
         )
 
     # 400 — invalid or malformed id (UUID)
-    import uuid
+    import re
 
-    try:
-        uuid.UUID(str(artifact_id))
-    except Exception:
+    id_pattern = r"^[a-zA-Z0-9\-]+$"
+
+    if not re.fullmatch(id_pattern, artifact_id):
         raise HTTPException(
             status_code=400,
             detail="400: There is missing field(s) in the artifact_type or artifact_id or it is formed improperly, or is invalid.",

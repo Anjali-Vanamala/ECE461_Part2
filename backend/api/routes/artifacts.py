@@ -135,7 +135,7 @@ async def register_artifact(
 
 
 @router.get(
-    "/artifact/{artifact_type}/{artifact_id:path}",
+    "/artifacts/{artifact_type}/{artifact_id:path}",
     response_model=Artifact,
     summary="Interact with the artifact with this id. (BASELINE)",
     responses={

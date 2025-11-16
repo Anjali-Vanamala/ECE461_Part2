@@ -174,12 +174,7 @@ jobs:
         if: steps.get-alb.outputs.ALB_AVAILABLE == 'true'
         run: |
           echo "Checking ALB target health..."
-          TARGET_GROUP_ARN=$(aws ecs describe-services \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }} \
-            --query 'services[0].loadBalancers[0].targetGroupArn' \
-            --output text \
-            --region ${{ env.AWS_REGION }})
+          TARGET_GROUP_ARN="${{ steps.get-alb.outputs.TARGET_GROUP_ARN }}"
           
           HEALTH=$(aws elbv2 describe-target-health \
             --target-group-arn "$TARGET_GROUP_ARN" \

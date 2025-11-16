@@ -1,3 +1,42 @@
-TASK_ARN=$(aws ecs list-tasks --cluster ece461-backend-cluster --service-name ece461-backend-service --region us-east-2 --query 'taskArns[0]' --output text) && \
-ENI=$(aws ecs describe-tasks --cluster ece461-backend-cluster --tasks "$TASK_ARN" --region us-east-2 --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text) && \
-aws ec2 describe-network-interfaces --network-interface-ids "$ENI" --region us-east-2 --query 'NetworkInterfaces[0].Association.PublicIp' --output text
+#!/bin/bash
+# Get Backend Access URLs
+# RECOMMENDED: Use API Gateway or ALB URLs (stable, don't change)
+# LEGACY: Direct task IP (changes when task restarts)
+
+echo "=== Backend Access URLs ==="
+echo ""
+
+# API Gateway (Primary - Recommended)
+API_ID=$(aws apigateway get-rest-apis --region us-east-2 --query 'items[?name==`ece461-api-gateway`].id' --output text 2>/dev/null)
+if [ -n "$API_ID" ] && [ "$API_ID" != "None" ]; then
+  echo "✅ API Gateway (Recommended):"
+  echo "   https://${API_ID}.execute-api.us-east-2.amazonaws.com/prod"
+  echo ""
+fi
+
+# ALB (Alternative - Also stable)
+ALB_DNS=$(aws elbv2 describe-load-balancers --names ece461-alb --region us-east-2 --query 'LoadBalancers[0].DNSName' --output text 2>/dev/null)
+if [ -n "$ALB_DNS" ] && [ "$ALB_DNS" != "None" ]; then
+  echo "✅ ALB (Alternative):"
+  echo "   http://${ALB_DNS}"
+  echo ""
+fi
+
+# Direct Task IP (Legacy - Changes on restart)
+echo "⚠️  Direct Task IP (Legacy - use above URLs instead):"
+TASK_ARN=$(aws ecs list-tasks --cluster ece461-backend-cluster --service-name ece461-backend-service --region us-east-2 --query 'taskArns[0]' --output text 2>/dev/null)
+if [ -n "$TASK_ARN" ] && [ "$TASK_ARN" != "None" ]; then
+  ENI=$(aws ecs describe-tasks --cluster ece461-backend-cluster --tasks "$TASK_ARN" --region us-east-2 --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text 2>/dev/null)
+  if [ -n "$ENI" ] && [ "$ENI" != "None" ]; then
+    TASK_IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI" --region us-east-2 --query 'NetworkInterfaces[0].Association.PublicIp' --output text 2>/dev/null)
+    if [ -n "$TASK_IP" ] && [ "$TASK_IP" != "None" ]; then
+      echo "   http://${TASK_IP}:8000"
+    else
+      echo "   ❌ Not available"
+    fi
+  else
+    echo "   ❌ Not available"
+  fi
+else
+  echo "   ❌ No running task"
+fi

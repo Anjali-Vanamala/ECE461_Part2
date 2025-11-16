@@ -5,6 +5,9 @@
 **Region:** us-east-2 (Ohio)  
 **Account ID:** [REDACTED]
 
+**Backend API URL (For Autograders):**
+- **API Gateway:** `https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod`
+
 ## Quick Reference
 
 📋 **AWS_setup.md**
@@ -17,8 +20,10 @@
    → Use this to quickly check if everything is running
 
 🔗 **URL_grab**
-   → Quick command to get your API's public IP address
-   → Returns just the IP (e.g., 18.191.123.45)
+   → Get all backend access URLs (API Gateway, ALB, and direct task IP)
+   → **Recommended for autograders:** Use API Gateway URL (stable, HTTPS)
+   → **Alternative:** Use ALB DNS (stable, HTTP)
+   → **Legacy:** Direct task IP (changes when task restarts - not recommended)
 
 📊 **detailed_commands.txt**
    → 10 standalone command blocks (like quick_status but by section)
@@ -31,8 +36,12 @@
 ### Quick Status Check:
 Copy all of `quick_status.txt` and paste into AWS CLI for a complete overview.
 
-### Get API URL:
-Copy all of `URL_grab` and paste into AWS CLI to get the current public IP.
+### Get Backend Access URLs:
+- **For Autograders/Testing:** 
+  - **Primary URL:** `https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod`
+  - Run `URL_grab` to get all available URLs (API Gateway, ALB, direct task IP)
+- **For Full Status:** Run `quick_status.txt` to see all URLs and deployment status
+- **Note:** API Gateway and ALB URLs are stable and don't change - use these instead of direct task IPs
 
 ### Detailed Info by Section:
 Open `detailed_commands.txt`, find the section you need (e.g., "SECTION 6: CloudWatch Logs"), copy from "(" to ")", and paste into AWS CLI.
@@ -45,7 +54,14 @@ Open `detailed_commands.txt`, find the section you need (e.g., "SECTION 6: Cloud
 - ECS Service: ece461-backend-service (1/1 tasks running)
 - Task Definition: ece461-backend-task (revision 13, 512 CPU, 1024 MB memory)
 - CloudWatch Logs: /ecs/ece461-backend-task
-- Current API IP: Changes when task restarts (use quick_status.txt to get current IP)
+
+**Load Balancing & API Gateway:**
+- Application Load Balancer: ece461-alb (ACTIVE)
+- Target Group: ece461-api-tg (port 8000, health check: /health)
+- API Gateway REST API: ece461-api-gateway
+- **API Gateway URL:** `https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod`
+- Methods: GET, POST, PUT, DELETE, OPTIONS (all configured with HTTP_PROXY)
+- **Note:** The `/prod` stage name is required in the URL path
 
 **Frontend (S3):**
 - S3 Bucket: ece461-frontend (2 files, website hosting enabled)
@@ -54,9 +70,9 @@ Open `detailed_commands.txt`, find the section you need (e.g., "SECTION 6: Cloud
 **Security & Networking:**
 - IAM Roles: github-actions-deploy-role, ecsTaskExecutionRole
 - OIDC Provider: token.actions.githubusercontent.com (for GitHub Actions)
-- Security Group: ece461-backend-ecs-sg (sg-xxxxxxxxxxxxxxxxx)
-- VPC: vpc-xxxxxxxxxxxxxxxxx (172.31.0.0/16)
-- Subnets: subnet-xxxxxxxxxxxxxxxxx (us-east-2c), subnet-xxxxxxxxxxxxxxxxx (us-east-2a)
+- Security Groups: ece461-backend-ecs-sg, ece461-alb-sg (IDs queried dynamically)
+- VPC and Subnets: Queried dynamically from ECS service configuration
+- **Note:** Run `quick_status.txt` to see current security group IDs, VPC, and subnet details
 
 ## Files in ../setup_instrucs/ (for reference)
 

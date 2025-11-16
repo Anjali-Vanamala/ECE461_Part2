@@ -13,7 +13,7 @@ name: CD - Deploy FastAPI to ECS/Fargate
 # - API Gateway REST API (optional - workflow will detect if configured)
 # - GitHub OIDC role with ECR/ECS/ELB permissions
 # - CloudWatch log group: /ecs/ece461-backend-task
-# - GitHub secrets: AWS_IAM_ROLE_ARN, API_GATEWAY_ID (optional), API_GATEWAY_STAGE (optional)
+# - GitHub secrets: AWS_IAM_ROLE_ARN
 
 on:
   push:
@@ -170,27 +170,6 @@ jobs:
             fi
           fi
 
-      - name: Get API Gateway URL
-        id: get-api-gateway
-        if: steps.get-alb.outputs.ALB_AVAILABLE == 'true'
-        run: |
-          # Get API Gateway URL from secret if configured
-          if [ -n "${{ secrets.API_GATEWAY_ID }}" ]; then
-            API_ID="${{ secrets.API_GATEWAY_ID }}"
-            API_STAGE="${{ secrets.API_GATEWAY_STAGE }}"
-            if [ -z "$API_STAGE" ]; then
-              API_STAGE="prod"
-            fi
-            API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/${API_STAGE}"
-            echo "✅ API Gateway URL: $API_URL"
-            echo "API_GATEWAY_URL=$API_URL" >> $GITHUB_OUTPUT
-            echo "API_GATEWAY_AVAILABLE=true" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️  API Gateway ID not configured in secrets"
-            echo "API_GATEWAY_URL=" >> $GITHUB_OUTPUT
-            echo "API_GATEWAY_AVAILABLE=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Verify ALB health
         if: steps.get-alb.outputs.ALB_AVAILABLE == 'true'
         run: |
@@ -219,10 +198,6 @@ jobs:
           if [ "${{ steps.get-alb.outputs.ALB_AVAILABLE }}" == "true" ]; then
             echo "ALB DNS: ${{ steps.get-alb.outputs.ALB_DNS_NAME }}"
             echo "ALB Health Check: http://${{ steps.get-alb.outputs.ALB_DNS_NAME }}/health"
-          fi
-          if [ "${{ steps.get-api-gateway.outputs.API_GATEWAY_AVAILABLE }}" == "true" ]; then
-            echo "API Gateway URL: ${{ steps.get-api-gateway.outputs.API_GATEWAY_URL }}"
-            echo "API Gateway Health: ${{ steps.get-api-gateway.outputs.API_GATEWAY_URL }}/health"
           fi
 
 

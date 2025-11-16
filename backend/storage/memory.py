@@ -152,7 +152,7 @@ def list_metadata(artifact_type: ArtifactType) -> List[ArtifactMetadata]:
 def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
     results: Dict[str, ArtifactMetadata] = {}
     for query in queries:
-        types = query.types or list(_TYPE_TO_STORE.keys())
+        types = query.types or ["model", "dataset", "code"]
         for artifact_type in types:
             for record in _get_store(artifact_type).values():
                 metadata = record.artifact.metadata

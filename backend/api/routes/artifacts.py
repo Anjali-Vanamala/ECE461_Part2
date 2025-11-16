@@ -169,6 +169,7 @@ async def get_artifact(
         )
 
     # 404 — not found
+    artifact_type_enum = ArtifactType(artifact_type.lower())
     artifact = memory.get_artifact(artifact_type_enum, artifact_id)
     if not artifact:
         raise HTTPException(

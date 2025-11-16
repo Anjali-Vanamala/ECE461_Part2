@@ -33,6 +33,9 @@
             
             try {
                 const response = await fetch(`${API_GATEWAY_URL}/health`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
                 statusDiv.className = 'success';
                 statusDiv.textContent = `API Health: ${data.status || 'OK'}`;

@@ -7,7 +7,8 @@ from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactMetadata,
-                            ArtifactQuery, ArtifactType, ModelRating, ArtifactRegistration)
+                            ArtifactQuery, ArtifactRegistration, ArtifactType,
+                            ModelRating)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory
 
@@ -108,7 +109,7 @@ async def register_artifact(
             artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(payload.url)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(exc)) from exc
-        
+
         if payload.name:
             artifact.metadata.name = payload.name
 

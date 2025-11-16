@@ -6,12 +6,11 @@ so it can be shared across branches without merge conflicts.
 """
 from __future__ import annotations
 
-import json
 import logging
 import time
-from typing import MutableMapping, Optional, cast
 
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 try:
     import boto3  # type: ignore
@@ -23,11 +22,6 @@ CLOUDWATCH_NAMESPACE = "ECE461/API"
 CLOUDWATCH_AVAILABLE = boto3 is not None
 
 logger = logging.getLogger("backend.middleware.logging")
-
-
-import time
-import logging
-from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("backend.middleware.logging")
 

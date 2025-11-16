@@ -3,7 +3,7 @@ from .artifact import (Artifact, ArtifactAuditEntry, ArtifactCost,
                        ArtifactLineageEdge, ArtifactLineageGraph,
                        ArtifactLineageNode, ArtifactMetadata, ArtifactName,
                        ArtifactQuery, ArtifactRegEx, ArtifactType, ModelRating,
-                       SimpleLicenseCheckRequest, SizeScore)
+                       SimpleLicenseCheckRequest, SizeScore, ArtifactRegistration)
 from .health import (HealthComponentBrief, HealthComponentCollection,
                      HealthComponentDetail, HealthIssue, HealthLogReference,
                      HealthMetricMap, HealthMetricValue, HealthRequestSummary,
@@ -22,6 +22,7 @@ __all__ = [
     "ArtifactMetadata",
     "ArtifactName",
     "ArtifactQuery",
+    "ArtifactRegistration",
     "ArtifactRegEx",
     "ArtifactType",
     "ModelRating",

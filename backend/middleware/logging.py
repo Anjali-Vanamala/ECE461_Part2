@@ -25,146 +25,38 @@ CLOUDWATCH_AVAILABLE = boto3 is not None
 logger = logging.getLogger("backend.middleware.logging")
 
 
-class LoggingMiddleware:
-    """Simple request/response logger for ASGI apps."""
+import time
+import logging
+from starlette.middleware.base import BaseHTTPMiddleware
 
-    def __init__(self, app: ASGIApp) -> None:
-        self.app = app
-        self.cloudwatch = None
-        if CLOUDWATCH_AVAILABLE and boto3 is not None:
-            try:
-                self.cloudwatch = boto3.client("cloudwatch")
-            except Exception:
-                logger.debug("CloudWatch client initialization failed", exc_info=True)
-                self.cloudwatch = None
+logger = logging.getLogger("backend.middleware.logging")
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope.get("type") != "http":
-            await self.app(scope, receive, send)
-            return
 
-        method = scope.get("method", "")
-        path = scope.get("path", "")
-        start = time.perf_counter()
-        status_holder: dict[str, Optional[int]] = {"status": None}
-
-        # 🔥 LOG IMMEDIATELY WHEN REQUEST ARRIVES
-        logger.info(f"[ARRIVED] {method} {path}")
-
-        # Collect body as it streams
-        body_store: list[bytes] = []
-
-        async def receive_wrapper():
-            message = await receive()
-
-            if message.get("type") == "http.request":
-                chunk = message.get("body", b"")
-                if chunk:
-                    body_store.append(chunk)
-
-                # 🔥 LOG THE BODY AS SOON AS COMPLETE (BEFORE handler runs)
-                if not message.get("more_body", False):
-                    try:
-                        raw_body = b"".join(body_store).decode("utf-8", errors="replace")
-                    except Exception:
-                        raw_body = "<unreadable>"
-                    logger.info(f"[ARRIVED BODY] {raw_body}")
-
-            return message
-
-        async def send_wrapper(message: MutableMapping[str, object]) -> None:
-            if message.get("type") == "http.response.start":
-                status_holder["status"] = cast(Optional[int], message.get("status"))
-            await send(message)
-
-        try:
-            await self.app(scope, receive_wrapper, send_wrapper)
-
-            status = status_holder["status"] or 0
-
-            # Log again after handling (old behavior preserved)
-            try:
-                raw_body = b"".join(body_store).decode("utf-8", errors="replace")
-            except Exception:
-                raw_body = "<unreadable>"
-            logger.info(f"Request body: {raw_body}")
-
-            self._log_success(method, path, status, time.perf_counter() - start)
-            self._send_metrics(method, path, status, success=True)
-
-        except Exception as exc:
-            self._log_error(method, path, exc)
-            self._send_metrics(method, path, 500, success=False)
-            raise
-
+class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        """Compatibility shim for tests using a Request object."""
+        # ARRIVAL
+        logger.info(f"[ARRIVED] {request.method} {request.url.path}")
 
-        method = getattr(request, "method", "")
-        path = getattr(getattr(request, "url", None), "path", "")
-        client = getattr(getattr(request, "client", None), "host", "unknown")
+        # Read body (make sure request.stream() stays readable)
+        body = await request.body()
+        if body:
+            try:
+                logger.info(f"[ARRIVED BODY] {body.decode('utf-8')}")
+            except Exception:
+                logger.info("[ARRIVED BODY] <unreadable>")
+
+        # Timer
         start = time.perf_counter()
+        response = await call_next(request)
+        duration = (time.perf_counter() - start) * 1000
 
-        try:
-            response = await call_next(request)
-            status = getattr(response, "status_code", 0)
-            self._log_success(method, path, status, time.perf_counter() - start, client)
-            self._send_metrics(method, path, status, success=True)
-            return response
-        except Exception as exc:
-            self._log_error(method, path, exc, client)
-            self._send_metrics(method, path, 500, success=False)
-            raise
+        # AFTER REQUEST
+        logger.info(
+            f"Request: {request.method} {request.url.path} | "
+            f"Status: {response.status_code} | Duration: {duration:.2f} ms"
+        )
 
-    def _log_success(self, method: str, path: str, status: int, duration: float, client: str | None = None) -> None:
-        duration_ms = duration * 1000
-        if LOG_LEVEL >= 1:
-            logger.info(f"Request: {method} {path} | Status: {status} | Duration: {duration_ms:.2f} ms")
-        if LOG_LEVEL >= 2:
-            debug_payload = {
-                "type": "request",
-                "method": method,
-                "path": path,
-                "status": status,
-                "duration_ms": duration_ms,
-                "client": client,
-            }
-            logger.debug(json.dumps(debug_payload))
-
-    def _log_error(self, method: str, path: str, exc: Exception, client: str | None = None) -> None:
-        if LOG_LEVEL >= 1:
-            logger.info(f"Error: {method} {path} -> {exc}")
-        if LOG_LEVEL >= 2:
-            debug_payload = {
-                "type": "error",
-                "method": method,
-                "path": path,
-                "error": str(exc),
-                "client": client,
-            }
-            logger.debug(json.dumps(debug_payload))
-
-    def _send_metrics(self, method: str, path: str, status: int, *, success: bool) -> None:
-        if not self.cloudwatch:
-            return
-        try:
-            self.cloudwatch.put_metric_data(
-                Namespace=CLOUDWATCH_NAMESPACE,
-                MetricData=[
-                    {
-                        "MetricName": "http_request",
-                        "Dimensions": [
-                            {"Name": "status_code", "Value": str(status)},
-                            {"Name": "outcome", "Value": "success" if success else "error"},
-                        ],
-                        "Value": 1,
-                        "Unit": "Count",
-                    }
-                ],
-            )
-        except Exception:
-            logger.debug("CloudWatch put_metric_data failed", exc_info=True)
-            self.cloudwatch = None
+        return response
 
 
 def setup_logging(app: ASGIApp) -> ASGIApp:

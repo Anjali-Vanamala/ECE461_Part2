@@ -19,6 +19,12 @@ ArtifactName = Annotated[
 ]
 
 
+class ArtifactRegistration(BaseModel):
+    name: Optional[str] = None
+    url: str
+    download_url: Optional[str] = None
+
+
 class ArtifactType(str, Enum):
     MODEL = "model"
     DATASET = "dataset"

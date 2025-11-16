@@ -7,7 +7,7 @@ from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactMetadata,
-                            ArtifactQuery, ArtifactType, ModelRating)
+                            ArtifactQuery, ArtifactType, ModelRating, ArtifactRegistration)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory
 
@@ -97,7 +97,7 @@ async def reset_registry() -> dict[str, str]:
     summary="Register a new artifact. (BASELINE)",
 )
 async def register_artifact(
-    payload: ArtifactData,
+    payload: ArtifactRegistration,
     artifact_type: ArtifactType = Path(..., description="Type of artifact being ingested."),
 ) -> Artifact:
     if memory.artifact_exists(artifact_type, payload.url):
@@ -108,6 +108,9 @@ async def register_artifact(
             artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(payload.url)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(exc)) from exc
+        
+        if payload.name:
+            artifact.metadata.name = payload.name
 
         memory.save_artifact(
             artifact,
@@ -121,10 +124,12 @@ async def register_artifact(
             memory.save_model_rating(artifact.metadata.id, rating)
         return artifact
 
+    artifact_name = payload.name or _derive_name(payload.url)
+
     artifact_id = memory.generate_artifact_id()
     artifact = Artifact(
         metadata=ArtifactMetadata(
-            name=_derive_name(payload.url),
+            name=artifact_name,
             id=artifact_id,
             type=artifact_type,
         ),

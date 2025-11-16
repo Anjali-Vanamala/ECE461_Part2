@@ -26,17 +26,10 @@
     <div id="status" class="loading">Checking API health...</div>
 
     <script>
-        // Update with your API Gateway URL
-        const API_GATEWAY_URL = 'https://YOUR_API_ID.execute-api.us-east-2.amazonaws.com/prod';
+        const API_GATEWAY_URL = 'https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod';
         
         async function checkHealth() {
             const statusDiv = document.getElementById('status');
-            
-            if (API_GATEWAY_URL.includes('YOUR_API_ID')) {
-                statusDiv.className = 'error';
-                statusDiv.textContent = 'Error: API Gateway URL not configured';
-                return;
-            }
             
             try {
                 const response = await fetch(`${API_GATEWAY_URL}/health`);
@@ -53,4 +46,3 @@
     </script>
 </body>
 </html>
-

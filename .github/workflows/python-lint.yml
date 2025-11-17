@@ -9,20 +9,23 @@ jobs:
   lint-import-typing:
     runs-on: ubuntu-latest
 
-    # GLOBAL ENV — inherited by ALL subprocesses
     env:
       LOG_FILE: /tmp/test_log.txt
       LOG_LEVEL: "1"
-      COVERAGE_PROCESS_START: ${{ github.workspace }}/.coveragerc
-      PYTHONPATH: ${{ github.workspace }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # --------------------------
+      #   PRINT DIRECTORY STRUCTURE
+      # --------------------------
       - name: Show directory tree + pwd
         run: |
-          echo "PWD: $(pwd)"
+          echo "Current working directory:"
+          pwd
+          echo ""
+          echo "Listing workspace:"
           ls -R .
 
       - name: Set up Python
@@ -49,54 +52,52 @@ jobs:
       - name: Run mypy (type checker)
         run: mypy . --ignore-missing-imports
 
-      # -----------------------------------------------------
-      # CREATE .coveragerc for auto-coverage
-      # -----------------------------------------------------
-      - name: Create coverage config
+      - name: Add project root to PYTHONPATH
         run: |
-          cat > .coveragerc << 'EOF'
-          [run]
-          parallel = True
-          source = backend
-          concurrency = thread, greenlet
-
-          [report]
-          show_missing = True
-          EOF
-
+          echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
+          echo "Added $PWD to PYTHONPATH"
+          
       # --------------------------
-      #   RUN BACKEND (auto coverage)
+      #   RUN BACKEND UNDER COVERAGE (with logging)
       # --------------------------
-      - name: Start backend (auto coverage)
+      - name: Start backend under coverage
         shell: bash
         env:
           BASE: "http://localhost:8000"
         run: |
-          echo "COVERAGE_PROCESS_START=$COVERAGE_PROCESS_START"
-          nohup python -m uvicorn backend.app:app \
-            --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+          echo "Starting backend with coverage..."
+          nohup python -m coverage run --parallel-mode --source=. \
+              -m uvicorn backend.app:app \
+              --host 0.0.0.0 --port 8000 > server.log 2>&1 &
 
           echo "Waiting for server..."
+          sleep 3
+
+          echo "---- Server startup log ----"
+          cat server.log || true
+
           for i in {1..30}; do
             if curl -fsS "$BASE/health" >/dev/null 2>&1; then
               echo "Server is up."
               break
             fi
-            echo "Not ready ($i/30)..."
+            echo "Server not ready yet ($i/30)..."
             sleep 1
           done
 
           if ! curl -fsS "$BASE/health" >/dev/null 2>&1; then
-            echo "🚨 Server failed to start"
-            cat server.log
+            echo "🚨 Server failed to start."
+            echo "---- Final server log ----"
+            cat server.log || true
             exit 1
           fi
 
       # --------------------------
-      # PYTEST (auto coverage)
+      # PYTEST UNDER COVERAGE
       # --------------------------
-      - name: Run pytest
-        run: pytest tests_main.py --maxfail=0
+      - name: Run pytest under coverage
+        run: |
+          coverage run --parallel-mode --source=. -m pytest tests_main.py --maxfail=0
 
       # --------------------------
       # POWERSHELL INTEGRATION TESTS
@@ -106,27 +107,30 @@ jobs:
         env:
           BASE: "http://localhost:8000"
         run: |
+          Write-Host "Running integration tests against $env:BASE"
           Invoke-RestMethod -Uri "$env:BASE/health" -Method Get
           Invoke-RestMethod -Uri "$env:BASE/reset" -Method Delete
 
-      - name: Run PowerShell integration tests (auto coverage)
+      - name: Run PowerShell integration tests (covered)
         shell: bash
+        env:
+          BASE: "http://localhost:8000"
         run: |
-          echo "Running PS tests with auto coverage..."
+          echo "Running integration tests under coverage against $BASE"
 
+          # Create a temp python script
           cat > run_ps_integration.py << 'EOF'
           import subprocess
           subprocess.check_call(["pwsh", "./integration_tests.ps1"])
           EOF
 
-          python run_ps_integration.py
+          # Run it under coverage
+          coverage run --parallel-mode --source=. run_ps_integration.py
 
       # --------------------------
-      # COMBINE & ENFORCE COVERAGE
+      # COMBINE & ENFORCE COVERAGE (Fail < 60%)
       # --------------------------
       - name: Combine + Report Coverage (Fail <60)
         run: |
-          echo "Combining coverage..."
-          ls -a .
           coverage combine
           coverage report -m --fail-under=60

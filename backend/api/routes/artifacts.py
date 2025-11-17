@@ -24,7 +24,7 @@ def _derive_name(url: str) -> str:
     return stripped.split("/")[-1]
 
 
-def safe_regex_search(pattern: str, text: str, timeout_ms: int = 0.01):
+def safe_regex_search(pattern: str, text: str, timeout_ms: int = 0.005):
     try:
         return bool(regex.search(pattern, text, timeout=timeout_ms))
     except TimeoutError:

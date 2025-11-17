@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import List
 
 import regex
@@ -23,15 +24,6 @@ def _derive_name(url: str) -> str:
         return "artifact"
     return stripped.split("/")[-1]
 
-
-import time
-import regex
-import re
-from typing import List
-from fastapi import APIRouter, Body, HTTPException
-
-from backend.storage import memory
-from backend.models import ArtifactMetadata
 
 router = APIRouter(tags=["artifacts"])
 
@@ -99,7 +91,6 @@ async def regex_artifact_search(payload: dict = Body(...)):
         raise HTTPException(404, "No artifact found under this regex.")
 
     return results
-
 
 
 @router.post(

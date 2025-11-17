@@ -26,7 +26,7 @@ permissions:
 env:
   AWS_REGION: us-east-2
   S3_BUCKET: ece461-frontend
-  BUILD_DIR: frontend/dist
+  BUILD_DIR: frontend/out  # Next.js static export outputs to 'out' directory
 
 jobs:
   build-deploy:

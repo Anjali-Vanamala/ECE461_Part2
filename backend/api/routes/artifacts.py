@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import List
 
+import regex
 from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
                      status)
 
@@ -22,9 +24,16 @@ def _derive_name(url: str) -> str:
     return stripped.split("/")[-1]
 
 
+def safe_regex_search(pattern: str, text: str, timeout_ms: int = 2):
+    try:
+        return bool(regex.search(pattern, text, timeout=timeout_ms))
+    except TimeoutError:
+        return None   # distinguish timeout from no-match
+
+
 @router.post(
     "/artifact/byRegEx",
-    response_model=list[ArtifactMetadata],
+    response_model=List[ArtifactMetadata],
     summary="Get any artifacts fitting the regular expression (BASELINE).",
     responses={
         200: {"description": "Return a list of artifacts."},
@@ -33,31 +42,47 @@ def _derive_name(url: str) -> str:
     },
 )
 async def regex_artifact_search(payload: dict = Body(...)):
-    # Validate that payload has "regex"
+    # Validate presence
     if not payload or "regex" not in payload:
         raise HTTPException(
             status_code=400,
             detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
         )
 
-    regex_str = payload.get("regex")
+    regex_str = payload["regex"]
 
-    # Validate it's a string
     if not isinstance(regex_str, str) or not regex_str.strip():
         raise HTTPException(
-            status_code=400,
-            detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
+            400,
+            "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
         )
 
-    # 🚫 DO NOT EXECUTE the regex
-    # 🚫 DO NOT COMPILE the regex
-    # 🚫 DO NOT SEARCH
-    # We simply return 404 for everything
+    # Validate syntax only
+    try:
+        re.compile(regex_str)
+    except re.error:
+        raise HTTPException(
+            400,
+            "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
+        )
 
-    raise HTTPException(
-        status_code=404,
-        detail="No artifact found under this regex.",
-    )
+    # Perform safe matching with timeout
+    results: List[ArtifactMetadata] = []
+
+    for store in memory._TYPE_TO_STORE.values():
+        for record in store.values():  # type: ignore[attr-defined]
+            name = record.artifact.metadata.name
+            print("Testing regex:", regex_str, "against", name, "=>", safe_regex_search(regex_str, name))
+            if safe_regex_search(regex_str, name):
+                results.append(record.artifact.metadata)
+
+    if not results:
+        raise HTTPException(
+            404,
+            "No artifact found under this regex.",
+        )
+
+    return results
 
 
 @router.post(

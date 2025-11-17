@@ -40,7 +40,7 @@ jobs:
       # --------------------------
       # VERIFY backend.app imports cleanly
       # --------------------------
-            - name: Debug import backend.app
+      - name: Debug import backend.app
         run: |
           echo "Testing import of backend.app..."
 

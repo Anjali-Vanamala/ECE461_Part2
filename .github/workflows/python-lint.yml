@@ -80,9 +80,6 @@ jobs:
       # --------------------------
       # POWERSHELL INTEGRATION TESTS
       # --------------------------
-      - name: Install PowerShell Core
-        uses: PowerShell/PowerShell@v2
-
       # Do pre-checks in PowerShell (this must be pwsh so Invoke-RestMethod works)
       - name: Pre-checks for integration tests (PowerShell)
         shell: pwsh

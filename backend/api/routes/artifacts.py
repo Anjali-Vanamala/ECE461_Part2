@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import List
 
+import regex
 from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
                      status)
 
@@ -11,13 +13,6 @@ from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ModelRating)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory
-import regex
-import re
-import multiprocessing
-from fastapi import Body, HTTPException
-from typing import List
-from backend.storage import memory
-from backend.models import ArtifactMetadata
 
 router = APIRouter(tags=["artifacts"])
 
@@ -46,11 +41,8 @@ def safe_regex_search(pattern: str, text: str, timeout_ms: int = 2):
         404: {"description": "No artifact found under this regex."},
     },
 )
-
 async def regex_artifact_search(payload: dict = Body(...)):
     # Validate presence
-    
-
     if not payload or "regex" not in payload:
         raise HTTPException(
             status_code=400,
@@ -58,7 +50,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
         )
 
     regex_str = payload["regex"]
-    
+
     if not isinstance(regex_str, str) or not regex_str.strip():
         raise HTTPException(
             400,

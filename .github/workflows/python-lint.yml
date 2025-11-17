@@ -13,6 +13,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # --------------------------
+      #   PRINT DIRECTORY STRUCTURE
+      # --------------------------
+      - name: Show directory tree + pwd
+        run: |
+          echo "Current working directory:"
+          pwd
+          echo ""
+          echo "Listing workspace:"
+          ls -R .
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -43,21 +54,24 @@ jobs:
       - name: Debug import backend.app
         run: |
           echo "Testing import of backend.app..."
+          echo "PWD: $(pwd)"
+          echo "Files:"
+          ls -R .
 
           python <<'EOF'
-          import traceback
+          import traceback, sys, os
+          print("Python path:", sys.path)
+          print("Current dir:", os.getcwd())
           print("Trying import...")
 
           try:
               import backend.app
               print("backend.app import OK")
-          except Exception as e:
+          except Exception:
               print("IMPORT ERROR:")
               traceback.print_exc()
               raise
           EOF
-
-
 
       # --------------------------
       #   RUN BACKEND UNDER COVERAGE (with logging)

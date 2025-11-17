@@ -80,7 +80,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
     for store in memory._TYPE_TO_STORE.values():
         for record in store.values():
             name = record.artifact.metadata.name
-            print("Testing regex:", regex_str, "against", name, "=>", safe_regex_search(regex_str, name))
+            #print("Testing regex:", regex_str, "against", name, "=>", safe_regex_search(regex_str, name))
             if safe_regex_search(regex_str, name):
                 results.append(record.artifact.metadata)
 

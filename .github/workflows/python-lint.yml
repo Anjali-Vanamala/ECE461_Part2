@@ -46,7 +46,7 @@ jobs:
           BASE: "http://localhost:8000"
         run: |
           nohup coverage run --parallel-mode --source=. \
-              -m uvicorn main:app --host 0.0.0.0 --port 8000 &
+              -m uvicorn backend.app:app --host 0.0.0.0 --port 8000 &
 
           echo "Waiting for server to become healthy at $BASE/health ..."
 

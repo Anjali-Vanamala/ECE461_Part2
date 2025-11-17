@@ -40,15 +40,23 @@ jobs:
       # --------------------------
       # VERIFY backend.app imports cleanly
       # --------------------------
-      - name: Debug import backend.app
+            - name: Debug import backend.app
         run: |
           echo "Testing import of backend.app..."
-          python -c "import traceback; print('Trying import...'); 
+
+          python <<'EOF'
+          import traceback
+          print("Trying import...")
+
           try:
               import backend.app
-              print('backend.app import OK')
+              print("backend.app import OK")
           except Exception as e:
-              print('IMPORT ERROR:'); traceback.print_exc(); raise"
+              print("IMPORT ERROR:")
+              traceback.print_exc()
+              raise
+          EOF
+
 
 
       # --------------------------

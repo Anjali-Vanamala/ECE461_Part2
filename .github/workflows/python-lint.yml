@@ -57,24 +57,27 @@ jobs:
       # VERIFY backend.app imports cleanly
       # --------------------------
       - name: Debug import backend.app
+        env:
+          LOG_FILE: /tmp/test_log.txt
+          LOG_LEVEL: 1
         run: |
           echo "Testing import of backend.app..."
-          echo "PWD: $(pwd)"
-          echo "Files:"
-          ls -R .
 
           python <<'EOF'
           import traceback, sys, os
+          print("PWD:", os.getcwd())
           print("Python path:", sys.path)
-          print("Current dir:", os.getcwd())
+          print("LOG_FILE:", os.environ.get("LOG_FILE"))
+          print("LOG_LEVEL:", os.environ.get("LOG_LEVEL"))
           print("Trying import...")
 
           try:
               import backend.app
               print("backend.app import OK")
           except Exception:
-              print("IMPORT ERROR:")
+              print("\n=== IMPORT ERROR TRACEBACK ===")
               traceback.print_exc()
+              print("=== END TRACEBACK ===")
               raise
           EOF
 
@@ -85,6 +88,8 @@ jobs:
         shell: bash
         env:
           BASE: "http://localhost:8000"
+          LOG_FILE: /tmp/test_log.txt
+          LOG_LEVEL: 1
         run: |
           echo "Starting backend with coverage..."
           nohup python -m coverage run --parallel-mode --source=. \

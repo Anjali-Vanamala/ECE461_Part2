@@ -8,6 +8,22 @@ import { ArrowLeft, Download, Share2, Flag } from "lucide-react"
 import { LineageGraph } from "@/components/lineage-graph"
 import { ModelScoreCard } from "@/components/model-score-card"
 
+// Required for static export with dynamic routes
+// TEMPORARY: Using mock model IDs that match existing mock data in browse/page.tsx and model-grid.tsx
+// This allows static export to build successfully.
+// TODO: When integrating with real API, update this to:
+//   - Fetch model IDs from API at build time (if API available during CI/CD build)
+//   - Or remove static export and use server-side rendering if models are truly dynamic
+export function generateStaticParams() {
+  // These IDs match the mock data currently used throughout the frontend
+  // See: frontend/app/browse/page.tsx and frontend/components/model-grid.tsx
+  return [
+    { id: "bert-base" },
+    { id: "resnet-50" },
+    { id: "gpt2-small" },
+  ]
+}
+
 const mockModelDetail = {
   id: "bert-base",
   name: "BERT Base Uncased",

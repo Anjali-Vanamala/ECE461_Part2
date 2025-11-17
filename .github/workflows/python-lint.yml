@@ -94,18 +94,39 @@ jobs:
 
       # Run the PowerShell integration script under coverage.
       # Use bash here-doc to feed Python stdin (bash supports <<'EOF').
-      - name: Run PowerShell integration tests (covered)
+      - name: Start backend under coverage
         shell: bash
         env:
           BASE: "http://localhost:8000"
         run: |
-          echo "Running integration tests under coverage against $BASE"
+          echo "Starting backend with coverage..."
+          nohup python -m coverage run --parallel-mode --source=. \
+              -m uvicorn backend.app:app \
+              --host 0.0.0.0 --port 8000 > server.log 2>&1 &
 
-          # Run script *under coverage* by launching a short Python process that calls pwsh.
-          coverage run --parallel-mode --source=. -m python - <<'PY'
-          import subprocess
-          subprocess.check_call(["pwsh", "./integration_tests.ps1"])
-          PY
+          echo "Waiting for server..."
+          
+          # Wait a moment for logs to populate
+          sleep 3
+          echo "---- Server startup log ----"
+          cat server.log || true
+
+          # Health-check loop
+          for i in {1..30}; do
+            if curl -fsS "$BASE/health" >/dev/null 2>&1; then
+              echo "Server is up."
+              break
+            fi
+            echo "Server not ready yet ($i/30)..."
+            sleep 1
+          done
+
+          if ! curl -fsS "$BASE/health" >/dev/null 2>&1; then
+            echo "🚨 Server failed to start."
+            echo "---- Final server log ----"
+            cat server.log || true
+            exit 1
+          fi
 
       # --------------------------
       # COMBINE & ENFORCE COVERAGE (Fail if < 60%)

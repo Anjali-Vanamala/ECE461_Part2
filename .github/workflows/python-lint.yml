@@ -43,17 +43,13 @@ jobs:
       - name: Debug import backend.app
         run: |
           echo "Testing import of backend.app..."
-          python - <<'EOF'
-          import traceback
-          print("Trying to import backend.app ...")
+          python -c "import traceback; print('Trying import...'); 
           try:
               import backend.app
-              print("backend.app IMPORT OK")
+              print('backend.app import OK')
           except Exception as e:
-              print("🚨 IMPORT ERROR in backend.app:")
-              traceback.print_exc()
-              raise
-          EOF
+              print('IMPORT ERROR:'); traceback.print_exc(); raise"
+
 
       # --------------------------
       #   RUN BACKEND UNDER COVERAGE (with logging)

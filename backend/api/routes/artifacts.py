@@ -24,7 +24,7 @@ def _derive_name(url: str) -> str:
     return stripped.split("/")[-1]
 
 
-def safe_regex_search(pattern: str, text: str, timeout_ms: float = 0.005):
+def safe_regex_search(pattern: str, text: str, timeout_ms: float = 0.01):
     try:
         return bool(regex.search(pattern, text, timeout=timeout_ms))
     except TimeoutError:
@@ -68,7 +68,12 @@ async def regex_artifact_search(payload: dict = Body(...)):
 
     # Perform safe matching with timeout
     results: List[ArtifactMetadata] = []
-
+    initial_test = safe_regex_search(regex_str, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    if initial_test is None:
+        raise HTTPException(
+            400,
+            "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
+        )
     for store in memory._TYPE_TO_STORE.values():
         for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name

@@ -1479,7 +1479,7 @@ Test-Call "POST /artifact/byRegEx (a+)+$" {
         -Method Post `
         -ContentType "application/json" `
         -Body '{"regex":"(a+)+$"}'
-} -ExpectedStatus @(400, 405)
+} -ExpectedStatus @(400, 404)
 
 Test-Call "POST /artifact/byRegEx (a{1,99999}){1,99999}$" {
     Invoke-WebRequest `

@@ -42,11 +42,33 @@ jobs:
       # --------------------------
       - name: Start backend under coverage
         shell: bash
+        env:
+          BASE: "http://localhost:8000"
         run: |
           nohup coverage run --parallel-mode --source=. \
               -m uvicorn main:app --host 0.0.0.0 --port 8000 &
-          echo "Waiting for server..."
-          sleep 7
+
+          echo "Waiting for server to become healthy at $BASE/health ..."
+
+          # Poll /health with a timeout (30s). Use curl -fsS to fail silently on non-2xx and suppress progress.
+          for i in {1..30}; do
+            if curl -fsS "$BASE/health" >/dev/null 2>&1; then
+              echo "Server is up after $i second(s)."
+              break
+            fi
+            echo "Server not ready yet ($i/30)..."
+            sleep 1
+          done
+
+          # Final check: exit non-zero if server never became healthy
+          if ! curl -fsS "$BASE/health" >/dev/null 2>&1; then
+            echo "Server did not start in time (30s timeout)." >&2
+            # Print process list for debugging
+            ps aux | sed -n '1,200p'
+            # Show server logs (if any) for debugging - adjust path as needed
+            # tail -n 200 nohup.out || true
+            exit 1
+          fi
 
       # --------------------------
       # PYTEST UNDER COVERAGE
@@ -61,7 +83,8 @@ jobs:
       - name: Install PowerShell Core
         uses: PowerShell/PowerShell@v2
 
-      - name: Run PowerShell integration tests (covered)
+      # Do pre-checks in PowerShell (this must be pwsh so Invoke-RestMethod works)
+      - name: Pre-checks for integration tests (PowerShell)
         shell: pwsh
         env:
           BASE: "http://localhost:8000"
@@ -72,16 +95,23 @@ jobs:
           Invoke-RestMethod -Uri "$env:BASE/health" -Method Get
           Invoke-RestMethod -Uri "$env:BASE/reset" -Method Delete
 
-          # Run script *under coverage* using python exec
-          # (This forces Python to stay in coverage context)
-          coverage run --parallel-mode --source=. `
-              -m python - <<'EOF'
-              import subprocess
-              subprocess.check_call(["pwsh", "./integration_tests.ps1"])
-              EOF
+      # Run the PowerShell integration script under coverage.
+      # Use bash here-doc to feed Python stdin (bash supports <<'EOF').
+      - name: Run PowerShell integration tests (covered)
+        shell: bash
+        env:
+          BASE: "http://localhost:8000"
+        run: |
+          echo "Running integration tests under coverage against $BASE"
+
+          # Run script *under coverage* by launching a short Python process that calls pwsh.
+          coverage run --parallel-mode --source=. -m python - <<'PY'
+          import subprocess
+          subprocess.check_call(["pwsh", "./integration_tests.ps1"])
+          PY
 
       # --------------------------
-      # COMBINE & ENFORCE COVERAGE
+      # COMBINE & ENFORCE COVERAGE (Fail if < 60%)
       # --------------------------
       - name: Combine + Report Coverage (Fail <60)
         run: |

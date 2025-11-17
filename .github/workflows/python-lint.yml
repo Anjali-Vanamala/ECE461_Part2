@@ -38,6 +38,23 @@ jobs:
         run: mypy . --ignore-missing-imports
 
       # --------------------------
+      # VERIFY backend.app imports cleanly
+      # --------------------------
+      - name: Debug import backend.app
+        run: |
+          echo "Testing import of backend.app..."
+          python - <<'EOF'
+          import traceback
+          try:
+              import backend.app
+              print("backend.app IMPORT OK")
+          except Exception:
+              print("🚨 IMPORT ERROR in backend.app:")
+              traceback.print_exc()
+              exit(1)
+          EOF
+
+      # --------------------------
       #   RUN BACKEND UNDER COVERAGE (with logging)
       # --------------------------
       - name: Start backend under coverage

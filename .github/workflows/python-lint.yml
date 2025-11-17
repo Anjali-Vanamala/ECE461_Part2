@@ -9,23 +9,20 @@ jobs:
   lint-import-typing:
     runs-on: ubuntu-latest
 
+    # GLOBAL ENV — inherited by ALL subprocesses
     env:
       LOG_FILE: /tmp/test_log.txt
       LOG_LEVEL: "1"
+      COVERAGE_PROCESS_START: ${{ github.workspace }}/.coveragerc
+      PYTHONPATH: ${{ github.workspace }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # --------------------------
-      #   PRINT DIRECTORY STRUCTURE
-      # --------------------------
       - name: Show directory tree + pwd
         run: |
-          echo "Current working directory:"
-          pwd
-          echo ""
-          echo "Listing workspace:"
+          echo "PWD: $(pwd)"
           ls -R .
 
       - name: Set up Python
@@ -52,13 +49,8 @@ jobs:
       - name: Run mypy (type checker)
         run: mypy . --ignore-missing-imports
 
-      - name: Add project root to PYTHONPATH
-        run: |
-          echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
-          echo "Added $PWD to PYTHONPATH"
-
       # -----------------------------------------------------
-      # CREATE .coveragerc for auto-coverage in subprocesses
+      # CREATE .coveragerc for auto-coverage
       # -----------------------------------------------------
       - name: Create coverage config
         run: |
@@ -72,11 +64,6 @@ jobs:
           show_missing = True
           EOF
 
-      # Export auto-coverage BEFORE uvicorn starts
-      - name: Export COVERAGE_PROCESS_START
-        run: |
-          echo "COVERAGE_PROCESS_START=$PWD/.coveragerc" >> $GITHUB_ENV
-
       # --------------------------
       #   RUN BACKEND (auto coverage)
       # --------------------------
@@ -85,30 +72,23 @@ jobs:
         env:
           BASE: "http://localhost:8000"
         run: |
-          export COVERAGE_PROCESS_START="$COVERAGE_PROCESS_START"
-          echo "Auto coverage enabled with: $COVERAGE_PROCESS_START"
-
-          echo "Starting backend with uvicorn..."
+          echo "COVERAGE_PROCESS_START=$COVERAGE_PROCESS_START"
           nohup python -m uvicorn backend.app:app \
-              --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+            --host 0.0.0.0 --port 8000 > server.log 2>&1 &
 
           echo "Waiting for server..."
-          sleep 3
-          echo "---- Server startup log ----"
-          cat server.log || true
-
           for i in {1..30}; do
             if curl -fsS "$BASE/health" >/dev/null 2>&1; then
               echo "Server is up."
               break
             fi
-            echo "Server not ready yet ($i/30)..."
+            echo "Not ready ($i/30)..."
             sleep 1
           done
 
           if ! curl -fsS "$BASE/health" >/dev/null 2>&1; then
-            echo "🚨 Server failed to start."
-            cat server.log || true
+            echo "🚨 Server failed to start"
+            cat server.log
             exit 1
           fi
 
@@ -126,18 +106,13 @@ jobs:
         env:
           BASE: "http://localhost:8000"
         run: |
-          Write-Host "Running integration tests against $env:BASE"
           Invoke-RestMethod -Uri "$env:BASE/health" -Method Get
           Invoke-RestMethod -Uri "$env:BASE/reset" -Method Delete
 
       - name: Run PowerShell integration tests (auto coverage)
         shell: bash
-        env:
-          BASE: "http://localhost:8000"
         run: |
-          export COVERAGE_PROCESS_START="$COVERAGE_PROCESS_START"
-
-          echo "Running integration tests with auto coverage..."
+          echo "Running PS tests with auto coverage..."
 
           cat > run_ps_integration.py << 'EOF'
           import subprocess
@@ -147,10 +122,11 @@ jobs:
           python run_ps_integration.py
 
       # --------------------------
-      # COMBINE & ENFORCE COVERAGE (Fail < 60%)
+      # COMBINE & ENFORCE COVERAGE
       # --------------------------
       - name: Combine + Report Coverage (Fail <60)
         run: |
           echo "Combining coverage..."
+          ls -a .
           coverage combine
           coverage report -m --fail-under=60

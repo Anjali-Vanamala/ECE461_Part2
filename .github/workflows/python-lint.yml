@@ -48,6 +48,11 @@ jobs:
       - name: Run mypy (type checker)
         run: mypy . --ignore-missing-imports
 
+      - name: Add project root to PYTHONPATH
+        run: |
+          echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
+          echo "Added $PWD to PYTHONPATH"
+          
       # --------------------------
       # VERIFY backend.app imports cleanly
       # --------------------------

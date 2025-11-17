@@ -56,18 +56,37 @@ jobs:
         run: |
           echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
           echo "Added $PWD to PYTHONPATH"
-          
+
+      # -----------------------------------------------------
+      # CREATE .coveragerc so uvicorn + subprocesses are covered
+      # -----------------------------------------------------
+      - name: Create coverage config
+        run: |
+          cat > .coveragerc << 'EOF'
+          [run]
+          parallel = True
+          source = backend
+          concurrency = thread, greenlet
+
+          [report]
+          show_missing = True
+          EOF
+
+      # Enable auto-coverage for ALL Python processes
+      - name: Export COVERAGE_PROCESS_START
+        run: |
+          echo "COVERAGE_PROCESS_START=$PWD/.coveragerc" >> $GITHUB_ENV
+
       # --------------------------
-      #   RUN BACKEND UNDER COVERAGE (with logging)
+      #   RUN BACKEND (auto coverage)
       # --------------------------
-      - name: Start backend under coverage
+      - name: Start backend (auto coverage)
         shell: bash
         env:
           BASE: "http://localhost:8000"
         run: |
-          echo "Starting backend with coverage..."
-          nohup python -m coverage run --parallel-mode --source=. \
-              -m uvicorn backend.app:app \
+          echo "Starting backend with auto coverage..."
+          nohup python -m uvicorn backend.app:app \
               --host 0.0.0.0 --port 8000 > server.log 2>&1 &
 
           echo "Waiting for server..."
@@ -87,17 +106,15 @@ jobs:
 
           if ! curl -fsS "$BASE/health" >/dev/null 2>&1; then
             echo "🚨 Server failed to start."
-            echo "---- Final server log ----"
             cat server.log || true
             exit 1
           fi
 
       # --------------------------
-      # PYTEST UNDER COVERAGE
+      # PYTEST (auto coverage)
       # --------------------------
-      - name: Run pytest under coverage
-        run: |
-          coverage run --parallel-mode --source=. -m pytest tests_main.py --maxfail=0
+      - name: Run pytest
+        run: pytest tests_main.py --maxfail=0
 
       # --------------------------
       # POWERSHELL INTEGRATION TESTS
@@ -111,21 +128,19 @@ jobs:
           Invoke-RestMethod -Uri "$env:BASE/health" -Method Get
           Invoke-RestMethod -Uri "$env:BASE/reset" -Method Delete
 
-      - name: Run PowerShell integration tests (covered)
+      - name: Run PowerShell integration tests (auto coverage)
         shell: bash
         env:
           BASE: "http://localhost:8000"
         run: |
-          echo "Running integration tests under coverage against $BASE"
+          echo "Running integration tests under auto coverage..."
 
-          # Create a temp python script
           cat > run_ps_integration.py << 'EOF'
           import subprocess
           subprocess.check_call(["pwsh", "./integration_tests.ps1"])
           EOF
 
-          # Run it under coverage
-          coverage run --parallel-mode --source=. run_ps_integration.py
+          python run_ps_integration.py
 
       # --------------------------
       # COMBINE & ENFORCE COVERAGE (Fail < 60%)

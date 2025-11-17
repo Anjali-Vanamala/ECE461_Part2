@@ -79,7 +79,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
         raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
     for store in memory._TYPE_TO_STORE.values():
-        for record in store.values():  #type: ignore[attr-defined]
+        for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name
             test = safe_regex_search(regex_str, name)
             if test is None:

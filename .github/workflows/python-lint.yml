@@ -118,10 +118,14 @@ jobs:
         run: |
           echo "Running integration tests under coverage against $BASE"
 
-          coverage run --parallel-mode --source=. - <<'PY'
+          # Create a temp python script
+          cat > run_ps_integration.py << 'EOF'
           import subprocess
           subprocess.check_call(["pwsh", "./integration_tests.ps1"])
-          PY
+          EOF
+
+          # Run it under coverage
+          coverage run --parallel-mode --source=. run_ps_integration.py
 
       # --------------------------
       # COMBINE & ENFORCE COVERAGE (Fail < 60%)

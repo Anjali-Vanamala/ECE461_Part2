@@ -9,6 +9,10 @@ jobs:
   lint-import-typing:
     runs-on: ubuntu-latest
 
+    env:
+      LOG_FILE: /tmp/test_log.txt
+      LOG_LEVEL: "1"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,42 +58,12 @@ jobs:
           echo "Added $PWD to PYTHONPATH"
           
       # --------------------------
-      # VERIFY backend.app imports cleanly
-      # --------------------------
-      - name: Debug import backend.app
-        env:
-          LOG_FILE: /tmp/test_log.txt
-          LOG_LEVEL: 1
-        run: |
-          echo "Testing import of backend.app..."
-
-          python <<'EOF'
-          import traceback, sys, os
-          print("PWD:", os.getcwd())
-          print("Python path:", sys.path)
-          print("LOG_FILE:", os.environ.get("LOG_FILE"))
-          print("LOG_LEVEL:", os.environ.get("LOG_LEVEL"))
-          print("Trying import...")
-
-          try:
-              import backend.app
-              print("backend.app import OK")
-          except Exception:
-              print("\n=== IMPORT ERROR TRACEBACK ===")
-              traceback.print_exc()
-              print("=== END TRACEBACK ===")
-              raise
-          EOF
-
-      # --------------------------
       #   RUN BACKEND UNDER COVERAGE (with logging)
       # --------------------------
       - name: Start backend under coverage
         shell: bash
         env:
           BASE: "http://localhost:8000"
-          LOG_FILE: /tmp/test_log.txt
-          LOG_LEVEL: 1
         run: |
           echo "Starting backend with coverage..."
           nohup python -m coverage run --parallel-mode --source=. \

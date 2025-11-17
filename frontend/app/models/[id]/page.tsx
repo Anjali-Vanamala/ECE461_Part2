@@ -4,36 +4,89 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { ArrowLeft, Download, Share2, Flag } from "lucide-react"
+import { ArrowLeft, Download, Share2, Flag, Loader2 } from "lucide-react"
 import { LineageGraph } from "@/components/lineage-graph"
 import { ModelScoreCard } from "@/components/model-score-card"
-
-const mockModelDetail = {
-  id: "bert-base",
-  name: "BERT Base Uncased",
-  version: "v2.1",
-  author: "Google Research",
-  description: "A transformer-based model pre-trained on English Wikipedia and BookCorpus",
-  fullDescription:
-    "BERT (Bidirectional Encoder Representations from Transformers) is a method of pre-training language representations that obtains state-of-the-art results on a wide array of Natural Language Processing tasks. This is the base uncased model, suitable for most NLP tasks.",
-  tags: ["NLP", "Transformer", "Production", "Pre-trained"],
-  size: "440 MB",
-  downloads: 15420,
-  lastUpdated: "2024-10-15",
-  rating: 4.8,
-  scores: {
-    overall: 4.8,
-    quality: 4.9,
-    reproducibility: 1.0,
-    reviewedness: 0.95,
-    treescore: 4.7,
-    documentation: 4.5,
-    latency: 3.8,
-  },
-  lineage: ["BERT-pretrained", "Transformers v4.30", "Wikipedia Corpus v2022"],
-}
+import { useEffect, useState } from "react"
+import { fetchModelById, fetchModelRating, API_BASE_URL } from "@/lib/api"
 
 export default function ModelDetailPage({ params }: { params: { id: string } }) {
+  const [model, setModel] = useState<any>(null)
+  const [rating, setRating] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function loadModel() {
+      try {
+        setLoading(true)
+        const [modelData, ratingData] = await Promise.all([
+          fetchModelById(params.id),
+          fetchModelRating(params.id).catch(() => null), // Rating might not exist
+        ])
+        setModel(modelData)
+        setRating(ratingData)
+        setError(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load model")
+        console.error("Error loading model:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadModel()
+  }, [params.id])
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-muted-foreground">Loading model...</span>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  if (error || !model) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <Button variant="ghost" asChild className="mb-6 gap-2">
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Models
+            </Link>
+          </Button>
+          <Card className="bg-destructive/10 border-destructive/30 backdrop-blur p-6">
+            <p className="text-destructive">Error: {error || "Model not found"}</p>
+          </Card>
+        </div>
+      </main>
+    )
+  }
+
+  // Map backend data to frontend format
+  const modelName = model.metadata?.name || "Unknown Model"
+  const modelUrl = model.data?.url || ""
+  const scores = rating ? {
+    overall: rating.overall_score ? rating.overall_score / 20 : 0,
+    quality: rating.quality_score ? rating.quality_score / 20 : 0,
+    reproducibility: rating.reproducibility_score ? rating.reproducibility_score / 100 : 0,
+    reviewedness: rating.code_review_score ? rating.code_review_score / 100 : 0,
+    treescore: rating.treescore ? rating.treescore / 20 : 0,
+    documentation: rating.documentation_score ? rating.documentation_score / 20 : 0,
+  } : {
+    overall: 0,
+    quality: 0,
+    reproducibility: 0,
+    reviewedness: 0,
+    treescore: 0,
+    documentation: 0,
+  }
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
@@ -48,14 +101,15 @@ export default function ModelDetailPage({ params }: { params: { id: string } }) 
         {/* Header Section */}
         <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="flex-1">
-            <h1 className="text-4xl font-bold text-foreground">{mockModelDetail.name}</h1>
-            <p className="mt-2 text-muted-foreground">{mockModelDetail.version}</p>
-            <p className="mt-1 text-sm text-muted-foreground">By {mockModelDetail.author}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {mockModelDetail.tags.map((tag) => (
-                <Badge key={tag}>{tag}</Badge>
-              ))}
-            </div>
+            <h1 className="text-4xl font-bold text-foreground">{modelName}</h1>
+            <p className="mt-2 text-muted-foreground">Model ID: {params.id}</p>
+            {modelUrl && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  View on HuggingFace
+                </a>
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-3 md:flex-row">
@@ -82,27 +136,37 @@ export default function ModelDetailPage({ params }: { params: { id: string } }) 
           <div className="lg:col-span-2 space-y-6">
             <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
               <h2 className="text-xl font-semibold text-foreground mb-4">About</h2>
-              <p className="text-muted-foreground leading-relaxed">{mockModelDetail.fullDescription}</p>
+              <p className="text-muted-foreground leading-relaxed">
+                {modelUrl ? (
+                  <>
+                    Model URL: <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{modelUrl}</a>
+                  </>
+                ) : (
+                  "No additional information available."
+                )}
+              </p>
             </Card>
 
             {/* Scores Section */}
             <div>
               <h2 className="text-xl font-semibold text-foreground mb-4">Scores & Metrics</h2>
               <div className="grid gap-4 md:grid-cols-2">
-                <ModelScoreCard label="Overall Rating" value={mockModelDetail.scores.overall} max={5} />
-                <ModelScoreCard label="Quality" value={mockModelDetail.scores.quality} max={5} />
-                <ModelScoreCard label="Reproducibility" value={mockModelDetail.scores.reproducibility} max={1} />
-                <ModelScoreCard label="Code Review" value={mockModelDetail.scores.reviewedness} max={1} percentage />
-                <ModelScoreCard label="Treescore" value={mockModelDetail.scores.treescore} max={5} />
-                <ModelScoreCard label="Documentation" value={mockModelDetail.scores.documentation} max={5} />
+                <ModelScoreCard label="Overall Rating" value={scores.overall} max={5} />
+                <ModelScoreCard label="Quality" value={scores.quality} max={5} />
+                <ModelScoreCard label="Reproducibility" value={scores.reproducibility} max={1} />
+                <ModelScoreCard label="Code Review" value={scores.reviewedness} max={1} percentage />
+                <ModelScoreCard label="Treescore" value={scores.treescore} max={5} />
+                <ModelScoreCard label="Documentation" value={scores.documentation} max={5} />
               </div>
             </div>
 
             {/* Lineage Section */}
-            <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
-              <h2 className="text-xl font-semibold text-foreground mb-4">Lineage</h2>
-              <LineageGraph lineage={mockModelDetail.lineage} />
-            </Card>
+            {model.lineage && (
+              <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
+                <h2 className="text-xl font-semibold text-foreground mb-4">Lineage</h2>
+                <LineageGraph lineage={model.lineage.nodes?.map((n: any) => n.name) || []} />
+              </Card>
+            )}
           </div>
 
           {/* Right Column - Sidebar */}
@@ -111,29 +175,41 @@ export default function ModelDetailPage({ params }: { params: { id: string } }) 
               <h3 className="font-semibold text-foreground mb-4">Model Info</h3>
               <div className="space-y-3 text-sm">
                 <div>
-                  <p className="text-muted-foreground">Model Size</p>
-                  <p className="font-semibold text-foreground">{mockModelDetail.size}</p>
+                  <p className="text-muted-foreground">Model ID</p>
+                  <p className="font-semibold text-foreground break-all">{params.id}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Downloads</p>
-                  <p className="font-semibold text-foreground">{mockModelDetail.downloads.toLocaleString()}</p>
+                  <p className="text-muted-foreground">Type</p>
+                  <p className="font-semibold text-foreground">{model.metadata?.type || "N/A"}</p>
                 </div>
-                <div>
-                  <p className="text-muted-foreground">Last Updated</p>
-                  <p className="font-semibold text-foreground">{mockModelDetail.lastUpdated}</p>
-                </div>
+                {modelUrl && (
+                  <div>
+                    <p className="text-muted-foreground">Source</p>
+                    <p className="font-semibold text-foreground break-all">
+                      <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        HuggingFace
+                      </a>
+                    </p>
+                  </div>
+                )}
               </div>
             </Card>
 
             <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
               <h3 className="font-semibold text-foreground mb-4">Quick Actions</h3>
               <div className="space-y-2">
-                <Button variant="outline" className="w-full justify-start bg-transparent">
-                  View API Docs
+                <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
+                  <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener noreferrer">
+                    View API Docs
+                  </a>
                 </Button>
-                <Button variant="outline" className="w-full justify-start bg-transparent">
-                  View on HuggingFace
-                </Button>
+                {modelUrl && (
+                  <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
+                    <a href={modelUrl} target="_blank" rel="noopener noreferrer">
+                      View on HuggingFace
+                    </a>
+                  </Button>
+                )}
                 <Button variant="outline" className="w-full justify-start bg-transparent">
                   View GitHub
                 </Button>

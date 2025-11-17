@@ -45,13 +45,14 @@ jobs:
           echo "Testing import of backend.app..."
           python - <<'EOF'
           import traceback
+          print("Trying to import backend.app ...")
           try:
               import backend.app
               print("backend.app IMPORT OK")
-          except Exception:
+          except Exception as e:
               print("🚨 IMPORT ERROR in backend.app:")
               traceback.print_exc()
-              exit(1)
+              raise
           EOF
 
       # --------------------------

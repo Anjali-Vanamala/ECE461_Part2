@@ -58,7 +58,7 @@ jobs:
           echo "Added $PWD to PYTHONPATH"
 
       # -----------------------------------------------------
-      # CREATE .coveragerc so uvicorn + subprocesses are covered
+      # CREATE .coveragerc for auto-coverage in subprocesses
       # -----------------------------------------------------
       - name: Create coverage config
         run: |
@@ -72,7 +72,7 @@ jobs:
           show_missing = True
           EOF
 
-      # Enable auto-coverage for ALL Python processes
+      # Export auto-coverage BEFORE uvicorn starts
       - name: Export COVERAGE_PROCESS_START
         run: |
           echo "COVERAGE_PROCESS_START=$PWD/.coveragerc" >> $GITHUB_ENV
@@ -85,13 +85,15 @@ jobs:
         env:
           BASE: "http://localhost:8000"
         run: |
-          echo "Starting backend with auto coverage..."
+          export COVERAGE_PROCESS_START="$COVERAGE_PROCESS_START"
+          echo "Auto coverage enabled with: $COVERAGE_PROCESS_START"
+
+          echo "Starting backend with uvicorn..."
           nohup python -m uvicorn backend.app:app \
               --host 0.0.0.0 --port 8000 > server.log 2>&1 &
 
           echo "Waiting for server..."
           sleep 3
-
           echo "---- Server startup log ----"
           cat server.log || true
 
@@ -133,7 +135,9 @@ jobs:
         env:
           BASE: "http://localhost:8000"
         run: |
-          echo "Running integration tests under auto coverage..."
+          export COVERAGE_PROCESS_START="$COVERAGE_PROCESS_START"
+
+          echo "Running integration tests with auto coverage..."
 
           cat > run_ps_integration.py << 'EOF'
           import subprocess
@@ -147,5 +151,6 @@ jobs:
       # --------------------------
       - name: Combine + Report Coverage (Fail <60)
         run: |
+          echo "Combining coverage..."
           coverage combine
           coverage report -m --fail-under=60

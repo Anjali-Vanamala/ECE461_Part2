@@ -118,7 +118,7 @@ jobs:
         run: |
           echo "Running integration tests under coverage against $BASE"
 
-          coverage run --parallel-mode --source=. -m python - <<'PY'
+          coverage run --parallel-mode --source=. - <<'PY'
           import subprocess
           subprocess.check_call(["pwsh", "./integration_tests.ps1"])
           PY

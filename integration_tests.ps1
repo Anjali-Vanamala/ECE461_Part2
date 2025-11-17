@@ -41,7 +41,7 @@ function Test-Call {
                 try { $json = $resp.Content | ConvertFrom-Json } catch {}
             }
         }
-        catch [System.Net.WebException] {
+        catch [System.Net.WebException], [Microsoft.PowerShell.Commands.HttpResponseException] {
             # Non-2xx (error) responses arrive here
             $response = $_.Exception.Response
             $actualStatus = [int]$response.StatusCode

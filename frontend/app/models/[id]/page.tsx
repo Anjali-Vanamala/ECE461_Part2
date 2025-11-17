@@ -10,19 +10,34 @@ import { ModelScoreCard } from "@/components/model-score-card"
 import { useEffect, useState } from "react"
 import { fetchModelById, fetchModelRating, API_BASE_URL } from "@/lib/api"
 
-export default function ModelDetailPage({ params }: { params: { id: string } }) {
+export default function ModelDetailPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
   const [model, setModel] = useState<any>(null)
   const [rating, setRating] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [modelId, setModelId] = useState<string | null>(null)
+
+  // Handle Next.js 16 async params
+  useEffect(() => {
+    async function resolveParams() {
+      const resolvedParams = params instanceof Promise ? await params : params
+      setModelId(resolvedParams.id)
+    }
+    resolveParams()
+  }, [params])
 
   useEffect(() => {
     async function loadModel() {
+      // Don't fetch if modelId is not available yet
+      if (!modelId) {
+        return
+      }
+
       try {
         setLoading(true)
         const [modelData, ratingData] = await Promise.all([
-          fetchModelById(params.id),
-          fetchModelRating(params.id).catch(() => null), // Rating might not exist
+          fetchModelById(modelId),
+          fetchModelRating(modelId).catch(() => null), // Rating might not exist
         ])
         setModel(modelData)
         setRating(ratingData)
@@ -36,7 +51,7 @@ export default function ModelDetailPage({ params }: { params: { id: string } }) 
     }
 
     loadModel()
-  }, [params.id])
+  }, [modelId])
 
   if (loading) {
     return (
@@ -102,7 +117,7 @@ export default function ModelDetailPage({ params }: { params: { id: string } }) 
         <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="flex-1">
             <h1 className="text-4xl font-bold text-foreground">{modelName}</h1>
-            <p className="mt-2 text-muted-foreground">Model ID: {params.id}</p>
+            <p className="mt-2 text-muted-foreground">Model ID: {modelId || "Loading..."}</p>
             {modelUrl && (
               <p className="mt-1 text-sm text-muted-foreground">
                 <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
@@ -113,8 +128,8 @@ export default function ModelDetailPage({ params }: { params: { id: string } }) 
           </div>
 
           <div className="flex flex-col gap-3 md:flex-row">
-            <Button size="lg" asChild>
-              <Link href={`/models/${params.id}/download`} className="gap-2">
+            <Button size="lg" asChild disabled={!modelId}>
+              <Link href={modelId ? `/models/${modelId}/download` : "#"} className="gap-2">
                 <Download className="h-4 w-4" />
                 Download
               </Link>
@@ -176,7 +191,7 @@ export default function ModelDetailPage({ params }: { params: { id: string } }) 
               <div className="space-y-3 text-sm">
                 <div>
                   <p className="text-muted-foreground">Model ID</p>
-                  <p className="font-semibold text-foreground break-all">{params.id}</p>
+                  <p className="font-semibold text-foreground break-all">{modelId || "Loading..."}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Type</p>

@@ -1192,6 +1192,7 @@ class Test_DynamoDBStorage:
         with patch('backend.storage.dynamodb.boto3'):
             # Need to reload module to get fresh import
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             artifact_id = dynamodb_module.generate_artifact_id()
@@ -1210,11 +1211,13 @@ class Test_DynamoDBStorage:
 
             # Reload module to pick up mocked boto3
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             # Patch the table after reload
             with patch.object(dynamodb_module, 'table', mock_table):
-                from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+                from backend.models import (Artifact, ArtifactData,
+                                            ArtifactMetadata, ArtifactType)
 
                 # Create test artifact
                 artifact = Artifact(
@@ -1277,6 +1280,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1315,6 +1319,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1350,6 +1355,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1393,6 +1399,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1436,10 +1443,13 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
-                from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType, ModelRating, SizeScore
+                from backend.models import (Artifact, ArtifactData,
+                                            ArtifactMetadata, ArtifactType,
+                                            ModelRating, SizeScore)
 
                 # Create test artifact
                 artifact = Artifact(
@@ -1533,10 +1543,12 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
-                from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+                from backend.models import (Artifact, ArtifactData,
+                                            ArtifactMetadata, ArtifactType)
 
                 # Create test artifact
                 artifact = Artifact(
@@ -1575,6 +1587,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1658,6 +1671,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1694,6 +1708,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1730,6 +1745,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1762,7 +1778,9 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             from botocore.exceptions import ClientError
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1811,6 +1829,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
@@ -1833,6 +1852,7 @@ class Test_DynamoDBStorage:
             mock_boto3.resource.return_value = mock_dynamodb
 
             import importlib
+
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):

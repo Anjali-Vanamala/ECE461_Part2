@@ -16,6 +16,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# package manager lock files (keeping them tracked for team consistency)
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
+
 # env files
 .env*
 

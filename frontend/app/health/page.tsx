@@ -3,8 +3,9 @@
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Activity, AlertCircle, CheckCircle, Clock } from "lucide-react"
-import { useState } from "react"
+import { Activity, AlertCircle, CheckCircle, Clock, Loader2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { fetchHealth, fetchHealthComponents } from "@/lib/api"
 
 interface HealthMetric {
   name: string
@@ -20,55 +21,46 @@ interface SystemLog {
 }
 
 export default function HealthPage() {
-  const [metrics, setMetrics] = useState<HealthMetric[]>([
-    {
-      name: "API Server",
-      status: "healthy",
-      value: "99.98% uptime",
-      lastChecked: "2 seconds ago",
-    },
-    {
-      name: "Database",
-      status: "healthy",
-      value: "245ms avg latency",
-      lastChecked: "5 seconds ago",
-    },
-    {
-      name: "Storage",
-      status: "healthy",
-      value: "15.4 TB used",
-      lastChecked: "1 minute ago",
-    },
-    {
-      name: "Cache",
-      status: "warning",
-      value: "85% capacity",
-      lastChecked: "3 seconds ago",
-    },
-  ])
+  const [healthSummary, setHealthSummary] = useState<any>(null)
+  const [healthComponents, setHealthComponents] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [windowMinutes, setWindowMinutes] = useState(60)
 
-  const [logs, setLogs] = useState<SystemLog[]>([
-    {
-      timestamp: "2024-01-15 14:32:15",
-      level: "info",
-      message: "Model inference completed for BERT-base in 234ms",
-    },
-    {
-      timestamp: "2024-01-15 14:31:42",
-      level: "info",
-      message: "User download completed: ResNet-50 (440 MB)",
-    },
-    {
-      timestamp: "2024-01-15 14:30:08",
-      level: "warning",
-      message: "Cache memory at 85% capacity",
-    },
-    {
-      timestamp: "2024-01-15 14:29:15",
-      level: "info",
-      message: "Model ingestion started: https://huggingface.co/...",
-    },
-  ])
+  useEffect(() => {
+    async function loadHealth() {
+      try {
+        setLoading(true)
+        const [summary, components] = await Promise.all([
+          fetchHealth(),
+          fetchHealthComponents(windowMinutes, false),
+        ])
+        setHealthSummary(summary)
+        setHealthComponents(components)
+        setError(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load health data")
+        console.error("Error loading health:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadHealth()
+    // Refresh every 30 seconds
+    const interval = setInterval(loadHealth, 30000)
+    return () => clearInterval(interval)
+  }, [windowMinutes])
+
+  // Map backend health data to frontend format
+  const metrics: HealthMetric[] = healthComponents?.components?.map((comp: any) => ({
+    name: comp.display_name || comp.id,
+    status: comp.status === "ok" ? "healthy" : comp.status === "degraded" ? "warning" : "critical",
+    value: comp.metrics ? Object.entries(comp.metrics).map(([k, v]) => `${k}: ${v}`).join(", ") : "N/A",
+    lastChecked: comp.observed_at ? new Date(comp.observed_at).toLocaleString() : "Unknown",
+  })) || []
+
+  const systemStatus = healthSummary?.status === "ok" ? "All Systems Operational" : "System Issues Detected"
 
   const getStatusIcon = (status: HealthMetric["status"]) => {
     if (status === "healthy") {
@@ -94,30 +86,67 @@ export default function HealthPage() {
             <p className="text-muted-foreground">Real-time monitoring of registry components</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" className="gap-2 bg-transparent">
+            <Button 
+              variant="outline" 
+              className="gap-2 bg-transparent"
+              onClick={() => setWindowMinutes(60)}
+            >
               <Clock className="h-4 w-4" />
               Last 1 Hour
             </Button>
-            <Button size="sm">Run Performance Test</Button>
+            <Button size="sm" onClick={() => {
+              setWindowMinutes(60)
+              setLoading(true)
+            }}>Refresh</Button>
           </div>
         </div>
 
-        {/* Quick Status */}
-        <Card className="mb-8 bg-card/40 border-border/50 backdrop-blur p-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-chart-3/20">
-              <Activity className="h-6 w-6 text-chart-3" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">System Status</p>
-              <p className="text-2xl font-bold text-foreground">All Systems Operational</p>
-            </div>
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-muted-foreground">Loading health data...</span>
           </div>
-        </Card>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <Card className="mb-8 bg-destructive/10 border-destructive/30 backdrop-blur p-6">
+            <p className="text-destructive">Error: {error}</p>
+          </Card>
+        )}
+
+        {/* Quick Status */}
+        {!loading && !error && healthSummary && (
+          <Card className="mb-8 bg-card/40 border-border/50 backdrop-blur p-6">
+            <div className="flex items-center gap-4">
+              <div className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                healthSummary.status === "ok" ? "bg-chart-3/20" : "bg-destructive/20"
+              }`}>
+                <Activity className={`h-6 w-6 ${
+                  healthSummary.status === "ok" ? "text-chart-3" : "text-destructive"
+                }`} />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">System Status</p>
+                <p className="text-2xl font-bold text-foreground">{systemStatus}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Checked at: {healthSummary.checked_at ? new Date(healthSummary.checked_at).toLocaleString() : "Unknown"}
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Metrics Grid */}
-        <div className="mb-8 grid gap-4 md:grid-cols-2">
-          {metrics.map((metric) => (
+        {!loading && !error && (
+          <div className="mb-8 grid gap-4 md:grid-cols-2">
+            {metrics.length === 0 ? (
+              <Card className="bg-card/40 border-border/50 backdrop-blur p-6 text-center">
+                <p className="text-muted-foreground">No health metrics available</p>
+              </Card>
+            ) : (
+              metrics.map((metric) => (
             <Card key={metric.name} className="bg-card/40 border-border/50 backdrop-blur p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -133,27 +162,47 @@ export default function HealthPage() {
                 </Badge>
               </div>
             </Card>
-          ))}
-        </div>
+              ))
+            )}
+          </div>
+        )}
 
         {/* Logs Section */}
-        <Card className="bg-card/40 border-border/50 backdrop-blur">
-          <div className="border-b border-border/50 p-6">
-            <h2 className="text-xl font-semibold text-foreground">Recent Activity</h2>
-          </div>
-          <div className="divide-y divide-border/50 max-h-96 overflow-y-auto">
-            {logs.map((log, index) => (
-              <div key={index} className="flex gap-4 p-4 hover:bg-secondary/5 transition-colors">
-                <div className={`text-xs font-bold ${getLevelColor(log.level)}`}>{log.level.toUpperCase()}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground">{log.timestamp}</p>
-                  <p className="mt-1 text-sm text-foreground break-words">{log.message}</p>
+        {!loading && !error && healthSummary && (
+          <Card className="bg-card/40 border-border/50 backdrop-blur">
+            <div className="border-b border-border/50 p-6">
+              <h2 className="text-xl font-semibold text-foreground">System Information</h2>
+            </div>
+            <div className="divide-y divide-border/50 max-h-96 overflow-y-auto p-6">
+              <div className="space-y-2 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Version</p>
+                  <p className="font-semibold text-foreground">{healthSummary.version || "N/A"}</p>
                 </div>
+                <div>
+                  <p className="text-muted-foreground">Uptime</p>
+                  <p className="font-semibold text-foreground">
+                    {healthSummary.uptime_seconds ? `${Math.floor(healthSummary.uptime_seconds / 3600)}h ${Math.floor((healthSummary.uptime_seconds % 3600) / 60)}m` : "N/A"}
+                  </p>
+                </div>
+                {healthSummary.request_summary && (
+                  <>
+                    <div>
+                      <p className="text-muted-foreground">Total Requests</p>
+                      <p className="font-semibold text-foreground">{healthSummary.request_summary.total_requests || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Unique Clients</p>
+                      <p className="font-semibold text-foreground">{healthSummary.request_summary.unique_clients || 0}</p>
+                    </div>
+                  </>
+                )}
               </div>
-            ))}
-          </div>
-        </Card>
+            </div>
+          </Card>
+        )}
       </div>
     </main>
   )
 }
+

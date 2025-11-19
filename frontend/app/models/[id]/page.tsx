@@ -1,17 +1,11 @@
 import { ModelDetailClient } from "./ModelDetailClient"
 
-// Required for static export with dynamic routes
-// This server component exports generateStaticParams() to satisfy static export requirements
-// The actual UI is in ModelDetailClient.tsx (client component)
-export function generateStaticParams() {
-  // These IDs match the mock data currently used throughout the frontend
-  // See: frontend/app/browse/page.tsx and frontend/components/model-grid.tsx
-  // TODO: When integrating with real API, fetch model IDs from API at build time
-  return [
-    { id: "bert-base" },
-    { id: "resnet-50" },
-    { id: "gpt2-small" },
-  ]
+// For static export, we need to return at least one param so the route structure exists
+// The client component will handle fetching data for any model ID at runtime
+export function generateStaticParams(): Array<{ id: string }> {
+  // Return a placeholder ID so the route structure is generated
+  // The actual model data is fetched client-side, so any ID will work
+  return [{ id: "placeholder" }]
 }
 
 export default function ModelDetailPage({ params }: { params: { id: string } }) {

@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useState } from "react"
 import { Download, Loader2, CheckCircle, AlertCircle } from "lucide-react"
+import { ingestModel } from "@/lib/api"
 
 type IngestionStatus = "idle" | "loading" | "success" | "error"
 
@@ -12,19 +13,27 @@ export default function IngestPage() {
   const [huggingfaceUrl, setHuggingfaceUrl] = useState("")
   const [status, setStatus] = useState<IngestionStatus>("idle")
   const [message, setMessage] = useState("")
+  const [ingestedModelId, setIngestedModelId] = useState<string | null>(null)
 
-  const handleIngest = () => {
+  const handleIngest = async () => {
+    if (!huggingfaceUrl.trim()) {
+      setStatus("error")
+      setMessage("Please enter a HuggingFace model URL")
+      return
+    }
+
     setStatus("loading")
-    // Simulate API call
-    setTimeout(() => {
-      if (huggingfaceUrl.includes("bert")) {
-        setStatus("success")
-        setMessage("Model ingested successfully! All quality metrics passed.")
-      } else {
-        setStatus("error")
-        setMessage("Model ingestion failed. Quality score below minimum threshold (0.5).")
-      }
-    }, 2000)
+    setMessage("")
+    
+    try {
+      const result = await ingestModel(huggingfaceUrl)
+      setStatus("success")
+      setIngestedModelId(result.metadata?.id || null)
+      setMessage("Model ingested successfully! All quality metrics passed.")
+    } catch (error) {
+      setStatus("error")
+      setMessage(error instanceof Error ? error.message : "Model ingestion failed. Please check the URL and try again.")
+    }
   }
 
   return (
@@ -83,9 +92,14 @@ export default function IngestPage() {
             {status === "success" && (
               <Card className="bg-chart-3/10 border-chart-3/30 backdrop-blur p-6 flex gap-3">
                 <CheckCircle className="h-5 w-5 text-chart-3 flex-shrink-0 mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <p className="font-medium text-foreground mb-1">Success</p>
                   <p className="text-sm text-muted-foreground">{message}</p>
+                  {ingestedModelId && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Model ID: {ingestedModelId}
+                    </p>
+                  )}
                 </div>
               </Card>
             )}

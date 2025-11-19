@@ -1,6 +1,5 @@
 # import parse_categories
 import json
-import os
 from datetime import datetime, timedelta
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import MagicMock, mock_open, patch
@@ -1231,7 +1230,7 @@ class Test_DynamoDBStorage:
                 mock_table.get_item.return_value = {}
 
                 # Save artifact
-                result = dynamodb_module.save_artifact(artifact)
+                dynamodb_module.save_artifact(artifact)
 
                 # Verify put_item was called
                 assert mock_table.put_item.called
@@ -1397,7 +1396,7 @@ class Test_DynamoDBStorage:
             import backend.storage.dynamodb as dynamodb_module
             importlib.reload(dynamodb_module)
             with patch.object(dynamodb_module, 'table', mock_table):
-                from backend.models import ArtifactQuery, ArtifactType
+                from backend.models import ArtifactQuery
 
                 # Mock scan to return items
                 mock_table.scan.return_value = {
@@ -1487,7 +1486,7 @@ class Test_DynamoDBStorage:
                 mock_table.scan.return_value = {"Items": []}
 
                 # Save artifact with rating
-                result = dynamodb_module.save_artifact(artifact, rating=rating)
+                dynamodb_module.save_artifact(artifact, rating=rating)
 
                 # Verify put_item was called
                 assert mock_table.put_item.called
@@ -1555,7 +1554,7 @@ class Test_DynamoDBStorage:
                 mock_table.scan.return_value = {"Items": []}
 
                 # Save artifact
-                result = dynamodb_module.save_artifact(artifact)
+                dynamodb_module.save_artifact(artifact)
 
                 # Verify put_item was called
                 assert mock_table.put_item.called

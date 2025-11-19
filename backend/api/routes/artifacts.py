@@ -69,6 +69,14 @@ async def regex_artifact_search(payload: dict = Body(...)):
     # Perform safe matching with timeout
     results: List[ArtifactMetadata] = []
 
+    # Initial catastrophic check - test regex against a long string to catch catastrophic backtracking
+    initial_test = safe_regex_search(regex_str, "a" * 5000)
+    if initial_test is None:
+        raise HTTPException(
+            400,
+            "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
+        )
+
     # Get all artifacts by type (works with both memory and DynamoDB backends)
     for artifact_type in [ArtifactType.MODEL, ArtifactType.DATASET, ArtifactType.CODE]:
         metadata_list = storage.list_metadata(artifact_type)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import boto3
 from boto3.dynamodb.conditions import Attr
@@ -44,9 +44,9 @@ def _normalized(name: Optional[str]) -> Optional[str]:
     return name.strip().lower() if isinstance(name, str) else None
 
 
-def _serialize_record(record: ModelRecord | DatasetRecord | CodeRecord) -> Dict:
+def _serialize_record(record: ModelRecord | DatasetRecord | CodeRecord) -> Dict[str, Any]:
     """Serialize a record to a DynamoDB-compatible dict."""
-    result = {}
+    result: Dict[str, Any] = {}
 
     # Serialize the artifact (Pydantic model)
     if hasattr(record.artifact, "model_dump"):
@@ -270,7 +270,8 @@ def save_artifact(
                 code_url=code_url,
             )
 
-        _link_dataset_code(record)
+        if isinstance(record, ModelRecord):
+            _link_dataset_code(record)
         item = _serialize_record(record)
         item[PK_NAME] = artifact_id
         table.put_item(Item=item)

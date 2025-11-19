@@ -10,4 +10,4 @@ USE_DYNAMODB = os.getenv("USE_DYNAMODB", "0") == "1"
 if USE_DYNAMODB:
     from . import dynamodb as storage  # noqa: F401
 else:
-    from . import memory as storage  # noqa: F401
+    from . import memory as storage  # type: ignore[no-redef]  # noqa: F401

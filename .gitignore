@@ -8,3 +8,8 @@ temp_log.txt
 .mypy_cache/
 venv
 tmp/
+
+# package manager lock files (keeping them tracked for team consistency)
+# frontend/package-lock.json
+# frontend/pnpm-lock.yaml
+# frontend/yarn.lock

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Package2, Menu, X, Sun, Moon, Settings2 } from "lucide-react"
 import { useState } from "react"
 import { useTheme } from "@/providers/theme-provider"
+import { API_BASE_URL } from "@/lib/api"
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -28,9 +29,9 @@ export function Header() {
           <Link href="/health" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Health
           </Link>
-          <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             API Docs
-          </Link>
+          </a>
         </nav>
 
         <div className="hidden gap-3 md:flex items-center">
@@ -97,9 +98,9 @@ export function Header() {
             <Link href="/health" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Health
             </Link>
-            <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               API Docs
-            </Link>
+            </a>
             <div className="flex items-center gap-1 border-t border-border pt-3 mt-2">
               <span className="text-xs text-muted-foreground px-2">Theme:</span>
               <button

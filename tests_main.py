@@ -50,7 +50,7 @@ class Test_Size_Score:
         """Test size calculation for GPT-2 model"""
         raw_model_url = "https://huggingface.co/gpt2"
         size_scores, net_size_score, size_latency = metrics.size.calculate_size_score(raw_model_url)
-        # GPT-2 should use default 0.5GB
+        # GPT-2 should use default 0.5GB.
         expected_scores = {
             'raspberry_pi': 0.75,
             'jetson_nano': 0.88,

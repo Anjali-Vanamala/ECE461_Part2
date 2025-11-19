@@ -11,4 +11,3 @@ if USE_DYNAMODB:
     from . import dynamodb as storage  # noqa: F401
 else:
     from . import memory as storage  # noqa: F401
-

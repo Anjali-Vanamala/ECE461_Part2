@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import Dict, Iterable, List, Optional, cast
+from typing import Dict, Iterable, List, Optional
 
 import boto3
-from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError
 
 from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
@@ -47,13 +47,13 @@ def _normalized(name: Optional[str]) -> Optional[str]:
 def _serialize_record(record: ModelRecord | DatasetRecord | CodeRecord) -> Dict:
     """Serialize a record to a DynamoDB-compatible dict."""
     result = {}
-    
+
     # Serialize the artifact (Pydantic model)
     if hasattr(record.artifact, "model_dump"):
         result["artifact"] = record.artifact.model_dump()
     else:
         result["artifact"] = record.artifact.dict()
-    
+
     # Add type-specific fields
     if isinstance(record, ModelRecord):
         result["artifact_type"] = ArtifactType.MODEL.value
@@ -74,18 +74,18 @@ def _serialize_record(record: ModelRecord | DatasetRecord | CodeRecord) -> Dict:
         result["artifact_type"] = ArtifactType.DATASET.value
     elif isinstance(record, CodeRecord):
         result["artifact_type"] = ArtifactType.CODE.value
-    
+
     return result
 
 
 def _deserialize_record(item: Dict) -> ModelRecord | DatasetRecord | CodeRecord:
     """Deserialize a DynamoDB item back to a record."""
     artifact_type_str = item.get("artifact_type")
-    
+
     # Reconstruct Artifact from dict
     artifact_dict = item.get("artifact", {})
     artifact = Artifact(**artifact_dict)
-    
+
     if artifact_type_str == ArtifactType.MODEL.value:
         rating_dict = item.get("rating")
         rating = ModelRating(**rating_dict) if rating_dict else None
@@ -119,7 +119,7 @@ def _find_by_url(artifact_type: ArtifactType, url: str) -> Optional[ArtifactID]:
             data_dict = artifact_dict.get("data", {})
             if data_dict.get("url") == url:
                 return item[PK_NAME]
-        
+
         # Handle pagination if needed
         while "LastEvaluatedKey" in response:
             response = table.scan(
@@ -133,7 +133,7 @@ def _find_by_url(artifact_type: ArtifactType, url: str) -> Optional[ArtifactID]:
                     return item[PK_NAME]
     except ClientError:
         pass
-    
+
     return None
 
 
@@ -157,7 +157,7 @@ def _link_dataset_code(model_record: ModelRecord) -> None:
                     # Update the model record in DynamoDB
                     _update_model_record(model_record)
                     break
-            
+
             # Handle pagination
             while "LastEvaluatedKey" in response:
                 response = table.scan(
@@ -176,7 +176,7 @@ def _link_dataset_code(model_record: ModelRecord) -> None:
                         break
         except ClientError:
             pass
-    
+
     code_name = _normalized(model_record.code_name)
     if model_record.code_id is None and code_name:
         # Scan for codes
@@ -195,7 +195,7 @@ def _link_dataset_code(model_record: ModelRecord) -> None:
                     # Update the model record in DynamoDB
                     _update_model_record(model_record)
                     break
-            
+
             # Handle pagination
             while "LastEvaluatedKey" in response:
                 response = table.scan(
@@ -239,7 +239,7 @@ def save_artifact(
 ) -> Artifact:
     """Insert or update an artifact entry in DynamoDB."""
     artifact_id = artifact.metadata.id
-    
+
     if artifact.metadata.type == ArtifactType.MODEL:
         # Get existing record if it exists
         existing_item = None
@@ -248,7 +248,7 @@ def save_artifact(
             existing_item = response.get("Item")
         except ClientError:
             pass
-        
+
         if existing_item and existing_item.get("artifact_type") == ArtifactType.MODEL.value:
             # Update existing
             record = _deserialize_record(existing_item)
@@ -269,18 +269,18 @@ def save_artifact(
                 code_name=code_name,
                 code_url=code_url,
             )
-        
+
         _link_dataset_code(record)
         item = _serialize_record(record)
         item[PK_NAME] = artifact_id
         table.put_item(Item=item)
-        
+
     elif artifact.metadata.type == ArtifactType.DATASET:
         record = DatasetRecord(artifact=artifact)
         item = _serialize_record(record)
         item[PK_NAME] = artifact_id
         table.put_item(Item=item)
-        
+
         # Link to models that reference this dataset by name
         dataset_name_normalized = _normalized(artifact.metadata.name)
         try:
@@ -294,7 +294,7 @@ def save_artifact(
                         record.dataset_id = artifact_id
                         record.dataset_url = artifact.data.url
                         _update_model_record(record)
-            
+
             # Handle pagination
             while "LastEvaluatedKey" in response:
                 response = table.scan(
@@ -310,13 +310,13 @@ def save_artifact(
                             _update_model_record(record)
         except ClientError:
             pass
-        
+
     elif artifact.metadata.type == ArtifactType.CODE:
         record = CodeRecord(artifact=artifact)
         item = _serialize_record(record)
         item[PK_NAME] = artifact_id
         table.put_item(Item=item)
-        
+
         # Link to models that reference this code by name
         code_name_normalized = _normalized(artifact.metadata.name)
         try:
@@ -330,7 +330,7 @@ def save_artifact(
                         record.code_id = artifact_id
                         record.code_url = artifact.data.url
                         _update_model_record(record)
-            
+
             # Handle pagination
             while "LastEvaluatedKey" in response:
                 response = table.scan(
@@ -348,7 +348,7 @@ def save_artifact(
             pass
     else:
         raise ValueError(f"Unsupported artifact type: {artifact.metadata.type}")
-    
+
     return artifact
 
 
@@ -359,11 +359,11 @@ def get_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> Option
         item = response.get("Item")
         if not item:
             return None
-        
+
         # Check type match
         if item.get("artifact_type") != artifact_type.value:
             return None
-        
+
         record = _deserialize_record(item)
         return record.artifact
     except ClientError:
@@ -378,10 +378,10 @@ def delete_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> boo
         item = response.get("Item")
         if not item:
             return False
-        
+
         if item.get("artifact_type") != artifact_type.value:
             return False
-        
+
         # Handle relationships
         if artifact_type == ArtifactType.DATASET:
             # Unlink from models
@@ -395,7 +395,7 @@ def delete_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> boo
                         record.dataset_id = None
                         record.dataset_url = None
                         _update_model_record(record)
-                
+
                 # Handle pagination
                 while "LastEvaluatedKey" in scan_response:
                     scan_response = table.scan(
@@ -422,7 +422,7 @@ def delete_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> boo
                         record.code_id = None
                         record.code_url = None
                         _update_model_record(record)
-                
+
                 # Handle pagination
                 while "LastEvaluatedKey" in scan_response:
                     scan_response = table.scan(
@@ -437,7 +437,7 @@ def delete_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> boo
                             _update_model_record(record)
             except ClientError:
                 pass
-        
+
         # Delete the item
         table.delete_item(Key={PK_NAME: artifact_id})
         return True
@@ -455,7 +455,7 @@ def list_metadata(artifact_type: ArtifactType) -> List[ArtifactMetadata]:
         for item in response.get("Items", []):
             record = _deserialize_record(item)
             results.append(record.artifact.metadata)
-        
+
         # Handle pagination
         while "LastEvaluatedKey" in response:
             response = table.scan(
@@ -467,14 +467,14 @@ def list_metadata(artifact_type: ArtifactType) -> List[ArtifactMetadata]:
                 results.append(record.artifact.metadata)
     except ClientError:
         pass
-    
+
     return results
 
 
 def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
     """Query artifacts by name and type."""
     results: Dict[str, ArtifactMetadata] = {}
-    
+
     # Collect all types to query
     types_to_query = set()
     for query in queries:
@@ -482,7 +482,7 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
             types_to_query.update(query.types)
         else:
             types_to_query.update([ArtifactType.MODEL, ArtifactType.DATASET, ArtifactType.CODE])
-    
+
     # Scan all relevant types
     try:
         for artifact_type in types_to_query:
@@ -492,18 +492,18 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
             for item in response.get("Items", []):
                 record = _deserialize_record(item)
                 metadata = record.artifact.metadata
-                
+
                 # Check against all queries
                 for query in queries:
                     # Check if type matches
                     if query.types and artifact_type not in query.types:
                         continue
-                    
+
                     # Check name match (exact except "*")
                     if query.name == "*" or query.name.lower() == metadata.name.lower():
                         results[f"{metadata.type}:{metadata.id}"] = metadata
                         break
-            
+
             # Handle pagination
             while "LastEvaluatedKey" in response:
                 response = table.scan(
@@ -513,20 +513,20 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
                 for item in response.get("Items", []):
                     record = _deserialize_record(item)
                     metadata = record.artifact.metadata
-                    
+
                     # Check against all queries
                     for query in queries:
                         # Check if type matches
                         if query.types and artifact_type not in query.types:
                             continue
-                        
+
                         # Check name match (exact except "*")
                         if query.name == "*" or query.name.lower() == metadata.name.lower():
                             results[f"{metadata.type}:{metadata.id}"] = metadata
                             break
     except ClientError:
         pass
-    
+
     return list(results.values())
 
 
@@ -538,7 +538,7 @@ def reset() -> None:
         with table.batch_writer() as batch:
             for item in response.get("Items", []):
                 batch.delete_item(Key={PK_NAME: item[PK_NAME]})
-        
+
         # Handle pagination
         while "LastEvaluatedKey" in response:
             response = table.scan(
@@ -569,7 +569,7 @@ def save_model_rating(artifact_id: ArtifactID, rating: ModelRating) -> None:
         item = response.get("Item")
         if not item or item.get("artifact_type") != ArtifactType.MODEL.value:
             return
-        
+
         record = _deserialize_record(item)
         if isinstance(record, ModelRecord):
             record.rating = rating
@@ -585,13 +585,13 @@ def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
         item = response.get("Item")
         if not item or item.get("artifact_type") != ArtifactType.MODEL.value:
             return None
-        
+
         record = _deserialize_record(item)
         if isinstance(record, ModelRecord):
             return record.rating
     except ClientError:
         pass
-    
+
     return None
 
 
@@ -607,7 +607,7 @@ def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
             if isinstance(record, DatasetRecord):
                 if _normalized(record.artifact.metadata.name) == normalized:
                     return record
-        
+
         # Handle pagination
         while "LastEvaluatedKey" in response:
             response = table.scan(
@@ -621,7 +621,7 @@ def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
                         return record
     except ClientError:
         pass
-    
+
     return None
 
 
@@ -637,7 +637,7 @@ def find_code_by_name(name: str) -> Optional[CodeRecord]:
             if isinstance(record, CodeRecord):
                 if _normalized(record.artifact.metadata.name) == normalized:
                     return record
-        
+
         # Handle pagination
         while "LastEvaluatedKey" in response:
             response = table.scan(
@@ -651,6 +651,5 @@ def find_code_by_name(name: str) -> Optional[CodeRecord]:
                         return record
     except ClientError:
         pass
-    
-    return None
 
+    return None

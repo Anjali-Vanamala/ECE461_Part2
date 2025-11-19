@@ -1,0 +1,23 @@
+[run]
+source = .
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */env/*
+    # Exclude DynamoDB implementation from coverage
+    # It requires AWS credentials and is infrastructure code
+    # The memory backend is tested, and the abstraction ensures interface consistency
+    backend/storage/dynamodb.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+

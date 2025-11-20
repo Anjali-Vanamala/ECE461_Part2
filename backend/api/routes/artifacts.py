@@ -13,7 +13,7 @@ from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactQuery, ArtifactRegistration, ArtifactType,
                             ModelRating)
 from backend.services.rating_service import compute_model_artifact
-from backend.storage import storage
+from backend.storage import memory
 
 router = APIRouter(tags=["artifacts"])
 
@@ -23,6 +23,9 @@ def _derive_name(url: str) -> str:
     if not stripped:
         return "artifact"
     return stripped.split("/")[-1]
+
+
+router = APIRouter(tags=["artifacts"])
 
 
 def calibrate_regex_timeout() -> float:
@@ -70,28 +73,19 @@ async def regex_artifact_search(payload: dict = Body(...)):
 
     results: List[ArtifactMetadata] = []
 
-    # Initial catastrophic check - test regex against a long string to catch catastrophic backtracking
+    # Initial catastrophic check
     initial_test = safe_regex_search(regex_str, "a" * 5000)
     if initial_test is None:
-        raise HTTPException(
-            400,
-            "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-        )
+        raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
-    # Get all artifacts by type (works with both memory and DynamoDB backends)
-    for artifact_type in [ArtifactType.MODEL, ArtifactType.DATASET, ArtifactType.CODE]:
-        metadata_list = storage.list_metadata(artifact_type)
-        for metadata in metadata_list:
-            name = metadata.name
-            print("Testing regex:", regex_str, "against", name, "=>", safe_regex_search(regex_str, name))
+    for store in memory._TYPE_TO_STORE.values():
+        for record in store.values():  # type: ignore[attr-defined]
+            name = record.artifact.metadata.name
             test = safe_regex_search(regex_str, name)
             if test is None:
-                raise HTTPException(
-                    400,
-                    "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-                )
-            elif test:
-                results.append(metadata)
+                raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
+            if test:
+                results.append(record.artifact.metadata)
 
     if not results:
         raise HTTPException(404, "No artifact found under this regex.")
@@ -112,7 +106,7 @@ async def query_artifacts_endpoint(
     if not queries:
         raise HTTPException(status_code=400, detail="At least one artifact query is required")
 
-    results = storage.query_artifacts(queries)
+    results = memory.query_artifacts(queries)
 
     if offset >= len(results):
         response.headers["offset"] = str(offset)
@@ -126,7 +120,7 @@ async def query_artifacts_endpoint(
 
 @router.delete("/reset", summary="Reset the registry. (BASELINE)")
 async def reset_registry() -> dict[str, str]:
-    storage.reset()
+    memory.reset()
     return {"status": "reset"}
 
 
@@ -140,7 +134,7 @@ async def register_artifact(
     payload: ArtifactRegistration,
     artifact_type: ArtifactType = Path(..., description="Type of artifact being ingested."),
 ) -> Artifact:
-    if storage.artifact_exists(artifact_type, payload.url):
+    if memory.artifact_exists(artifact_type, payload.url):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Artifact exists already")
 
     if artifact_type == ArtifactType.MODEL:
@@ -152,7 +146,7 @@ async def register_artifact(
         if payload.name:
             artifact.metadata.name = payload.name
 
-        storage.save_artifact(
+        memory.save_artifact(
             artifact,
             rating=rating,
             dataset_name=dataset_name,
@@ -161,12 +155,12 @@ async def register_artifact(
             code_url=code_url,
         )
         if rating:
-            storage.save_model_rating(artifact.metadata.id, rating)
+            memory.save_model_rating(artifact.metadata.id, rating)
         return artifact
 
     artifact_name = payload.name or _derive_name(payload.url)
 
-    artifact_id = storage.generate_artifact_id()
+    artifact_id = memory.generate_artifact_id()
     artifact = Artifact(
         metadata=ArtifactMetadata(
             name=artifact_name,
@@ -175,7 +169,7 @@ async def register_artifact(
         ),
         data=ArtifactData(url=payload.url),
     )
-    storage.save_artifact(artifact)
+    memory.save_artifact(artifact)
     return artifact
 
 
@@ -215,7 +209,7 @@ async def get_artifact(
 
     # 404 — not found
     artifact_type_enum = ArtifactType(artifact_type.lower())
-    artifact = storage.get_artifact(artifact_type_enum, artifact_id)
+    artifact = memory.get_artifact(artifact_type_enum, artifact_id)
     if not artifact:
         raise HTTPException(
             status_code=404,
@@ -249,7 +243,7 @@ async def update_artifact(
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(exc)) from exc
 
-        storage.save_artifact(
+        memory.save_artifact(
             artifact,
             rating=rating,
             dataset_name=dataset_name,
@@ -258,14 +252,14 @@ async def update_artifact(
             code_url=code_url,
         )
         if rating:
-            storage.save_model_rating(artifact_id, rating)
+            memory.save_model_rating(artifact_id, rating)
         return artifact
 
-    existing = storage.get_artifact(artifact_type, artifact_id)
+    existing = memory.get_artifact(artifact_type, artifact_id)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
 
-    storage.save_artifact(payload)
+    memory.save_artifact(payload)
     return payload
 
 
@@ -278,7 +272,7 @@ async def delete_artifact(
     artifact_type: ArtifactType = Path(..., description="Artifact type"),
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
 ) -> dict[str, ArtifactID]:
-    success = storage.delete_artifact(artifact_type, artifact_id)
+    success = memory.delete_artifact(artifact_type, artifact_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
     return {"deleted": artifact_id}
@@ -292,7 +286,7 @@ async def delete_artifact(
 async def get_model_rating(
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
 ) -> ModelRating:
-    rating = storage.get_model_rating(artifact_id)
+    rating = memory.get_model_rating(artifact_id)
     if not rating:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist or lacks a rating.")
     return rating
@@ -307,12 +301,12 @@ async def get_artifact_cost(
     artifact_type: ArtifactType = Path(..., description="Artifact type"),
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
 ) -> ArtifactCost:
-    artifact = storage.get_artifact(artifact_type, artifact_id)
+    artifact = memory.get_artifact(artifact_type, artifact_id)
     if not artifact:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
 
     if artifact_type == ArtifactType.MODEL:
-        rating = storage.get_model_rating(artifact_id)
+        rating = memory.get_model_rating(artifact_id)
         if not rating:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

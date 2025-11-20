@@ -87,26 +87,9 @@ jobs:
             --task-definition ${{ env.ECS_TASK_DEFINITION }} \
             --query taskDefinition > task-definition.json
           
-          # Update image URI and environment variables using jq (pre-installed in GitHub Actions)
+          # Update image URI using jq (pre-installed in GitHub Actions)
           jq --arg IMAGE "$IMAGE_URI" \
            '.containerDefinitions[0].image = $IMAGE
-            | .containerDefinitions[0].environment = (
-                (.containerDefinitions[0].environment // []) | 
-                map(select(.name != "USE_DYNAMODB" and .name != "DDB_TABLE_NAME" and .name != "AWS_REGION"))
-              ) + [
-                {
-                  "name": "USE_DYNAMODB",
-                  "value": "1"
-                },
-                {
-                  "name": "DDB_TABLE_NAME",
-                  "value": "artifacts_metadata"
-                },
-                {
-                  "name": "AWS_REGION",
-                  "value": "us-east-2"
-                }
-              ]
             | .containerDefinitions[0].secrets = [
                 {
                   "name": "GEN_AI_STUDIO_API_KEY",

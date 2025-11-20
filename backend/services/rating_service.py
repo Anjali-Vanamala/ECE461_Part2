@@ -9,7 +9,7 @@ from huggingface_hub import HfApi, hf_hub_url
 
 from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
                             ArtifactType, ModelRating, SizeScore)
-from backend.storage import memory
+from backend.storage import storage
 from metric_concurrent import main as run_metrics
 from metrics.size import calculate_size_score
 
@@ -108,7 +108,7 @@ def _resolve_dataset(dataset_name: Optional[str]) -> Tuple[Optional[str], Option
         return None, None
 
     normalized = dataset_name.split("/")[-1].lower()
-    record = memory.find_dataset_by_name(normalized)
+    record = storage.find_dataset_by_name(normalized)
     if record:
         return normalized, record.artifact.data.url
 
@@ -159,7 +159,7 @@ def _resolve_code(code_repo: Optional[str], code_name: Optional[str]) -> Tuple[O
         resolved_url = code_repo
         resolved_name = _derive_name_from_url(code_repo).lower()
     if resolved_name:
-        record = memory.find_code_by_name(resolved_name)
+        record = storage.find_code_by_name(resolved_name)
         if record:
             resolved_url = record.artifact.data.url
 
@@ -176,7 +176,7 @@ def compute_model_artifact(
     name_override: Optional[str] = None,
 ) -> tuple[Artifact, ModelRating, Optional[str], Optional[str], Optional[str], Optional[str]]:
     name = name_override or _derive_name_from_url(url)
-    artifact_id = artifact_id or memory.generate_artifact_id()
+    artifact_id = artifact_id or storage.generate_artifact_id()
 
     # Fetch model info to extract dataset/code names from README
     # We'll use these names to link to already-registered artifacts
@@ -191,7 +191,7 @@ def compute_model_artifact(
     dataset_url = None
     dataset_name = None
     if dataset_name_hint:
-        dataset_record = memory.find_dataset_by_name(dataset_name_hint)
+        dataset_record = storage.find_dataset_by_name(dataset_name_hint)
         if dataset_record:
             dataset_url = dataset_record.artifact.data.url
             dataset_name = dataset_record.artifact.metadata.name
@@ -203,7 +203,7 @@ def compute_model_artifact(
     code_info: dict[str, Any] = {}
     code_readme: str = ""
     if code_name_hint:
-        code_record = memory.find_code_by_name(code_name_hint)
+        code_record = storage.find_code_by_name(code_name_hint)
         if code_record:
             code_url = code_record.artifact.data.url
             code_name = code_record.artifact.metadata.name

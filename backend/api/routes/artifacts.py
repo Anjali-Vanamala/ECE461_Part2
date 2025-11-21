@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import List
 
 import regex
@@ -24,69 +25,70 @@ def _derive_name(url: str) -> str:
     return stripped.split("/")[-1]
 
 
-def safe_regex_search(pattern: str, text: str, timeout_ms: int = 2):
+router = APIRouter(tags=["artifacts"])
+
+
+def calibrate_regex_timeout() -> float:
+    """
+    Measures how long regex takes in this platform for a safe case.
+    The timeout is set to 2x the baseline to avoid false-positive timeouts.
+    """
+    test_pattern = r"a+"
+    test_text = "a" * 5000
+
+    start = time.perf_counter()
+    regex.search(test_pattern, test_text)
+    baseline = time.perf_counter() - start
+
+    # Never allow insanely tiny values
+    return max(0.0001, baseline * 2)
+
+
+# Compute once at import time
+REGEX_TIMEOUT = calibrate_regex_timeout()
+print(f"[Regex] Calibrated REGEX_TIMEOUT = {REGEX_TIMEOUT:.6f} seconds")
+
+
+def safe_regex_search(pattern: str, text: str, timeout: float = REGEX_TIMEOUT):
     try:
-        return bool(regex.search(pattern, text, timeout=timeout_ms))
+        return bool(regex.search(pattern, text, timeout=timeout))
     except TimeoutError:
-        return None   # distinguish timeout from no-match
+        return None
 
 
-@router.post(
-    "/artifact/byRegEx",
-    response_model=List[ArtifactMetadata],
-    summary="Get any artifacts fitting the regular expression (BASELINE).",
-    responses={
-        200: {"description": "Return a list of artifacts."},
-        400: {"description": "Missing or invalid regex."},
-        404: {"description": "No artifact found under this regex."},
-    },
-)
+@router.post("/artifact/byRegEx", response_model=List[ArtifactMetadata])
 async def regex_artifact_search(payload: dict = Body(...)):
-    # Validate presence
     if not payload or "regex" not in payload:
-        raise HTTPException(
-            status_code=400,
-            detail="There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-        )
+        raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
     regex_str = payload["regex"]
 
     if not isinstance(regex_str, str) or not regex_str.strip():
-        raise HTTPException(
-            400,
-            "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-        )
+        raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
-    # Validate syntax only
     try:
         re.compile(regex_str)
     except re.error:
-        raise HTTPException(
-            400,
-            "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-        )
+        raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
-    # Perform safe matching with timeout
     results: List[ArtifactMetadata] = []
+
+    # Initial catastrophic check
+    initial_test = safe_regex_search(regex_str, "a" * 5000)
+    if initial_test is None:
+        raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
     for store in memory._TYPE_TO_STORE.values():
         for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name
-            print("Testing regex:", regex_str, "against", name, "=>", safe_regex_search(regex_str, name))
             test = safe_regex_search(regex_str, name)
             if test is None:
-                raise HTTPException(
-                    400,
-                    "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid",
-                )
-            elif test:
+                raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
+            if test:
                 results.append(record.artifact.metadata)
 
     if not results:
-        raise HTTPException(
-            404,
-            "No artifact found under this regex.",
-        )
+        raise HTTPException(404, "No artifact found under this regex.")
 
     return results
 

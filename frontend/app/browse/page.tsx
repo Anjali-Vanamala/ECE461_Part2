@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { useState } from "react"
-import { Search, Download, Star } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Search, Download, Star, Loader2 } from "lucide-react"
+import { fetchModels, fetchModelRating } from "@/lib/api"
 
 interface BrowseModel {
   id: string
@@ -18,39 +19,55 @@ interface BrowseModel {
   tags: string[]
 }
 
-const models: BrowseModel[] = [
-  {
-    id: "bert-base",
-    name: "BERT Base Uncased",
-    rating: 4.8,
-    downloads: 15420,
-    reproducibility: 1,
-    reviewedness: 0.95,
-    tags: ["NLP", "Transformer", "Production"],
-  },
-  {
-    id: "resnet-50",
-    name: "ResNet-50",
-    rating: 4.6,
-    downloads: 12340,
-    reproducibility: 1,
-    reviewedness: 0.88,
-    tags: ["Vision", "CNN", "Production"],
-  },
-  {
-    id: "gpt2-small",
-    name: "GPT-2 Small",
-    rating: 4.4,
-    downloads: 9876,
-    reproducibility: 0.5,
-    reviewedness: 0.72,
-    tags: ["NLP", "Language Model"],
-  },
-]
-
 export default function BrowsePage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
+  const [models, setModels] = useState<BrowseModel[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function loadModels() {
+      try {
+        setLoading(true)
+        const artifacts = await fetchModels()
+        
+        // Fetch ratings for each model
+        const modelsWithRatings = await Promise.all(
+          artifacts.map(async (artifact: any) => {
+            let rating = null
+            try {
+              rating = await fetchModelRating(artifact.id)
+            } catch (e) {
+              // Rating might not exist, that's okay
+            }
+
+            // Map backend artifact to frontend model format
+            const model: BrowseModel = {
+              id: artifact.id,
+              name: artifact.name,
+              rating: rating?.overall_score ? rating.overall_score / 20 : 0, // Convert 0-100 to 0-5 scale
+              downloads: 0, // Not available in backend
+              reproducibility: rating?.reproducibility_score ? rating.reproducibility_score / 100 : 0,
+              reviewedness: rating?.code_review_score ? rating.code_review_score / 100 : 0,
+              tags: [], // Not available in backend artifact metadata
+            }
+            return model
+          })
+        )
+        
+        setModels(modelsWithRatings)
+        setError(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load models")
+        console.error("Error loading models:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadModels()
+  }, [])
 
   const filteredModels = models.filter((model) => {
     const matchesSearch = model.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -96,9 +113,30 @@ export default function BrowsePage() {
           </div>
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-muted-foreground">Loading models...</span>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <Card className="bg-destructive/10 border-destructive/30 backdrop-blur p-6">
+            <p className="text-destructive">Error: {error}</p>
+          </Card>
+        )}
+
         {/* Models List */}
-        <div className="space-y-3">
-          {filteredModels.map((model) => (
+        {!loading && !error && (
+          <div className="space-y-3">
+            {filteredModels.length === 0 ? (
+              <Card className="bg-card/40 border-border/50 backdrop-blur p-6 text-center">
+                <p className="text-muted-foreground">No models found</p>
+              </Card>
+            ) : (
+              filteredModels.map((model) => (
             <Card
               key={model.id}
               className="bg-card/40 border-border/50 backdrop-blur p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:border-primary/50 transition-all"
@@ -140,8 +178,10 @@ export default function BrowsePage() {
                 </Button>
               </div>
             </Card>
-          ))}
-        </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </main>
   )

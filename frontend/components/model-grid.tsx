@@ -4,7 +4,9 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Download, Star, GitBranch } from "lucide-react"
+import { Download, Star, GitBranch, Loader2 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { fetchModels, fetchModelRating } from "@/lib/api"
 
 interface Model {
   id: string
@@ -19,61 +21,71 @@ interface Model {
   tags: string[]
 }
 
-const mockModels: Model[] = [
-  {
-    id: "bert-base",
-    name: "BERT Base Uncased",
-    version: "v2.1",
-    description: "A transformer-based model pre-trained on English Wikipedia and BookCorpus",
-    rating: 4.8,
-    downloads: 15420,
-    reproducibility: 1,
-    reviewedness: 0.95,
-    treescore: 4.7,
-    tags: ["NLP", "Transformer", "Production"],
-  },
-  {
-    id: "resnet-50",
-    name: "ResNet-50",
-    version: "v1.0",
-    description: "Deep residual network with 50 layers for image classification",
-    rating: 4.6,
-    downloads: 12340,
-    reproducibility: 1,
-    reviewedness: 0.88,
-    treescore: 4.5,
-    tags: ["Vision", "CNN", "Production"],
-  },
-  {
-    id: "gpt2-small",
-    name: "GPT-2 Small",
-    version: "v1.0",
-    description: "A smaller variant of GPT-2 language model for text generation",
-    rating: 4.4,
-    downloads: 9876,
-    reproducibility: 0.5,
-    reviewedness: 0.72,
-    treescore: 4.3,
-    tags: ["NLP", "Language Model", "Fine-tuning"],
-  },
-  {
-    id: "wav2vec",
-    name: "Wav2Vec 2.0",
-    version: "v1.1",
-    description: "Self-supervised learning model for speech recognition and audio tasks",
-    rating: 4.5,
-    downloads: 5432,
-    reproducibility: 1,
-    reviewedness: 0.91,
-    treescore: 4.4,
-    tags: ["Audio", "Speech", "Production"],
-  },
-]
-
 export function ModelGrid() {
+  const [models, setModels] = useState<Model[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadModels() {
+      try {
+        const artifacts = await fetchModels()
+        
+        // Fetch ratings for each model and map to frontend format
+        const modelsWithRatings = await Promise.all(
+          artifacts.slice(0, 6).map(async (artifact: any) => { // Limit to 6 for grid
+            let rating = null
+            try {
+              rating = await fetchModelRating(artifact.id)
+            } catch (e) {
+              // Rating might not exist, that's okay
+            }
+
+            return {
+              id: artifact.id,
+              name: artifact.name,
+              version: "v1.0", // Not available in backend
+              description: "", // Not available in artifact metadata
+              rating: rating?.overall_score ? rating.overall_score / 20 : 0,
+              downloads: 0,
+              reproducibility: rating?.reproducibility_score ? rating.reproducibility_score / 100 : 0,
+              reviewedness: rating?.code_review_score ? rating.code_review_score / 100 : 0,
+              treescore: rating?.treescore ? rating.treescore / 20 : 0,
+              tags: [],
+            } as Model
+          })
+        )
+        
+        setModels(modelsWithRatings)
+      } catch (err) {
+        console.error("Error loading models:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadModels()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">Loading models...</span>
+      </div>
+    )
+  }
+
+  if (models.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">No models available</p>
+      </div>
+    )
+  }
+
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-      {mockModels.map((model) => (
+      {models.map((model) => (
         <Card
           key={model.id}
           className="flex flex-col overflow-hidden border-border/50 bg-card/40 backdrop-blur hover:border-primary/50 hover:shadow-lg transition-all duration-300"

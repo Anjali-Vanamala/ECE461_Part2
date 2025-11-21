@@ -109,12 +109,12 @@ export default function HealthPage() {
               <Activity className="h-6 w-6 text-chart-3" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">System Status</p>
-              <p className="text-2xl font-bold text-foreground">All Systems Operational</p>
+              <h2 className="text-sm text-muted-foreground">System Status</h2>
+              <h3 className="text-2xl font-bold text-foreground">All Systems Operational</h3>
             </div>
           </div>
         </Card>
-
+        <h2 className="text-xl font-semibold text-foreground mb-4">Component Metrics</h2>
         {/* Metrics Grid */}
         <div className="mb-8 grid gap-4 md:grid-cols-2">
           {metrics.map((metric) => (

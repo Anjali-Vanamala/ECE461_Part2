@@ -69,6 +69,8 @@ export default function BrowsePage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              id="search-models"
+              aria-label="Search models"
               placeholder="Search models..."
               className="pl-10"
               value={searchQuery}
@@ -103,7 +105,7 @@ export default function BrowsePage() {
             >
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-lg font-semibold text-foreground">{model.name}</h3>
+                  <h2 className="text-lg font-semibold text-foreground">{model.name}</h2>
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-chart-2 text-chart-2" />
                     <span className="text-sm font-medium">{model.rating}</span>
@@ -128,10 +130,13 @@ export default function BrowsePage() {
 
               <div className="flex gap-2 md:ml-auto">
                 <Button asChild variant="outline" size="sm">
-                  <Link href={`/models/${model.id}`}>Details</Link>
+                  <Link href={`/models/${model.id}`}
+                        aria-label={`View details for ${model.name}`}
+                        >Details</Link>
                 </Button>
                 <Button asChild size="sm">
-                  <Link href={`/models/${model.id}/download`}>Download</Link>
+                  <Link href={`/models/${model.id}/download`}
+                        aria-label={`Download ${model.name}`}>Download</Link>
                 </Button>
               </div>
             </Card>

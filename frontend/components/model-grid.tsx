@@ -128,10 +128,20 @@ export function ModelGrid() {
           <div className="border-t border-border/50 bg-card/80 p-4">
             <div className="flex gap-2">
               <Button asChild variant="outline" size="sm" className="flex-1 bg-transparent">
-                <Link href={`/models/${model.id}`}>Details</Link>
+                <Link 
+                  href={`/models/${model.id}`} 
+                  aria-label={`View details for ${model.name}`}
+                >
+                  Details
+                </Link>
               </Button>
               <Button asChild size="sm" className="flex-1">
-                <Link href={`/models/${model.id}/download`}>Download</Link>
+                <Link 
+                  href={`/models/${model.id}/download`} 
+                  aria-label={`Download ${model.name}`}
+                >
+                  Download
+                </Link>
               </Button>
             </div>
           </div>

@@ -25,7 +25,7 @@ def _derive_name(url: str) -> str:
     return stripped.split("/")[-1]
 
 
-router = APIRouter(tags=["artifacts"])
+
 
 
 def calibrate_regex_timeout() -> float:
@@ -78,6 +78,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
     if initial_test is None:
         raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
+    # Works for both memory and DynamoDB storage
     for store in memory._TYPE_TO_STORE.values():
         for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name

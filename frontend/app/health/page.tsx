@@ -152,7 +152,7 @@ export default function HealthPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3">
                     {getStatusIcon(metric.status)}
-                    <h3 className="font-semibold text-foreground">{metric.name}</h3>
+                    <h2 className="font-semibold text-foreground">{metric.name}</h2>
                   </div>
                   <p className="mt-2 text-2xl font-bold text-foreground">{metric.value}</p>
                   <p className="mt-1 text-xs text-muted-foreground">Checked {metric.lastChecked}</p>

@@ -1182,3 +1182,198 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
 
             assert result.status_code == 200
             assert mock_logger.info.called
+
+
+# =============================================================================
+# Health Endpoint Tests
+# =============================================================================
+
+class Test_Health_Endpoints:
+    """Test suite for health check endpoints using FastAPI TestClient."""
+
+    def test_health_endpoint_returns_ok(self):
+        """Test GET /health returns 200 with correct structure."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert "uptime_seconds" in data
+        assert "request_summary" in data
+        assert "version" in data
+        assert "components" in data
+
+    def test_health_endpoint_request_summary_structure(self):
+        """Test that request_summary has the expected fields."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        data = response.json()
+        summary = data["request_summary"]
+
+        assert "window_start" in summary
+        assert "window_end" in summary
+        assert "total_requests" in summary
+        assert "per_route" in summary
+        assert "per_artifact_type" in summary
+        assert "unique_clients" in summary
+
+    def test_health_components_endpoint(self):
+        """Test GET /health/components returns component details."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/health/components")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "components" in data
+        assert "generated_at" in data
+        assert "window_minutes" in data
+        assert len(data["components"]) > 0
+
+    def test_health_components_with_timeline(self):
+        """Test GET /health/components with include_timeline=true."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/health/components?include_timeline=true")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "components" in data
+        # Timeline should be present (may be empty if no requests)
+        assert "timeline" in data["components"][0]
+
+    def test_health_components_custom_window(self):
+        """Test GET /health/components with custom window_minutes."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/health/components?window_minutes=30")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["window_minutes"] == 30
+
+    def test_health_component_has_metrics(self):
+        """Test that health components include metrics."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/health/components")
+
+        assert response.status_code == 200
+        data = response.json()
+        component = data["components"][0]
+
+        assert "metrics" in component
+        assert "requests_per_minute" in component["metrics"]
+        assert "uptime_hours" in component["metrics"]
+
+
+# =============================================================================
+# Metrics Tracker Tests
+# =============================================================================
+
+class Test_Metrics_Tracker:
+    """Test suite for the metrics tracker service."""
+
+    def test_get_uptime_seconds(self):
+        """Test that uptime returns a positive integer."""
+        from backend.services.metrics_tracker import get_uptime_seconds
+
+        uptime = get_uptime_seconds()
+        assert isinstance(uptime, int)
+        assert uptime >= 0
+
+    def test_record_request(self):
+        """Test recording a request."""
+        from backend.services.metrics_tracker import (
+            get_request_summary,
+            record_request,
+        )
+
+        # Record a test request
+        record_request("GET", "/test-endpoint", 200, "127.0.0.1", None)
+
+        summary = get_request_summary(60)
+        assert summary["total_requests"] >= 1
+
+    def test_get_request_summary_structure(self):
+        """Test that request summary has correct structure."""
+        from backend.services.metrics_tracker import get_request_summary
+
+        summary = get_request_summary(60)
+
+        assert "window_start" in summary
+        assert "window_end" in summary
+        assert "total_requests" in summary
+        assert "per_route" in summary
+        assert "per_artifact_type" in summary
+        assert "unique_clients" in summary
+
+    def test_get_requests_per_minute(self):
+        """Test requests per minute calculation."""
+        from backend.services.metrics_tracker import get_requests_per_minute
+
+        rpm = get_requests_per_minute(60)
+        assert isinstance(rpm, float)
+        assert rpm >= 0
+
+    def test_get_timeline(self):
+        """Test timeline generation."""
+        from backend.services.metrics_tracker import get_timeline
+
+        timeline = get_timeline(60, 10)
+        assert isinstance(timeline, list)
+
+        # If there are entries, check structure
+        if timeline:
+            entry = timeline[0]
+            assert "bucket" in entry
+            assert "value" in entry
+            assert "unit" in entry
+
+    def test_record_request_tracks_client_ip(self):
+        """Test that client IPs are tracked."""
+        from backend.services.metrics_tracker import (
+            get_request_summary,
+            record_request,
+        )
+
+        record_request("GET", "/test", 200, "192.168.1.100", None)
+
+        summary = get_request_summary(60)
+        assert summary["unique_clients"] >= 1
+
+    def test_record_request_tracks_routes(self):
+        """Test that routes are tracked in per_route."""
+        from backend.services.metrics_tracker import (
+            get_request_summary,
+            record_request,
+        )
+
+        record_request("GET", "/unique-test-route-12345", 200, None, None)
+
+        summary = get_request_summary(60)
+        # The route should appear in per_route
+        assert isinstance(summary["per_route"], dict)

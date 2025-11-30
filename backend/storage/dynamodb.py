@@ -420,6 +420,23 @@ def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
         return None
 
 
+def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
+    """Get full model record with relationships (dataset_id, code_id)."""
+    try:
+        response = table.get_item(Key={"artifact_id": artifact_id})
+        if "Item" not in response:
+            return None
+
+        item = response["Item"]
+        if item.get("artifact_type") != ArtifactType.MODEL.value:
+            return None
+
+        return _item_to_record(item)
+    except ClientError as e:
+        print(f"[DynamoDB] Error getting model record: {e}")
+        return None
+
+
 def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
     """Find a dataset by normalized name."""
     normalized = _normalized(name) or ""

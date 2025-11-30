@@ -1307,10 +1307,8 @@ class Test_Metrics_Tracker:
 
     def test_record_request(self):
         """Test recording a request."""
-        from backend.services.metrics_tracker import (
-            get_request_summary,
-            record_request,
-        )
+        from backend.services.metrics_tracker import (get_request_summary,
+                                                      record_request)
 
         # Record a test request
         record_request("GET", "/test-endpoint", 200, "127.0.0.1", None)
@@ -1355,10 +1353,8 @@ class Test_Metrics_Tracker:
 
     def test_record_request_tracks_client_ip(self):
         """Test that client IPs are tracked."""
-        from backend.services.metrics_tracker import (
-            get_request_summary,
-            record_request,
-        )
+        from backend.services.metrics_tracker import (get_request_summary,
+                                                      record_request)
 
         record_request("GET", "/test", 200, "192.168.1.100", None)
 
@@ -1367,10 +1363,8 @@ class Test_Metrics_Tracker:
 
     def test_record_request_tracks_routes(self):
         """Test that routes are tracked in per_route."""
-        from backend.services.metrics_tracker import (
-            get_request_summary,
-            record_request,
-        )
+        from backend.services.metrics_tracker import (get_request_summary,
+                                                      record_request)
 
         record_request("GET", "/unique-test-route-12345", 200, None, None)
 

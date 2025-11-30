@@ -13,6 +13,8 @@ from typing import MutableMapping, Optional, cast
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from backend.services.metrics_tracker import record_request
+
 try:
     import boto3  # type: ignore
 except Exception:
@@ -48,6 +50,18 @@ class LoggingMiddleware:
         start = time.perf_counter()
         status_holder: dict[str, Optional[int]] = {"status": None}
 
+        # Extract client IP
+        client_ip = None
+        if "client" in scope and scope["client"]:
+            client_ip = scope["client"][0] if isinstance(scope["client"], tuple) else None
+
+        # Extract artifact type from path if applicable
+        artifact_type = None
+        if "/artifacts/" in path:
+            parts = path.split("/artifacts/")
+            if len(parts) > 1:
+                artifact_type = parts[1].split("/")[0]
+
         # 🔥 LOG IMMEDIATELY WHEN REQUEST ARRIVES
         logger.info(f"[ARRIVED] {method} {path}")
 
@@ -81,6 +95,10 @@ class LoggingMiddleware:
             await self.app(scope, receive_wrapper, send_wrapper)
 
             status = status_holder["status"] or 0
+
+            # Record request for metrics (skip health endpoints to avoid recursion)
+            if not path.startswith("/health"):
+                record_request(method, path, status, client_ip, artifact_type)
 
             # Log again after handling (old behavior preserved)
             try:

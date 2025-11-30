@@ -102,7 +102,9 @@ def save_artifact(
     # Add model-specific fields
     if artifact_type == ArtifactType.MODEL:
         if rating is not None:
-            item["rating"] = _serialize_rating(rating)
+            rating_dict = _serialize_rating(rating)
+            if rating_dict is not None:
+                item["rating"] = rating_dict
         if dataset_name is not None:
             item["dataset_name"] = dataset_name
             item["dataset_name_normalized"] = _normalized(dataset_name) or ""
@@ -431,7 +433,9 @@ def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
         )
         items = response.get("Items", [])
         if items:
-            return _item_to_record(items[0])
+            record = _item_to_record(items[0])
+            if isinstance(record, DatasetRecord):
+                return record
         return None
     except ClientError as e:
         print(f"[DynamoDB] Error finding dataset by name: {e}")
@@ -451,7 +455,9 @@ def find_code_by_name(name: str) -> Optional[CodeRecord]:
         )
         items = response.get("Items", [])
         if items:
-            return _item_to_record(items[0])
+            record = _item_to_record(items[0])
+            if isinstance(record, CodeRecord):
+                return record
         return None
     except ClientError as e:
         print(f"[DynamoDB] Error finding code by name: {e}")

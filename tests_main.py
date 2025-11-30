@@ -1,9 +1,9 @@
 # import parse_categories
 import json
+import sys
 from datetime import datetime, timedelta
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import MagicMock, mock_open, patch
-import sys
 
 import requests as rq
 
@@ -1204,6 +1204,7 @@ class Test_Health_Endpoints:
         import os
         os.environ.setdefault('USE_DYNAMODB', '0')
         from fastapi.testclient import TestClient
+
         from backend.app import app
 
         client = TestClient(app)
@@ -1221,6 +1222,7 @@ class Test_Health_Endpoints:
         import os
         os.environ.setdefault('USE_DYNAMODB', '0')
         from fastapi.testclient import TestClient
+
         from backend.app import app
 
         client = TestClient(app)
@@ -1237,6 +1239,7 @@ class Test_Health_Endpoints:
         import os
         os.environ.setdefault('USE_DYNAMODB', '0')
         from fastapi.testclient import TestClient
+
         from backend.app import app
 
         client = TestClient(app)
@@ -1297,7 +1300,8 @@ class Test_Artifact_Models:
 
     def test_artifact_creation(self):
         """Test Artifact model creation"""
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
 
         metadata = ArtifactMetadata(name="test", id="id-123", type=ArtifactType.MODEL)
         data = ArtifactData(url="https://example.com")
@@ -1340,6 +1344,7 @@ class Test_Storage_Memory:
     def setup_method(self):
         """Ensure we use memory storage, not DynamoDB - set before any imports"""
         import os
+
         # Set before any storage imports happen
         if 'USE_DYNAMODB' not in os.environ:
             os.environ['USE_DYNAMODB'] = '0'
@@ -1363,7 +1368,8 @@ class Test_Storage_Memory:
 
     def test_save_and_get_artifact_dataset(self):
         """Test saving and retrieving a dataset artifact"""
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         # Reset storage
@@ -1384,7 +1390,8 @@ class Test_Storage_Memory:
 
     def test_save_and_get_artifact_code(self):
         """Test saving and retrieving a code artifact"""
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         # Reset storage
@@ -1405,7 +1412,8 @@ class Test_Storage_Memory:
 
     def test_artifact_exists(self):
         """Test artifact_exists function"""
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         # Reset storage
@@ -1423,7 +1431,8 @@ class Test_Storage_Memory:
 
     def test_list_metadata(self):
         """Test list_metadata function"""
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         # Reset storage
@@ -1443,7 +1452,8 @@ class Test_Storage_Memory:
 
     def test_reset_storage(self):
         """Test reset function"""
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         # Create and save artifact
@@ -1463,7 +1473,8 @@ class Test_Storage_Memory:
 
     def test_query_artifacts(self):
         """Test query_artifacts function"""
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactQuery, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactQuery, ArtifactType)
         from backend.storage import memory
 
         # Reset storage
@@ -1519,6 +1530,7 @@ class Test_App_Initialization:
         import os
         os.environ.setdefault('USE_DYNAMODB', '0')
         from fastapi.testclient import TestClient
+
         from backend.app import app
 
         client = TestClient(app)

@@ -4,5 +4,4 @@ import os
 if os.getenv("USE_DYNAMODB", "0") == "1":
     from backend.storage import dynamodb as memory
 else:
-    from backend.storage import memory
-
+    from backend.storage import memory  # noqa: F401

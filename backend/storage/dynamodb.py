@@ -58,7 +58,7 @@ def _item_to_record(item: Dict) -> CodeRecord | DatasetRecord | ModelRecord:
     """Convert DynamoDB item to appropriate Record type."""
     artifact = _deserialize_artifact(item["artifact"])
     artifact_type = ArtifactType(item["artifact_type"])
-    
+
     if artifact_type == ArtifactType.MODEL:
         return ModelRecord(
             artifact=artifact,
@@ -88,7 +88,7 @@ def save_artifact(
     """Insert or update an artifact entry in DynamoDB."""
     artifact_id = artifact.metadata.id
     artifact_type = artifact.metadata.type
-    
+
     # Prepare base item
     item = {
         "artifact_id": artifact_id,
@@ -98,7 +98,7 @@ def save_artifact(
         "name_normalized": _normalized(artifact.metadata.name) or "",
         "url": artifact.data.url,
     }
-    
+
     # Add model-specific fields
     if artifact_type == ArtifactType.MODEL:
         if rating is not None:
@@ -113,24 +113,24 @@ def save_artifact(
             item["code_name_normalized"] = _normalized(code_name) or ""
         if code_url is not None:
             item["code_url"] = code_url
-    
+
     # Update dataset/code IDs for models that reference this
     if artifact_type == ArtifactType.DATASET:
         _update_models_with_dataset(artifact_id, artifact.metadata.name, artifact.data.url)
     elif artifact_type == ArtifactType.CODE:
         _update_models_with_code(artifact_id, artifact.metadata.name, artifact.data.url)
-    
+
     try:
         table.put_item(Item=item)
         print(f"[DynamoDB] Saved artifact: {artifact_type.value}:{artifact_id}")
     except ClientError as e:
         print(f"[DynamoDB] Error saving artifact: {e}")
         raise
-    
+
     # Try to link dataset/code by name if IDs not set (AFTER item is saved)
     if artifact_type == ArtifactType.MODEL:
         _link_dataset_code_by_name(artifact_id, dataset_name, code_name)
-    
+
     return artifact
 
 
@@ -214,11 +214,11 @@ def get_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> Option
         response = table.get_item(Key={"artifact_id": artifact_id})
         if "Item" not in response:
             return None
-        
+
         item = response["Item"]
         if item.get("artifact_type") != artifact_type.value:
             return None
-        
+
         return _deserialize_artifact(item["artifact"])
     except ClientError as e:
         print(f"[DynamoDB] Error getting artifact: {e}")
@@ -231,13 +231,13 @@ def delete_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> boo
     artifact = get_artifact(artifact_type, artifact_id)
     if not artifact:
         return False
-    
+
     # If deleting dataset/code, unlink from models
     if artifact_type == ArtifactType.DATASET:
         _unlink_dataset_from_models(artifact_id)
     elif artifact_type == ArtifactType.CODE:
         _unlink_code_from_models(artifact_id)
-    
+
     try:
         table.delete_item(Key={"artifact_id": artifact_id})
         print(f"[DynamoDB] Deleted artifact: {artifact_type.value}:{artifact_id}")
@@ -307,11 +307,11 @@ def list_metadata(artifact_type: ArtifactType) -> List[ArtifactMetadata]:
 def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
     """Query artifacts by name and type."""
     results: Dict[str, ArtifactMetadata] = {}
-    
+
     for query in queries:
         types = query.types or [ArtifactType.MODEL, ArtifactType.DATASET, ArtifactType.CODE]
         query_name_normalized = _normalized(query.name) if query.name != "*" else None
-        
+
         for artifact_type in types:
             try:
                 # Build filter expression
@@ -324,7 +324,7 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
                 else:
                     filter_expr = "artifact_type = :type"
                     expr_values = {":type": artifact_type.value}
-                
+
                 # Scan with pagination
                 response = table.scan(
                     FilterExpression=filter_expr,
@@ -346,7 +346,7 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
                     )
             except ClientError as e:
                 print(f"[DynamoDB] Error querying artifacts: {e}")
-    
+
     return list(results.values())
 
 
@@ -365,7 +365,7 @@ def reset() -> None:
                     ProjectionExpression="artifact_id",
                     ExclusiveStartKey=response["LastEvaluatedKey"],
                 )
-        print(f"[DynamoDB] Reset: deleted all artifacts")
+        print("[DynamoDB] Reset: deleted all artifacts")
     except ClientError as e:
         print(f"[DynamoDB] Error resetting table: {e}")
 
@@ -407,11 +407,11 @@ def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
         response = table.get_item(Key={"artifact_id": artifact_id})
         if "Item" not in response:
             return None
-        
+
         item = response["Item"]
         if item.get("artifact_type") != ArtifactType.MODEL.value:
             return None
-        
+
         return _deserialize_rating(item.get("rating"))
     except ClientError as e:
         print(f"[DynamoDB] Error getting model rating: {e}")
@@ -478,7 +478,7 @@ class _StoreDict:
     """Dict-like wrapper for DynamoDB storage to match memory._TYPE_TO_STORE interface."""
     def __init__(self, artifact_type: ArtifactType):
         self.artifact_type = artifact_type
-    
+
     def values(self):
         """Return records for this artifact type."""
         try:
@@ -505,4 +505,3 @@ _TYPE_TO_STORE = {
     ArtifactType.DATASET: _StoreDict(ArtifactType.DATASET),
     ArtifactType.CODE: _StoreDict(ArtifactType.CODE),
 }
-

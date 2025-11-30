@@ -25,9 +25,6 @@ def _derive_name(url: str) -> str:
     return stripped.split("/")[-1]
 
 
-
-
-
 def calibrate_regex_timeout() -> float:
     """
     Measures how long regex takes in this platform for a safe case.

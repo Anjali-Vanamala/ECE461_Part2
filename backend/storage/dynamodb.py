@@ -141,7 +141,7 @@ def _link_dataset_code_by_name(artifact_id: str, dataset_name: Optional[str], co
         if dataset_record:
             _update_model_field(artifact_id, "dataset_id", dataset_record.artifact.metadata.id)
             _update_model_field(artifact_id, "dataset_url", dataset_record.artifact.data.url)
-    
+
     if code_name:
         code_record = find_code_by_name(code_name)
         if code_record:

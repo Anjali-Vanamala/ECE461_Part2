@@ -113,9 +113,6 @@ def save_artifact(
             item["code_name_normalized"] = _normalized(code_name) or ""
         if code_url is not None:
             item["code_url"] = code_url
-        
-        # Try to link dataset/code by name if IDs not set
-        _link_dataset_code_by_name(artifact_id, dataset_name, code_name)
     
     # Update dataset/code IDs for models that reference this
     if artifact_type == ArtifactType.DATASET:
@@ -129,6 +126,10 @@ def save_artifact(
     except ClientError as e:
         print(f"[DynamoDB] Error saving artifact: {e}")
         raise
+    
+    # Try to link dataset/code by name if IDs not set (AFTER item is saved)
+    if artifact_type == ArtifactType.MODEL:
+        _link_dataset_code_by_name(artifact_id, dataset_name, code_name)
     
     return artifact
 
@@ -155,7 +156,7 @@ def _update_model_field(artifact_id: str, field_name: str, value: Optional[str])
         table.update_item(
             Key={"artifact_id": artifact_id},
             UpdateExpression=update_expr,
-            ConditionExpression="attribute_exists(artifact_id) AND artifact_type = :type",
+            ConditionExpression="artifact_type = :type",
             ExpressionAttributeValues={":val": value, ":type": ArtifactType.MODEL.value},
         )
     except ClientError as e:

@@ -308,10 +308,10 @@ async def get_model_lineage(
     model_record = memory.get_model_record(artifact_id)
     if not model_record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
-    
+
     nodes: List[ArtifactLineageNode] = []
     edges: List[ArtifactLineageEdge] = []
-    
+
     # Add model node
     model_node = ArtifactLineageNode(
         artifact_id=model_record.artifact.metadata.id,
@@ -320,7 +320,7 @@ async def get_model_lineage(
         metadata={"type": "model"},
     )
     nodes.append(model_node)
-    
+
     # Add dataset node and edge if dataset exists
     if model_record.dataset_id:
         dataset = memory.get_artifact(ArtifactType.DATASET, model_record.dataset_id)
@@ -332,7 +332,7 @@ async def get_model_lineage(
                 metadata={"type": "dataset"},
             )
             nodes.append(dataset_node)
-            
+
             # Edge: dataset -> model (dataset is upstream dependency)
             dataset_edge = ArtifactLineageEdge(
                 from_node_artifact_id=dataset.metadata.id,
@@ -340,7 +340,7 @@ async def get_model_lineage(
                 relationship="training_dataset",
             )
             edges.append(dataset_edge)
-    
+
     # Add code node and edge if code exists
     if model_record.code_id:
         code = memory.get_artifact(ArtifactType.CODE, model_record.code_id)
@@ -352,7 +352,7 @@ async def get_model_lineage(
                 metadata={"type": "code"},
             )
             nodes.append(code_node)
-            
+
             # Edge: code -> model (code is upstream dependency)
             code_edge = ArtifactLineageEdge(
                 from_node_artifact_id=code.metadata.id,
@@ -360,7 +360,7 @@ async def get_model_lineage(
                 relationship="implemented_with",
             )
             edges.append(code_edge)
-    
+
     return ArtifactLineageGraph(nodes=nodes, edges=edges)
 
 

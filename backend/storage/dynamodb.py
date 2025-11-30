@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, cast
 
 import boto3
 from botocore.exceptions import ClientError
@@ -431,7 +431,8 @@ def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
         if item.get("artifact_type") != ArtifactType.MODEL.value:
             return None
 
-        return _item_to_record(item)
+        # Type assertion: we've already verified it's a MODEL, so _item_to_record will return ModelRecord
+        return cast(ModelRecord, _item_to_record(item))
     except ClientError as e:
         print(f"[DynamoDB] Error getting model record: {e}")
         return None

@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timedelta
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import MagicMock, mock_open, patch
+import sys
 
 import requests as rq
 
@@ -1182,3 +1183,348 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
 
             assert result.status_code == 200
             assert mock_logger.info.called
+
+
+# ============================================================================
+# Backend API Tests
+# ============================================================================
+
+# Mock boto3 before any backend imports
+_mock_boto3 = MagicMock()
+sys.modules['boto3'] = _mock_boto3
+sys.modules['botocore'] = MagicMock()
+sys.modules['botocore.exceptions'] = MagicMock()
+
+
+class Test_Health_Endpoints:
+    """Tests for backend/api/routes/health.py"""
+
+    def test_health_summary_endpoint(self):
+        """Test GET /health endpoint"""
+        import os
+        os.environ.setdefault('USE_DYNAMODB', '0')
+        from fastapi.testclient import TestClient
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert "checked_at" in data
+        assert "components" in data
+        assert len(data["components"]) > 0
+
+    def test_health_components_endpoint(self):
+        """Test GET /health/components endpoint"""
+        import os
+        os.environ.setdefault('USE_DYNAMODB', '0')
+        from fastapi.testclient import TestClient
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/health/components")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "components" in data
+        assert "generated_at" in data
+        assert len(data["components"]) > 0
+
+    def test_health_components_with_timeline(self):
+        """Test GET /health/components with include_timeline parameter"""
+        import os
+        os.environ.setdefault('USE_DYNAMODB', '0')
+        from fastapi.testclient import TestClient
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/health/components?include_timeline=true")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "components" in data
+        if data["components"]:
+            assert "timeline" in data["components"][0]
+
+
+class Test_Artifact_Models:
+    """Tests for backend/models/artifact.py"""
+
+    def test_artifact_registration_creation(self):
+        """Test ArtifactRegistration model creation"""
+        from backend.models import ArtifactRegistration
+
+        reg = ArtifactRegistration(name="test-model", url="https://example.com/model")
+        assert reg.name == "test-model"
+        assert reg.url == "https://example.com/model"
+        assert reg.download_url is None
+
+    def test_artifact_registration_with_download_url(self):
+        """Test ArtifactRegistration with download_url"""
+        from backend.models import ArtifactRegistration
+
+        reg = ArtifactRegistration(
+            name="test", url="https://example.com", download_url="https://example.com/download"
+        )
+        assert reg.download_url == "https://example.com/download"
+
+    def test_artifact_type_enum(self):
+        """Test ArtifactType enum values"""
+        from backend.models import ArtifactType
+
+        assert ArtifactType.MODEL == "model"
+        assert ArtifactType.DATASET == "dataset"
+        assert ArtifactType.CODE == "code"
+
+    def test_artifact_metadata_creation(self):
+        """Test ArtifactMetadata model creation"""
+        from backend.models import ArtifactMetadata, ArtifactType
+
+        metadata = ArtifactMetadata(name="test-artifact", id="test-id-123", type=ArtifactType.MODEL)
+        assert metadata.name == "test-artifact"
+        assert metadata.id == "test-id-123"
+        assert metadata.type == ArtifactType.MODEL
+
+    def test_artifact_data_creation(self):
+        """Test ArtifactData model creation"""
+        from backend.models import ArtifactData
+
+        data = ArtifactData(url="https://example.com")
+        assert data.url == "https://example.com"
+        assert data.download_url is None
+
+    def test_artifact_creation(self):
+        """Test Artifact model creation"""
+        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+
+        metadata = ArtifactMetadata(name="test", id="id-123", type=ArtifactType.MODEL)
+        data = ArtifactData(url="https://example.com")
+        artifact = Artifact(metadata=metadata, data=data)
+
+        assert artifact.metadata.name == "test"
+        assert artifact.data.url == "https://example.com"
+
+    def test_artifact_query_creation(self):
+        """Test ArtifactQuery model creation"""
+        from backend.models import ArtifactQuery, ArtifactType
+
+        query = ArtifactQuery(name="test-query")
+        assert query.name == "test-query"
+        assert query.types is None
+
+        query_with_types = ArtifactQuery(name="test", types=[ArtifactType.MODEL, ArtifactType.DATASET])
+        assert len(query_with_types.types) == 2
+
+    def test_artifact_cost_entry_creation(self):
+        """Test ArtifactCostEntry model creation"""
+        from backend.models import ArtifactCostEntry
+
+        entry = ArtifactCostEntry(standalone_cost=10.5, total_cost=15.0)
+        assert entry.standalone_cost == 10.5
+        assert entry.total_cost == 15.0
+
+    def test_artifact_cost_creation(self):
+        """Test ArtifactCost model creation"""
+        from backend.models import ArtifactCost, ArtifactCostEntry
+
+        cost = ArtifactCost({"id-1": ArtifactCostEntry(standalone_cost=10.0, total_cost=10.0)})
+        assert "id-1" in cost.root
+        assert cost.root["id-1"].total_cost == 10.0
+
+
+class Test_Storage_Memory:
+    """Tests for backend/storage/memory.py"""
+
+    def setup_method(self):
+        """Ensure we use memory storage, not DynamoDB - set before any imports"""
+        import os
+        # Set before any storage imports happen
+        if 'USE_DYNAMODB' not in os.environ:
+            os.environ['USE_DYNAMODB'] = '0'
+        elif os.environ.get('USE_DYNAMODB') != '0':
+            # Force reload if it was set to something else
+            os.environ['USE_DYNAMODB'] = '0'
+            import importlib
+            if 'backend.storage' in sys.modules:
+                importlib.reload(sys.modules['backend.storage'])
+
+    def test_generate_artifact_id(self):
+        """Test generate_artifact_id function"""
+        from backend.storage import memory
+
+        id1 = memory.generate_artifact_id()
+        id2 = memory.generate_artifact_id()
+
+        assert id1 != id2
+        assert len(id1) > 0
+        assert isinstance(id1, str)
+
+    def test_save_and_get_artifact_dataset(self):
+        """Test saving and retrieving a dataset artifact"""
+        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.storage import memory
+
+        # Reset storage
+        memory.reset()
+
+        # Create and save artifact
+        metadata = ArtifactMetadata(name="test-dataset", id="ds-1", type=ArtifactType.DATASET)
+        data = ArtifactData(url="https://example.com/dataset")
+        artifact = Artifact(metadata=metadata, data=data)
+
+        saved = memory.save_artifact(artifact)
+        assert saved.metadata.id == "ds-1"
+
+        # Retrieve artifact
+        retrieved = memory.get_artifact(ArtifactType.DATASET, "ds-1")
+        assert retrieved is not None
+        assert retrieved.metadata.name == "test-dataset"
+
+    def test_save_and_get_artifact_code(self):
+        """Test saving and retrieving a code artifact"""
+        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.storage import memory
+
+        # Reset storage
+        memory.reset()
+
+        # Create and save artifact
+        metadata = ArtifactMetadata(name="test-code", id="code-1", type=ArtifactType.CODE)
+        data = ArtifactData(url="https://github.com/example/repo")
+        artifact = Artifact(metadata=metadata, data=data)
+
+        saved = memory.save_artifact(artifact)
+        assert saved.metadata.id == "code-1"
+
+        # Retrieve artifact
+        retrieved = memory.get_artifact(ArtifactType.CODE, "code-1")
+        assert retrieved is not None
+        assert retrieved.metadata.name == "test-code"
+
+    def test_artifact_exists(self):
+        """Test artifact_exists function"""
+        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.storage import memory
+
+        # Reset storage
+        memory.reset()
+
+        # Create and save artifact
+        metadata = ArtifactMetadata(name="test", id="test-1", type=ArtifactType.DATASET)
+        data = ArtifactData(url="https://example.com/test")
+        artifact = Artifact(metadata=metadata, data=data)
+        memory.save_artifact(artifact)
+
+        # Check existence
+        assert memory.artifact_exists(ArtifactType.DATASET, "https://example.com/test") is True
+        assert memory.artifact_exists(ArtifactType.DATASET, "https://example.com/other") is False
+
+    def test_list_metadata(self):
+        """Test list_metadata function"""
+        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.storage import memory
+
+        # Reset storage
+        memory.reset()
+
+        # Create and save artifacts
+        for i in range(3):
+            metadata = ArtifactMetadata(name=f"test-{i}", id=f"id-{i}", type=ArtifactType.DATASET)
+            data = ArtifactData(url=f"https://example.com/{i}")
+            artifact = Artifact(metadata=metadata, data=data)
+            memory.save_artifact(artifact)
+
+        # List metadata
+        metadata_list = memory.list_metadata(ArtifactType.DATASET)
+        assert len(metadata_list) == 3
+        assert all(m.type == ArtifactType.DATASET for m in metadata_list)
+
+    def test_reset_storage(self):
+        """Test reset function"""
+        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.storage import memory
+
+        # Create and save artifact
+        metadata = ArtifactMetadata(name="test", id="test-1", type=ArtifactType.DATASET)
+        data = ArtifactData(url="https://example.com/test")
+        artifact = Artifact(metadata=metadata, data=data)
+        memory.save_artifact(artifact)
+
+        # Verify it exists
+        assert memory.get_artifact(ArtifactType.DATASET, "test-1") is not None
+
+        # Reset
+        memory.reset()
+
+        # Verify it's gone
+        assert memory.get_artifact(ArtifactType.DATASET, "test-1") is None
+
+    def test_query_artifacts(self):
+        """Test query_artifacts function"""
+        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactQuery, ArtifactType
+        from backend.storage import memory
+
+        # Reset storage
+        memory.reset()
+
+        # Create and save artifacts (models need additional params, but can be None)
+        metadata1 = ArtifactMetadata(name="model-1", id="m1", type=ArtifactType.MODEL)
+        data1 = ArtifactData(url="https://example.com/m1")
+        memory.save_artifact(Artifact(metadata=metadata1, data=data1), rating=None)
+
+        metadata2 = ArtifactMetadata(name="dataset-1", id="d1", type=ArtifactType.DATASET)
+        data2 = ArtifactData(url="https://example.com/d1")
+        memory.save_artifact(Artifact(metadata=metadata2, data=data2))
+
+        # Query by name - query for dataset instead since model query might need more setup
+        query = ArtifactQuery(name="dataset-1")
+        results = memory.query_artifacts([query])
+        assert len(results) >= 1
+        assert any(r.name == "dataset-1" for r in results)
+
+        # Query with wildcard
+        query_all = ArtifactQuery(name="*")
+        results_all = memory.query_artifacts([query_all])
+        assert len(results_all) >= 2
+
+
+class Test_App_Initialization:
+    """Tests for backend/app.py"""
+
+    def test_app_creation(self):
+        """Test that the FastAPI app is created correctly"""
+        import os
+        os.environ.setdefault('USE_DYNAMODB', '0')
+        from backend.app import app
+
+        assert app is not None
+        assert app.title == "Model Registry API"
+        assert app.version == "0.1.0"
+
+    def test_app_routes_registered(self):
+        """Test that routes are registered"""
+        import os
+        os.environ.setdefault('USE_DYNAMODB', '0')
+        from backend.app import app
+
+        # Check that routes are registered
+        route_paths = [route.path for route in app.routes]
+        assert "/health" in route_paths or any("/health" in str(route) for route in app.routes)
+        assert "/" in route_paths
+
+    def test_root_endpoint(self):
+        """Test root endpoint"""
+        import os
+        os.environ.setdefault('USE_DYNAMODB', '0')
+        from fastapi.testclient import TestClient
+        from backend.app import app
+
+        client = TestClient(app)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+        assert data["message"] == "Hello, World!"

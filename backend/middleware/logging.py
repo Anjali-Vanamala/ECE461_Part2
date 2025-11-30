@@ -13,12 +13,12 @@ from typing import MutableMapping, Optional, cast
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from backend.services.metrics_tracker import record_request
-
 try:
     import boto3  # type: ignore
 except Exception:
     boto3 = None  # type: ignore
+
+from backend.services.metrics_tracker import record_request
 
 LOG_LEVEL: int = 1  # 0 = silent, 1 = info, 2 = debug
 CLOUDWATCH_NAMESPACE = "ECE461/API"

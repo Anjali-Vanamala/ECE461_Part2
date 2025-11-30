@@ -11,8 +11,8 @@ from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactLineageEdge,
                             ArtifactLineageGraph, ArtifactLineageNode,
-                            ArtifactMetadata, ArtifactQuery, ArtifactRegistration,
-                            ArtifactType, ModelRating)
+                            ArtifactMetadata, ArtifactQuery,
+                            ArtifactRegistration, ArtifactType, ModelRating)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory
 

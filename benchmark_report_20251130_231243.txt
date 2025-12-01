@@ -1,0 +1,34 @@
+﻿========================================
+BENCHMARK RESULTS - Concurrent Model Downloads
+========================================
+Test Configuration:
+  API Base URL: https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod
+  Concurrent Requests: 5
+  Timeout: 120 seconds
+  Test Duration: 30.4s
+  Model Type: 100 small/tiny models
+
+Request Summary:
+  Total Requests: 5
+  Successful: 5
+  Failed: 0
+  Duplicates (409): 0
+
+Per-Model Response Times (time to ingest each individual model):
+  Average: 28.2s
+  P50 (Median): 28.6s
+  P95: 29.3s
+  P99: 29.3s
+  Min: 25.9s
+  Max: 29.3s
+
+Overall Test Performance:
+  Total Test Duration: 30.4s
+  Throughput: 0.16 requests/second
+  Note: Total duration is wall-clock time for all concurrent requests to complete
+
+Error Breakdown:
+Unique Models Ingested: 5
+Model IDs: 71558805-8e15-4506-8b58-6b15c1542d71, a4fd98b4-8c65-4a3a-8f6e-6231f262e72b, e515e9eb-b7a0-45d5-a398-52d7671dbb2a, 26f27ca5-85e0-47eb-9f81-38754d47850a, f1e1efd8-8a7d-49b0-b809-f07be040e413
+
+========================================

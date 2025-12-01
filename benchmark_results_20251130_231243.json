@@ -1,0 +1,167 @@
+﻿{
+    "Results":  [
+                    {
+                        "DurationMs":  25899.413,
+                        "ModelId":  "71558805-8e15-4506-8b58-6b15c1542d71",
+                        "Success":  true,
+                        "EndTime":  "2025-11-30T23:13:10.7561553-05:00",
+                        "ErrorType":  null,
+                        "ModelName":  "distilbert-base-uncased-0",
+                        "StartTime":  "2025-11-30T23:12:44.8567423-05:00",
+                        "ModelUrl":  "https://huggingface.co/distilbert-base-uncased-distilled-squad",
+                        "ErrorMessage":  null,
+                        "ResponseBody":  {
+                                             "metadata":  {
+                                                              "name":  "distilbert-base-uncased-0",
+                                                              "id":  "71558805-8e15-4506-8b58-6b15c1542d71",
+                                                              "type":  "model"
+                                                          },
+                                             "data":  {
+                                                          "url":  "https://huggingface.co/distilbert-base-uncased-distilled-squad",
+                                                          "download_url":  null
+                                                      }
+                                         },
+                        "StatusCode":  201,
+                        "PSComputerName":  "localhost",
+                        "RunspaceId":  "6ac2adca-56d4-4517-ad4a-0f5449a52de3",
+                        "PSShowComputerName":  false
+                    },
+                    {
+                        "DurationMs":  28335.807800000002,
+                        "ModelId":  "a4fd98b4-8c65-4a3a-8f6e-6231f262e72b",
+                        "Success":  true,
+                        "EndTime":  "2025-11-30T23:13:13.3266000-05:00",
+                        "ErrorType":  null,
+                        "ModelName":  "audience-classifier-1",
+                        "StartTime":  "2025-11-30T23:12:44.9907922-05:00",
+                        "ModelUrl":  "https://huggingface.co/parvk11/audience_classifier_model",
+                        "ErrorMessage":  null,
+                        "ResponseBody":  {
+                                             "metadata":  {
+                                                              "name":  "audience-classifier-1",
+                                                              "id":  "a4fd98b4-8c65-4a3a-8f6e-6231f262e72b",
+                                                              "type":  "model"
+                                                          },
+                                             "data":  {
+                                                          "url":  "https://huggingface.co/parvk11/audience_classifier_model",
+                                                          "download_url":  null
+                                                      }
+                                         },
+                        "StatusCode":  201,
+                        "PSComputerName":  "localhost",
+                        "RunspaceId":  "b53d7544-0af3-4cff-b6ce-245583f0b9fb",
+                        "PSShowComputerName":  false
+                    },
+                    {
+                        "DurationMs":  28566.230300000003,
+                        "ModelId":  "e515e9eb-b7a0-45d5-a398-52d7671dbb2a",
+                        "Success":  true,
+                        "EndTime":  "2025-11-30T23:13:13.6878510-05:00",
+                        "ErrorType":  null,
+                        "ModelName":  "bert-base-uncased-2",
+                        "StartTime":  "2025-11-30T23:12:45.1216207-05:00",
+                        "ModelUrl":  "https://huggingface.co/google-bert/bert-base-uncased",
+                        "ErrorMessage":  null,
+                        "ResponseBody":  {
+                                             "metadata":  {
+                                                              "name":  "bert-base-uncased-2",
+                                                              "id":  "e515e9eb-b7a0-45d5-a398-52d7671dbb2a",
+                                                              "type":  "model"
+                                                          },
+                                             "data":  {
+                                                          "url":  "https://huggingface.co/google-bert/bert-base-uncased",
+                                                          "download_url":  null
+                                                      }
+                                         },
+                        "StatusCode":  201,
+                        "PSComputerName":  "localhost",
+                        "RunspaceId":  "974a8598-e5ac-449f-863e-59dd0b07bfb5",
+                        "PSShowComputerName":  false
+                    },
+                    {
+                        "DurationMs":  28766.4303,
+                        "ModelId":  "26f27ca5-85e0-47eb-9f81-38754d47850a",
+                        "Success":  true,
+                        "EndTime":  "2025-11-30T23:13:14.0150733-05:00",
+                        "ErrorType":  null,
+                        "ModelName":  "whisper-tiny-3",
+                        "StartTime":  "2025-11-30T23:12:45.2486430-05:00",
+                        "ModelUrl":  "https://huggingface.co/openai/whisper-tiny/tree/main",
+                        "ErrorMessage":  null,
+                        "ResponseBody":  {
+                                             "metadata":  {
+                                                              "name":  "whisper-tiny-3",
+                                                              "id":  "26f27ca5-85e0-47eb-9f81-38754d47850a",
+                                                              "type":  "model"
+                                                          },
+                                             "data":  {
+                                                          "url":  "https://huggingface.co/openai/whisper-tiny/tree/main",
+                                                          "download_url":  null
+                                                      }
+                                         },
+                        "StatusCode":  201,
+                        "PSComputerName":  "localhost",
+                        "RunspaceId":  "0518d292-a6e2-41c4-b2c5-95ca813168be",
+                        "PSShowComputerName":  false
+                    },
+                    {
+                        "DurationMs":  29255.7837,
+                        "ModelId":  "f1e1efd8-8a7d-49b0-b809-f07be040e413",
+                        "Success":  true,
+                        "EndTime":  "2025-11-30T23:13:14.6422507-05:00",
+                        "ErrorType":  null,
+                        "ModelName":  "vit-tiny-4",
+                        "StartTime":  "2025-11-30T23:12:45.3864670-05:00",
+                        "ModelUrl":  "https://huggingface.co/WinKawaks/vit-tiny-patch16-224",
+                        "ErrorMessage":  null,
+                        "ResponseBody":  {
+                                             "metadata":  {
+                                                              "name":  "vit-tiny-4",
+                                                              "id":  "f1e1efd8-8a7d-49b0-b809-f07be040e413",
+                                                              "type":  "model"
+                                                          },
+                                             "data":  {
+                                                          "url":  "https://huggingface.co/WinKawaks/vit-tiny-patch16-224",
+                                                          "download_url":  null
+                                                      }
+                                         },
+                        "StatusCode":  201,
+                        "PSComputerName":  "localhost",
+                        "RunspaceId":  "946ac4c1-50a3-41f2-b07e-5274f73f0775",
+                        "PSShowComputerName":  false
+                    }
+                ],
+    "Configuration":  {
+                          "ModelType":  "100 small/tiny models",
+                          "BaseUrl":  "https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod",
+                          "TimeoutSeconds":  120,
+                          "ConcurrentRequests":  5
+                      },
+    "PerModelResponseTimes":  {
+                                  "Note":  "Response times are measured per individual model ingestion request",
+                                  "Average":  28164.733020000003,
+                                  "P50":  28566.230300000003,
+                                  "Min":  25899.413,
+                                  "Max":  29255.7837,
+                                  "P95":  29255.7837,
+                                  "P99":  29255.7837
+                              },
+    "Errors":  {
+
+               },
+    "Summary":  {
+                    "FailedRequests":  0,
+                    "ThroughputRPS":  0.16,
+                    "TotalRequests":  5,
+                    "SuccessfulRequests":  5,
+                    "TotalDurationSeconds":  30.4007144,
+                    "DuplicateResponses":  0
+                },
+    "ModelIds":  [
+                     "71558805-8e15-4506-8b58-6b15c1542d71",
+                     "a4fd98b4-8c65-4a3a-8f6e-6231f262e72b",
+                     "e515e9eb-b7a0-45d5-a398-52d7671dbb2a",
+                     "26f27ca5-85e0-47eb-9f81-38754d47850a",
+                     "f1e1efd8-8a7d-49b0-b809-f07be040e413"
+                 ]
+}

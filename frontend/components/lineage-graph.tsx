@@ -9,10 +9,10 @@ interface LineageGraphProps {
 
 export function LineageGraph({ lineage }: LineageGraphProps) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" role="list" aria-label="Model lineage">
       {lineage.map((parent, index) => (
-        <div key={index} className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20">
+        <div key={index} className="flex items-center gap-3" role="listitem">
+          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20" aria-hidden="true">
             <GitBranch className="h-4 w-4 text-primary" />
           </div>
           <div className="flex-1">
@@ -20,7 +20,7 @@ export function LineageGraph({ lineage }: LineageGraphProps) {
               <p className="text-sm font-medium text-foreground">{parent}</p>
             </Card>
           </div>
-          {index < lineage.length - 1 && <div className="w-0.5 h-8 bg-border/50 ml-4" />}
+          {index < lineage.length - 1 && <div className="w-0.5 h-8 bg-border/50 ml-4" aria-hidden="true" />}
         </div>
       ))}
     </div>

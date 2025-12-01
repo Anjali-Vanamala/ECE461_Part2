@@ -20,26 +20,31 @@ export default function UploadPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Upload Model</h1>
-          <p className="text-muted-foreground mb-8">Upload your custom ML model to the registry</p>
+          <header>
+            <h1 className="text-3xl font-bold text-foreground mb-2">Upload Model</h1>
+            <p className="text-muted-foreground mb-8">Upload your custom ML model to the registry</p>
+          </header>
 
           <div className="grid gap-6">
             {/* Upload Area */}
-            <Card className="bg-card/40 border-border/50 backdrop-blur border-2 border-dashed p-8 text-center cursor-pointer hover:border-primary/50 transition-colors">
+            <section aria-label="File upload">
+              <Card className="bg-card/40 border-border/50 backdrop-blur border-2 border-dashed p-8 text-center cursor-pointer hover:border-primary/50 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
               <input
                 type="file"
                 id="file-upload"
                 className="hidden"
                 onChange={handleFileChange}
                 accept=".zip,.tar,.gz"
+                aria-label="Upload model file"
+                aria-describedby="file-upload-help"
               />
               <label htmlFor="file-upload" className="cursor-pointer">
                 {file ? (
                   <div className="space-y-3">
-                    <File className="h-10 w-10 mx-auto text-primary" />
+                    <File className="h-10 w-10 mx-auto text-primary" aria-hidden="true" />
                     <div>
                       <p className="font-semibold text-foreground">{file.name}</p>
                       <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
@@ -47,18 +52,20 @@ export default function UploadPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <Upload className="h-10 w-10 mx-auto text-muted-foreground" />
+                    <Upload className="h-10 w-10 mx-auto text-muted-foreground" aria-hidden="true" />
                     <div>
                       <p className="font-semibold text-foreground">Click to upload or drag and drop</p>
-                      <p className="text-xs text-muted-foreground">ZIP, TAR, or GZ files up to 5GB</p>
+                      <p id="file-upload-help" className="text-xs text-muted-foreground">ZIP, TAR, or GZ files up to 5GB</p>
                     </div>
                   </div>
                 )}
               </label>
             </Card>
+            </section>
 
             {/* Form Fields */}
-            <Card className="bg-card/40 border-border/50 backdrop-blur p-6 space-y-6">
+            <section aria-label="Model information form">
+              <Card className="bg-card/40 border-border/50 backdrop-blur p-6 space-y-6">
               <div>
                 <label htmlFor="model-name" className="block text-sm font-medium text-foreground mb-2">
                   Model Name
@@ -68,7 +75,11 @@ export default function UploadPage() {
                   placeholder="e.g., BERT Fine-tuned for Sentiment"
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
+                  aria-describedby="model-name-help"
                 />
+                <p id="model-name-help" className="text-xs text-muted-foreground mt-1">
+                  Enter a descriptive name for your model
+                </p>
               </div>
 
               <div>
@@ -82,11 +93,15 @@ export default function UploadPage() {
                   rows={5}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
+                  aria-describedby="description-help"
                 />
+                <p id="description-help" className="text-xs text-muted-foreground mt-1">
+                  Provide details about your model's purpose and capabilities
+                </p>
               </div>
 
               <div className="rounded-lg bg-secondary/10 border border-secondary/20 p-4 flex gap-3">
-                <AlertCircle className="h-5 w-5 text-secondary flex-shrink-0 mt-0.5" />
+                <AlertCircle className="h-5 w-5 text-secondary flex-shrink-0 mt-0.5" aria-hidden="true" />
                 <div className="text-sm text-muted-foreground">
                   <p className="font-medium text-foreground mb-1">Privacy Notice</p>
                   <p>
@@ -95,6 +110,7 @@ export default function UploadPage() {
                 </div>
               </div>
             </Card>
+            </section>
 
             {/* Action Buttons */}
             <div className="flex gap-3">

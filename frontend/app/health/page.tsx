@@ -64,11 +64,11 @@ export default function HealthPage() {
 
   const getStatusIcon = (status: HealthMetric["status"]) => {
     if (status === "healthy") {
-      return <CheckCircle className="h-5 w-5 text-chart-3" />
+      return <CheckCircle className="h-5 w-5 text-chart-3" aria-hidden="true" />
     } else if (status === "warning") {
-      return <AlertCircle className="h-5 w-5 text-chart-2" />
+      return <AlertCircle className="h-5 w-5 text-chart-2" aria-hidden="true" />
     }
-    return <AlertCircle className="h-5 w-5 text-destructive" />
+    return <AlertCircle className="h-5 w-5 text-destructive" aria-hidden="true" />
   }
 
   const getLevelColor = (level: SystemLog["level"]) => {
@@ -78,9 +78,9 @@ export default function HealthPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">System Health</h1>
             <p className="text-muted-foreground">Real-time monitoring of registry components</p>
@@ -90,42 +90,45 @@ export default function HealthPage() {
               variant="outline" 
               className="gap-2 bg-transparent"
               onClick={() => setWindowMinutes(60)}
+              aria-pressed={windowMinutes === 60}
+              aria-label="Show last 1 hour"
             >
-              <Clock className="h-4 w-4" />
+              <Clock className="h-4 w-4" aria-hidden="true" />
               Last 1 Hour
             </Button>
             <Button size="sm" onClick={() => {
               setWindowMinutes(60)
               setLoading(true)
-            }}>Refresh</Button>
+            }} aria-label="Refresh health data">Refresh</Button>
           </div>
-        </div>
+        </header>
 
         {/* Loading State */}
         {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="flex items-center justify-center py-12" role="status" aria-live="polite" aria-busy="true">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
             <span className="ml-2 text-muted-foreground">Loading health data...</span>
           </div>
         )}
 
         {/* Error State */}
         {error && !loading && (
-          <Card className="mb-8 bg-destructive/10 border-destructive/30 backdrop-blur p-6">
+          <Card className="mb-8 bg-destructive/10 border-destructive/30 backdrop-blur p-6" role="alert" aria-live="assertive">
             <p className="text-destructive">Error: {error}</p>
           </Card>
         )}
 
         {/* Quick Status */}
         {!loading && !error && healthSummary && (
-          <Card className="mb-8 bg-card/40 border-border/50 backdrop-blur p-6">
+          <section aria-label="System status summary">
+            <Card className="mb-8 bg-card/40 border-border/50 backdrop-blur p-6">
             <div className="flex items-center gap-4">
               <div className={`flex h-12 w-12 items-center justify-center rounded-full ${
                 healthSummary.status === "ok" ? "bg-chart-3/20" : "bg-destructive/20"
               }`}>
                 <Activity className={`h-6 w-6 ${
                   healthSummary.status === "ok" ? "text-chart-3" : "text-destructive"
-                }`} />
+                }`} aria-hidden="true" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">System Status</p>
@@ -136,11 +139,12 @@ export default function HealthPage() {
               </div>
             </div>
           </Card>
+          </section>
         )}
 
         {/* Metrics Grid */}
         {!loading && !error && (
-          <div className="mb-8 grid gap-4 md:grid-cols-2">
+          <section aria-label="Health metrics" className="mb-8 grid gap-4 md:grid-cols-2">
             {metrics.length === 0 ? (
               <Card className="bg-card/40 border-border/50 backdrop-blur p-6 text-center">
                 <p className="text-muted-foreground">No health metrics available</p>
@@ -164,12 +168,13 @@ export default function HealthPage() {
             </Card>
               ))
             )}
-          </div>
+          </section>
         )}
 
         {/* Logs Section */}
         {!loading && !error && healthSummary && (
-          <Card className="bg-card/40 border-border/50 backdrop-blur">
+          <section aria-label="System information">
+            <Card className="bg-card/40 border-border/50 backdrop-blur">
             <div className="border-b border-border/50 p-6">
               <h2 className="text-xl font-semibold text-foreground">System Information</h2>
             </div>
@@ -200,6 +205,7 @@ export default function HealthPage() {
               </div>
             </div>
           </Card>
+          </section>
         )}
       </div>
     </main>

@@ -46,8 +46,8 @@ export function ModelDetailClient({ id }: { id: string }) {
     return (
       <main className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="flex items-center justify-center py-12" role="status" aria-live="polite" aria-busy="true">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
             <span className="ml-2 text-muted-foreground">Loading model...</span>
           </div>
         </div>
@@ -61,7 +61,7 @@ export function ModelDetailClient({ id }: { id: string }) {
         <div className="container mx-auto px-4 py-8">
           <Button variant="ghost" asChild className="mb-6 gap-2">
             <Link href="/">
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back to Models
             </Link>
           </Button>
@@ -92,24 +92,26 @@ export function ModelDetailClient({ id }: { id: string }) {
     documentation: 0,
   }
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         {/* Back Button */}
-        <Button variant="ghost" asChild className="mb-6 gap-2">
-          <Link href="/">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Models
-          </Link>
-        </Button>
+        <nav aria-label="Breadcrumb">
+          <Button variant="ghost" asChild className="mb-6 gap-2">
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Back to Models
+            </Link>
+          </Button>
+        </nav>
 
         {/* Header Section */}
-        <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+        <header className="mb-8 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="flex-1">
             <h1 className="text-4xl font-bold text-foreground">{modelName}</h1>
             <p className="mt-2 text-muted-foreground">Model ID: {id || "Loading..."}</p>
             {modelUrl && (
               <p className="mt-1 text-sm text-muted-foreground">
-                <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" aria-label="View on HuggingFace (opens in new tab)">
                   View on HuggingFace
                 </a>
               </p>
@@ -119,31 +121,31 @@ export function ModelDetailClient({ id }: { id: string }) {
           <div className="flex flex-col gap-3 md:flex-row">
             <Button size="lg" asChild disabled={!id}>
               <Link href={id ? `/models/${id}/download` : "#"} className="gap-2">
-                <Download className="h-4 w-4" />
+                <Download className="h-4 w-4" aria-hidden="true" />
                 Download
               </Link>
             </Button>
-            <Button variant="outline" size="lg" className="gap-2 bg-transparent">
-              <Share2 className="h-4 w-4" />
+            <Button variant="outline" size="lg" className="gap-2 bg-transparent" aria-label="Share model">
+              <Share2 className="h-4 w-4" aria-hidden="true" />
               Share
             </Button>
-            <Button variant="outline" size="lg" className="gap-2 bg-transparent">
-              <Flag className="h-4 w-4" />
+            <Button variant="outline" size="lg" className="gap-2 bg-transparent" aria-label="Report model">
+              <Flag className="h-4 w-4" aria-hidden="true" />
               Report
             </Button>
           </div>
-        </div>
+        </header>
 
         {/* Main Content Grid */}
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left Column - Description & Info */}
-          <div className="lg:col-span-2 space-y-6">
+          <section className="lg:col-span-2 space-y-6" aria-label="Model details">
             <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
               <h2 className="text-xl font-semibold text-foreground mb-4">About</h2>
               <p className="text-muted-foreground leading-relaxed">
                 {modelUrl ? (
                   <>
-                    Model URL: <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{modelUrl}</a>
+                    Model URL: <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" aria-label={`Model URL: ${modelUrl} (opens in new tab)`}>{modelUrl}</a>
                   </>
                 ) : (
                   "No additional information available."
@@ -152,7 +154,7 @@ export function ModelDetailClient({ id }: { id: string }) {
             </Card>
 
             {/* Scores Section */}
-            <div>
+            <section aria-label="Model scores and metrics">
               <h2 className="text-xl font-semibold text-foreground mb-4">Scores & Metrics</h2>
               <div className="grid gap-4 md:grid-cols-2">
                 <ModelScoreCard label="Overall Rating" value={scores.overall} max={5} />
@@ -162,19 +164,21 @@ export function ModelDetailClient({ id }: { id: string }) {
                 <ModelScoreCard label="Treescore" value={scores.treescore} max={5} />
                 <ModelScoreCard label="Documentation" value={scores.documentation} max={5} />
               </div>
-            </div>
+            </section>
 
             {/* Lineage Section */}
             {model.lineage && (
-              <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
-                <h2 className="text-xl font-semibold text-foreground mb-4">Lineage</h2>
-                <LineageGraph lineage={model.lineage.nodes?.map((n: any) => n.name) || []} />
-              </Card>
+              <section aria-label="Model lineage">
+                <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
+                  <h2 className="text-xl font-semibold text-foreground mb-4">Lineage</h2>
+                  <LineageGraph lineage={model.lineage.nodes?.map((n: any) => n.name) || []} />
+                </Card>
+              </section>
             )}
-          </div>
+          </section>
 
           {/* Right Column - Sidebar */}
-          <div className="space-y-4">
+          <aside className="space-y-4" aria-label="Model information sidebar">
             <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
               <h3 className="font-semibold text-foreground mb-4">Model Info</h3>
               <div className="space-y-3 text-sm">
@@ -190,7 +194,7 @@ export function ModelDetailClient({ id }: { id: string }) {
                   <div>
                     <p className="text-muted-foreground">Source</p>
                     <p className="font-semibold text-foreground break-all">
-                      <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                      <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" aria-label="View on HuggingFace (opens in new tab)">
                         HuggingFace
                       </a>
                     </p>
@@ -203,23 +207,23 @@ export function ModelDetailClient({ id }: { id: string }) {
               <h3 className="font-semibold text-foreground mb-4">Quick Actions</h3>
               <div className="space-y-2">
                 <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
-                  <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener noreferrer">
+                  <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener noreferrer" aria-label="View API Docs (opens in new tab)">
                     View API Docs
                   </a>
                 </Button>
                 {modelUrl && (
                   <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
-                    <a href={modelUrl} target="_blank" rel="noopener noreferrer">
+                    <a href={modelUrl} target="_blank" rel="noopener noreferrer" aria-label="View on HuggingFace (opens in new tab)">
                       View on HuggingFace
                     </a>
                   </Button>
                 )}
-                <Button variant="outline" className="w-full justify-start bg-transparent">
+                <Button variant="outline" className="w-full justify-start bg-transparent" aria-label="View GitHub repository">
                   View GitHub
                 </Button>
               </div>
             </Card>
-          </div>
+          </aside>
         </div>
       </div>
     </main>

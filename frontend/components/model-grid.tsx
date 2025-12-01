@@ -68,8 +68,8 @@ export function ModelGrid() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center py-12" role="status" aria-live="polite" aria-busy="true">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
         <span className="ml-2 text-muted-foreground">Loading models...</span>
       </div>
     )
@@ -98,8 +98,8 @@ export function ModelGrid() {
               </div>
               <div className="text-right">
                 <div className="flex items-center gap-1">
-                  <Star className="h-4 w-4 fill-chart-2 text-chart-2" />
-                  <span className="text-sm font-medium">{model.rating}</span>
+                  <Star className="h-4 w-4 fill-chart-2 text-chart-2" aria-hidden="true" />
+                  <span className="text-sm font-medium" aria-label={`Rating: ${model.rating} out of 5`}>{model.rating}</span>
                 </div>
               </div>
             </div>
@@ -126,12 +126,12 @@ export function ModelGrid() {
             </div>
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Download className="h-3 w-3" />
+              <span className="flex items-center gap-1" aria-label={`${model.downloads.toLocaleString()} downloads`}>
+                <Download className="h-3 w-3" aria-hidden="true" />
                 {model.downloads.toLocaleString()}
               </span>
-              <span className="flex items-center gap-1">
-                <GitBranch className="h-3 w-3" />
+              <span className="flex items-center gap-1" aria-label={`Tree score: ${model.treescore.toFixed(1)}`}>
+                <GitBranch className="h-3 w-3" aria-hidden="true" />
                 Tree: {model.treescore.toFixed(1)}
               </span>
             </div>

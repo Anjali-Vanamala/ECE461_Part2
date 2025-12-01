@@ -14,22 +14,22 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2" aria-label="Model Registry Home">
           <div className="flex h-8 w-8 items-center justify-center rounded bg-primary">
-            <Package2 className="h-5 w-5 text-primary-foreground" />
+            <Package2 className="h-5 w-5 text-primary-foreground" aria-hidden="true" />
           </div>
           <span className="text-lg font-bold">Model Registry</span>
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden gap-6 md:flex">
-          <Link href="/browse" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <nav className="hidden gap-6 md:flex" aria-label="Main navigation">
+          <Link href="/browse" className="text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded">
             Browse
           </Link>
-          <Link href="/health" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <Link href="/health" className="text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded">
             Health
           </Link>
-          <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded" aria-label="API Docs (opens in new tab)">
             API Docs
           </a>
         </nav>
@@ -44,9 +44,10 @@ export function Header() {
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               aria-label="Light theme"
+              aria-pressed={theme === "light"}
               title="Light"
             >
-              <Sun className="h-4 w-4" />
+              <Sun className="h-4 w-4" aria-hidden="true" />
             </button>
             <button
               onClick={() => setTheme("dark")}
@@ -56,9 +57,10 @@ export function Header() {
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               aria-label="Dark theme"
+              aria-pressed={theme === "dark"}
               title="Dark"
             >
-              <Moon className="h-4 w-4" />
+              <Moon className="h-4 w-4" aria-hidden="true" />
             </button>
             <button
               onClick={() => setTheme("system")}
@@ -68,9 +70,10 @@ export function Header() {
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               aria-label="System theme"
+              aria-pressed={theme === "system"}
               title="System"
             >
-              <Settings2 className="h-4 w-4" />
+              <Settings2 className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
 
@@ -83,22 +86,22 @@ export function Header() {
         </div>
 
         {/* Mobile Menu Button */}
-        <button className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Toggle menu">
-          {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+        <button className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Toggle menu" aria-expanded={mobileMenuOpen} aria-controls="mobile-menu">
+          {mobileMenuOpen ? <X className="h-6 w-6" aria-hidden="true" /> : <Menu className="h-6 w-6" aria-hidden="true" />}
         </button>
       </div>
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="border-t border-border bg-card md:hidden">
-          <nav className="flex flex-col gap-3 px-4 py-4">
-            <Link href="/browse" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <div id="mobile-menu" className="border-t border-border bg-card md:hidden">
+          <nav className="flex flex-col gap-3 px-4 py-4" aria-label="Mobile navigation">
+            <Link href="/browse" className="text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded">
               Browse
             </Link>
-            <Link href="/health" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/health" className="text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded">
               Health
             </Link>
-            <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded" aria-label="API Docs (opens in new tab)">
               API Docs
             </a>
             <div className="flex items-center gap-1 border-t border-border pt-3 mt-2">
@@ -111,8 +114,9 @@ export function Header() {
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
                 aria-label="Light theme"
+                aria-pressed={theme === "light"}
               >
-                <Sun className="h-4 w-4" />
+                <Sun className="h-4 w-4" aria-hidden="true" />
               </button>
               <button
                 onClick={() => setTheme("dark")}
@@ -122,8 +126,9 @@ export function Header() {
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
                 aria-label="Dark theme"
+                aria-pressed={theme === "dark"}
               >
-                <Moon className="h-4 w-4" />
+                <Moon className="h-4 w-4" aria-hidden="true" />
               </button>
               <button
                 onClick={() => setTheme("system")}
@@ -133,8 +138,9 @@ export function Header() {
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
                 aria-label="System theme"
+                aria-pressed={theme === "system"}
               >
-                <Settings2 className="h-4 w-4" />
+                <Settings2 className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
 

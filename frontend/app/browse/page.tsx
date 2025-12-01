@@ -76,15 +76,17 @@ export default function BrowsePage() {
   })
 
   return (
-    <main className="min-h-screen bg-background">
+    <main id="main-content" className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Browse Models</h1>
-        <p className="text-muted-foreground mb-8">Discover trusted machine learning models</p>
+        <header>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Browse Models</h1>
+          <p className="text-muted-foreground mb-8">Discover trusted machine learning models</p>
+        </header>
 
         {/* Search */}
-        <div className="mb-8 space-y-4">
+        <section aria-label="Search and filter" className="mb-8 space-y-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
               id="search-models"
               aria-label="Search models"
@@ -101,36 +103,38 @@ export default function BrowsePage() {
               <button
                 key={tag}
                 onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                aria-pressed={selectedTag === tag}
+                aria-label={`Filter by ${tag} tag`}
+                className={`rounded-full px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   selectedTag === tag
                     ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/30 text-foreground hover:bg-secondary/50"
+                    : "bg-secondary/30 text-foreground hover:bg-secondary/50 dark:hover:bg-secondary/70"
                 }`}
               >
                 {tag}
               </button>
             ))}
           </div>
-        </div>
+        </section>
 
         {/* Loading State */}
         {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="flex items-center justify-center py-12" role="status" aria-live="polite" aria-busy="true">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
             <span className="ml-2 text-muted-foreground">Loading models...</span>
           </div>
         )}
 
         {/* Error State */}
         {error && !loading && (
-          <Card className="bg-destructive/10 border-destructive/30 backdrop-blur p-6">
+          <Card className="bg-destructive/10 border-destructive/30 backdrop-blur p-6" role="alert" aria-live="assertive">
             <p className="text-destructive">Error: {error}</p>
           </Card>
         )}
 
         {/* Models List */}
         {!loading && !error && (
-          <div className="space-y-3">
+          <section aria-label="Model listings" className="space-y-3">
             {filteredModels.length === 0 ? (
               <Card className="bg-card/40 border-border/50 backdrop-blur p-6 text-center">
                 <p className="text-muted-foreground">No models found</p>
@@ -145,8 +149,8 @@ export default function BrowsePage() {
                 <div className="flex items-center gap-2 mb-2">
                   <h2 className="text-lg font-semibold text-foreground">{model.name}</h2>
                   <div className="flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-chart-2 text-chart-2" />
-                    <span className="text-sm font-medium">{model.rating}</span>
+                    <Star className="h-4 w-4 fill-chart-2 text-chart-2" aria-hidden="true" />
+                    <span className="text-sm font-medium" aria-label={`Rating: ${model.rating} out of 5`}>{model.rating}</span>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -159,11 +163,11 @@ export default function BrowsePage() {
               </div>
 
               <div className="flex items-center gap-6 text-xs text-muted-foreground md:justify-end">
-                <span className="flex items-center gap-1">
-                  <Download className="h-3 w-3" />
+                <span className="flex items-center gap-1" aria-label={`${model.downloads.toLocaleString()} downloads`}>
+                  <Download className="h-3 w-3" aria-hidden="true" />
                   {model.downloads.toLocaleString()}
                 </span>
-                <span>Repro: {(model.reproducibility * 100).toFixed(0)}%</span>
+                <span aria-label={`Reproducibility: ${(model.reproducibility * 100).toFixed(0)}%`}>Repro: {(model.reproducibility * 100).toFixed(0)}%</span>
               </div>
 
               <div className="flex gap-2 md:ml-auto">
@@ -180,7 +184,7 @@ export default function BrowsePage() {
             </Card>
               ))
             )}
-          </div>
+          </section>
         )}
       </div>
     </main>

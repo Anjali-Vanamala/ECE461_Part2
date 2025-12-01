@@ -151,17 +151,17 @@ export default function HealthPage() {
               </Card>
             ) : (
               metrics.map((metric) => (
-            <Card key={metric.name} className="bg-card/40 border-border/50 backdrop-blur p-6">
+            <Card key={metric.name} className="bg-card/40 border-border/50 backdrop-blur p-6" role="region" aria-label={`${metric.name} health metric`}>
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3">
                     {getStatusIcon(metric.status)}
                     <h2 className="font-semibold text-foreground">{metric.name}</h2>
                   </div>
-                  <p className="mt-2 text-2xl font-bold text-foreground">{metric.value}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Checked {metric.lastChecked}</p>
+                  <p className="mt-2 text-2xl font-bold text-foreground" aria-label={`${metric.name} value: ${metric.value}`}>{metric.value}</p>
+                  <p className="mt-1 text-xs text-muted-foreground" aria-label={`Last checked: ${metric.lastChecked}`}>Checked {metric.lastChecked}</p>
                 </div>
-                <Badge variant={metric.status === "healthy" ? "default" : "secondary"} className="ml-2">
+                <Badge variant={metric.status === "healthy" ? "default" : "secondary"} className="ml-2" aria-label={`Status: ${metric.status}`}>
                   {metric.status}
                 </Badge>
               </div>

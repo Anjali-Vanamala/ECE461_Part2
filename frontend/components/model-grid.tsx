@@ -88,7 +88,7 @@ export function ModelGrid() {
       {models.map((model) => (
         <Card
           key={model.id}
-          className="flex flex-col overflow-hidden border-border/50 bg-card/40 backdrop-blur hover:border-primary/50 hover:shadow-lg transition-all duration-300"
+          className="flex flex-col overflow-hidden border-border/50 bg-card/40 backdrop-blur hover:border-primary/50 hover:bg-card/60 hover:shadow-lg transition-all duration-300"
         >
           <div className="flex-1 p-6">
             <div className="mb-3 flex items-start justify-between">

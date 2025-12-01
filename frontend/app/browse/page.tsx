@@ -143,7 +143,7 @@ export default function BrowsePage() {
               filteredModels.map((model) => (
             <Card
               key={model.id}
-              className="bg-card/40 border-border/50 backdrop-blur p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:border-primary/50 transition-all"
+              className="bg-card/40 border-border/50 backdrop-blur p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:border-primary/50 hover:bg-card/60 hover:shadow-lg transition-all"
             >
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">

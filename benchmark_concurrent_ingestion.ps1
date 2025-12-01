@@ -7,63 +7,48 @@ $BASE = "https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod"
 # $BASE = "http://localhost:8000"
 
 # Benchmark configuration
-$CONCURRENT_REQUESTS = 5  # Start with 5, scale to 100 later
+$CONCURRENT_REQUESTS = 1  # Start with 5, scale to 100 later
 $TIMEOUT_SECONDS = 120    # 2 minutes per request (adjustable)
-$TEST_MODE = $true        # Set to $false for full 100-request run
 
 # Output files with timestamps
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $OUTPUT_JSON = "benchmark_results_$timestamp.json"
 $OUTPUT_REPORT = "benchmark_report_$timestamp.txt"
 
-Write-Host "🔥 Using API base URL: $BASE" -ForegroundColor Cyan
-Write-Host "📊 Benchmark Configuration:" -ForegroundColor Cyan
+Write-Host "Using API base URL: $BASE" -ForegroundColor Cyan
+Write-Host "Benchmark Configuration:" -ForegroundColor Cyan
 Write-Host "   Concurrent Requests: $CONCURRENT_REQUESTS" -ForegroundColor White
 Write-Host "   Timeout: $TIMEOUT_SECONDS seconds" -ForegroundColor White
+Write-Host "   Model Type: Tiny-LLM only" -ForegroundColor White
 Write-Host ""
 
 # ============================
-# TINY MODEL COLLECTION
+# TINY-LLM MODEL CONFIGURATION
 # ============================
-# Hybrid strategy: Mix of unique models and duplicates
-$TINY_MODELS = @(
-    @{name="whisper-tiny"; url="https://huggingface.co/openai/whisper-tiny"},
-    @{name="audience-classifier"; url="https://huggingface.co/parvk11/audience_classifier_model"},
-    @{name="distilbert-base"; url="https://huggingface.co/distilbert-base-uncased"},
-    @{name="vit-tiny"; url="https://huggingface.co/WinKawaks/vit-tiny-patch16-224"},
-    @{name="dialoGPT-small"; url="https://huggingface.co/microsoft/DialoGPT-small"}
+# Collection of 5 different TinyLlama models for concurrent testing
+$TINYLLM_MODELS = @(
+    @{name="TinyLlama-1.1B-Chat"; url="https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0"},
+    @{name="TinyLlama-1.1B-Intermediate"; url="https://huggingface.co/TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"},
+    @{name="TinyLlama-1.1B-Step50k"; url="https://huggingface.co/TinyLlama/TinyLlama-1.1B-intermediate-step-50k-1T"},
+    @{name="TinyLlama-1.1B-Step100k"; url="https://huggingface.co/TinyLlama/TinyLlama-1.1B-intermediate-step-100k-1T"},
+    @{name="TinyLlama-1.1B-Step200k"; url="https://huggingface.co/TinyLlama/TinyLlama-1.1B-intermediate-step-200k-1T"}
 )
 
-# For 5 requests: 3 unique + 2 duplicates of whisper-tiny
-# For 100 requests: 50 duplicates of whisper-tiny + 50 unique (rotated from list)
 function Get-ModelQueue {
     param([int]$Count)
     
     $queue = @()
-    $uniqueCount = [Math]::Floor($Count * 0.5)  # 50% unique
-    $duplicateCount = $Count - $uniqueCount       # 50% duplicates
     
-    # Add unique models (rotate through list)
-    for ($i = 0; $i -lt $uniqueCount; $i++) {
-        $model = $TINY_MODELS[$i % $TINY_MODELS.Count]
+    # Use different TinyLlama models, cycling through the list if Count > available models
+    for ($i = 0; $i -lt $Count; $i++) {
+        $model = $TINYLLM_MODELS[$i % $TINYLLM_MODELS.Count]
         $queue += @{
             name = "$($model.name)-$i"
             url = $model.url
-            isDuplicate = $false
         }
     }
     
-    # Add duplicates (all whisper-tiny)
-    for ($i = 0; $i -lt $duplicateCount; $i++) {
-        $queue += @{
-            name = "whisper-tiny-duplicate-$i"
-            url = $TINY_MODELS[0].url
-            isDuplicate = $true
-        }
-    }
-    
-    # Shuffle for realistic load pattern
-    return $queue | Get-Random -Count $queue.Count
+    return $queue
 }
 
 # ============================
@@ -201,26 +186,26 @@ function Format-Duration {
 # ============================
 # PRE-BENCHMARK SETUP
 # ============================
-Write-Host "🔄 Resetting registry..." -ForegroundColor Yellow
+Write-Host "Resetting registry..." -ForegroundColor Yellow
 try {
     $resetResponse = Invoke-WebRequest -Uri "$BASE/reset" -Method Delete -TimeoutSec 30
     if ($resetResponse.StatusCode -eq 200) {
-        Write-Host "✓ Registry reset complete" -ForegroundColor Green
+        Write-Host "Registry reset complete" -ForegroundColor Green
     }
 } catch {
-    Write-Host "⚠️  Warning: Could not reset registry: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "Warning: Could not reset registry: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
-Write-Host "🏥 Health check..." -ForegroundColor Yellow
+Write-Host "Health check..." -ForegroundColor Yellow
 try {
     $health = Invoke-RestMethod -Uri "$BASE/health" -Method Get -TimeoutSec 10
     if ($health.status -eq "healthy") {
-        Write-Host "✓ Backend is healthy" -ForegroundColor Green
+        Write-Host "Backend is healthy" -ForegroundColor Green
     } else {
-        Write-Host "⚠️  Warning: Backend health status: $($health.status)" -ForegroundColor Yellow
+        Write-Host "Warning: Backend health status: $($health.status)" -ForegroundColor Yellow
     }
 } catch {
-    Write-Host "✗ Error: Backend health check failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Error: Backend health check failed: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "   Continuing anyway..." -ForegroundColor Yellow
 }
 
@@ -230,41 +215,32 @@ Write-Host ""
 # PREPARE MODEL QUEUE
 # ============================
 $modelQueue = Get-ModelQueue -Count $CONCURRENT_REQUESTS
-Write-Host "📋 Prepared $($modelQueue.Count) model requests:" -ForegroundColor Cyan
-$uniqueModels = ($modelQueue | Where-Object { -not $_.isDuplicate }).Count
-$duplicateModels = ($modelQueue | Where-Object { $_.isDuplicate }).Count
-Write-Host "   Unique models: $uniqueModels" -ForegroundColor White
-Write-Host "   Duplicate models: $duplicateModels" -ForegroundColor White
+Write-Host "Prepared $($modelQueue.Count) Tiny-LLM model requests" -ForegroundColor Cyan
+Write-Host "Using $($TINYLLM_MODELS.Count) different TinyLlama models" -ForegroundColor White
 Write-Host ""
 
 # ============================
 # EXECUTE CONCURRENT REQUESTS
 # ============================
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "🚀 Starting Concurrent Benchmark" -ForegroundColor Cyan
+Write-Host "Starting Concurrent Benchmark" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Launching $CONCURRENT_REQUESTS concurrent requests..." -ForegroundColor White
+Write-Host "Launching $CONCURRENT_REQUESTS concurrent Tiny-LLM download requests..." -ForegroundColor White
 Write-Host ""
 
 $benchmarkStart = Get-Date
 
-# Execute all requests in parallel
-$results = $modelQueue | ForEach-Object -Parallel {
-    $baseUrl = $using:BASE
-    $timeoutSec = $using:TIMEOUT_SECONDS
-    
-    function Invoke-IngestRequest {
-        param(
-            [string]$ModelUrl,
-            [string]$ModelName,
-            [string]$BaseUrl,
-            [int]$TimeoutSeconds
-        )
+# Execute all requests in parallel using Start-Job for PowerShell 5.1+ compatibility
+$jobs = @()
+foreach ($model in $modelQueue) {
+    $job = Start-Job -ScriptBlock {
+        param($ModelUrl, $ModelName, $BaseUrl, $TimeoutSeconds)
         
+        $startTime = Get-Date
         $result = @{
             ModelName = $ModelName
             ModelUrl = $ModelUrl
-            StartTime = Get-Date
+            StartTime = $startTime.ToString("o")
             EndTime = $null
             DurationMs = 0
             StatusCode = $null
@@ -281,82 +257,123 @@ $results = $modelQueue | ForEach-Object -Parallel {
                 name = $ModelName
             } | ConvertTo-Json
             
-            $response = Invoke-WebRequest `
-                -Uri "$BaseUrl/artifact/model" `
-                -Method Post `
-                -ContentType "application/json" `
-                -Body $body `
-                -TimeoutSec $TimeoutSeconds `
-                -ErrorAction Stop
-            
-            $result.StatusCode = $response.StatusCode
-            $result.EndTime = Get-Date
-            $result.DurationMs = ($result.EndTime - $result.StartTime).TotalMilliseconds
-            
-            if ($response.Content) {
-                try {
-                    $json = $response.Content | ConvertFrom-Json
-                    $result.ResponseBody = $json
-                    $result.ModelId = $json.metadata.id
-                } catch {
-                    $result.ResponseBody = $response.Content
-                }
-            }
-            
-            if ($result.StatusCode -in @(200, 201)) {
-                $result.Success = $true
-            } elseif ($result.StatusCode -eq 409) {
-                $result.ErrorType = "Duplicate"
-            } else {
-                $result.ErrorType = "HTTP_$($result.StatusCode)"
-            }
-            
-        } catch [System.Net.WebException] {
-            $result.EndTime = Get-Date
-            $result.DurationMs = ($result.EndTime - $result.StartTime).TotalMilliseconds
-            
-            if ($_.Exception.Response) {
-                $result.StatusCode = [int]$_.Exception.Response.StatusCode
-                $result.ErrorType = "HTTP_$($result.StatusCode)"
+            # Use Invoke-WebRequest with proper error handling
+            try {
+                $response = Invoke-WebRequest `
+                    -Uri "$BaseUrl/artifact/model" `
+                    -Method Post `
+                    -ContentType "application/json" `
+                    -Body $body `
+                    -TimeoutSec $TimeoutSeconds `
+                    -UseBasicParsing `
+                    -ErrorAction Stop
                 
-                try {
-                    $stream = $_.Exception.Response.GetResponseStream()
-                    $reader = New-Object IO.StreamReader($stream)
-                    $errorBody = $reader.ReadToEnd()
-                    $result.ErrorMessage = $errorBody
+                $endTime = Get-Date
+                $result.EndTime = $endTime.ToString("o")
+                $result.DurationMs = ($endTime - $startTime).TotalMilliseconds
+                
+                # Success case
+                $result.StatusCode = $response.StatusCode
+                
+                if ($response.Content) {
                     try {
-                        $result.ResponseBody = $errorBody | ConvertFrom-Json
-                    } catch {}
-                } catch {}
-            } else {
-                $result.ErrorType = "NetworkError"
-                $result.ErrorMessage = $_.Exception.Message
+                        $json = $response.Content | ConvertFrom-Json
+                        $result.ResponseBody = $json
+                        if ($json.metadata -and $json.metadata.id) {
+                            $result.ModelId = $json.metadata.id
+                        }
+                    } catch {
+                        $result.ResponseBody = $response.Content
+                    }
+                }
+                
+                if ($result.StatusCode -in @(200, 201)) {
+                    $result.Success = $true
+                } elseif ($result.StatusCode -eq 409) {
+                    $result.ErrorType = "Duplicate"
+                } else {
+                    $result.ErrorType = "HTTP_$($result.StatusCode)"
+                }
+                
+            } catch [System.Net.WebException] {
+                $endTime = Get-Date
+                $result.EndTime = $endTime.ToString("o")
+                $result.DurationMs = ($endTime - $startTime).TotalMilliseconds
+                
+                # Extract status code from WebException
+                $webException = $_.Exception
+                if ($webException.Response) {
+                    $httpResponse = $webException.Response
+                    $result.StatusCode = [int]$httpResponse.StatusCode
+                    $result.ErrorType = "HTTP_$($result.StatusCode)"
+                    
+                    # Read error response body
+                    $errorBody = $null
+                    try {
+                        $responseStream = $httpResponse.GetResponseStream()
+                        if ($responseStream -and $responseStream.CanRead) {
+                            $reader = New-Object System.IO.StreamReader($responseStream, [System.Text.Encoding]::UTF8)
+                            $errorBody = $reader.ReadToEnd()
+                            $reader.Close()
+                            $responseStream.Close()
+                        }
+                    } catch {
+                        # If stream reading fails, try to get info from exception
+                        $errorBody = $webException.Message
+                    }
+                    
+                    if ($errorBody -and $errorBody.Trim()) {
+                        $result.ErrorMessage = $errorBody
+                        try {
+                            $parsed = $errorBody | ConvertFrom-Json
+                            $result.ResponseBody = $parsed
+                            if ($parsed.detail) {
+                                $result.ErrorMessage = $parsed.detail
+                            } elseif ($parsed.message) {
+                                $result.ErrorMessage = $parsed.message
+                            }
+                        } catch {
+                            $result.ResponseBody = $errorBody
+                        }
+                    } else {
+                        $result.ErrorMessage = "Empty response body. Status: $($result.StatusCode). Exception: $($webException.Message)"
+                    }
+                } else {
+                    $result.StatusCode = 0
+                    $result.ErrorType = "NetworkError"
+                    $result.ErrorMessage = $webException.Message
+                }
+                
+            } catch {
+                $endTime = Get-Date
+                $result.EndTime = $endTime.ToString("o")
+                $result.DurationMs = ($endTime - $startTime).TotalMilliseconds
+                $result.ErrorType = "Exception"
+                $result.ErrorMessage = $_.Exception.ToString()
             }
-            
-        } catch [Microsoft.PowerShell.Commands.HttpResponseException] {
-            $result.EndTime = Get-Date
-            $result.DurationMs = ($result.EndTime - $result.StartTime).TotalMilliseconds
-            $result.StatusCode = $_.Exception.Response.StatusCode.value__
-            $result.ErrorType = "HTTP_$($result.StatusCode)"
-            $result.ErrorMessage = $_.Exception.Message
             
         } catch {
-            $result.EndTime = Get-Date
-            $result.DurationMs = ($result.EndTime - $result.StartTime).TotalMilliseconds
-            $result.ErrorType = "UnknownError"
-            $result.ErrorMessage = $_.Exception.Message
+            $endTime = Get-Date
+            $result.EndTime = $endTime.ToString("o")
+            $result.DurationMs = ($endTime - $startTime).TotalMilliseconds
+            $result.ErrorType = "Exception"
+            $result.ErrorMessage = $_.Exception.ToString()
         }
         
         return $result
-    }
+    } -ArgumentList $model.url, $model.name, $BASE, $TIMEOUT_SECONDS
     
-    Invoke-IngestRequest -ModelUrl $_.url -ModelName $_.name -BaseUrl $baseUrl -TimeoutSeconds $timeoutSec
-} -ThrottleLimit $CONCURRENT_REQUESTS
+    $jobs += $job
+}
+
+# Wait for all jobs to complete and collect results
+$results = $jobs | Wait-Job | Receive-Job
+$jobs | Remove-Job
 
 $benchmarkEnd = Get-Date
 $totalDuration = ($benchmarkEnd - $benchmarkStart).TotalSeconds
 
-Write-Host "✓ All requests completed" -ForegroundColor Green
+Write-Host "All requests completed" -ForegroundColor Green
 Write-Host ""
 
 # ============================
@@ -420,19 +437,20 @@ $metrics.ThroughputRPS = if ($totalDuration -gt 0) {
 # ============================
 $report = @"
 ========================================
-📊 BENCHMARK RESULTS
+BENCHMARK RESULTS - Tiny-LLM Downloads
 ========================================
 Test Configuration:
   API Base URL: $BASE
   Concurrent Requests: $($metrics.TotalRequests)
   Timeout: $TIMEOUT_SECONDS seconds
   Test Duration: $(Format-Duration ($totalDuration * 1000))
+  Model Type: Tiny-LLM only
 
 Request Summary:
   Total Requests: $($metrics.TotalRequests)
-  Successful: $($metrics.SuccessfulRequests) ✓
-  Failed: $($metrics.FailedRequests) ✗
-  Duplicates (409): $($metrics.DuplicateResponses) ⚠
+  Successful: $($metrics.SuccessfulRequests)
+  Failed: $($metrics.FailedRequests)
+  Duplicates (409): $($metrics.DuplicateResponses)
 
 Response Times:
   Average: $(Format-Duration $metrics.AvgResponseTime)
@@ -471,7 +489,7 @@ $jsonOutput = @{
         BaseUrl = $BASE
         ConcurrentRequests = $CONCURRENT_REQUESTS
         TimeoutSeconds = $TIMEOUT_SECONDS
-        TestMode = $TEST_MODE
+        ModelType = "Tiny-LLM"
     }
     Summary = @{
         TotalRequests = $metrics.TotalRequests
@@ -500,7 +518,7 @@ $jsonOutput | ConvertTo-Json -Depth 10 | Out-File -FilePath $OUTPUT_JSON -Encodi
 $report | Out-File -FilePath $OUTPUT_REPORT -Encoding UTF8
 
 Write-Host ""
-Write-Host "✅ Results saved:" -ForegroundColor Green
+Write-Host "Results saved:" -ForegroundColor Green
 Write-Host "   JSON: $OUTPUT_JSON" -ForegroundColor White
 Write-Host "   Report: $OUTPUT_REPORT" -ForegroundColor White
 Write-Host ""

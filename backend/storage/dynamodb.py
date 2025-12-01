@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from typing import Dict, Iterable, List, Optional, cast
+from decimal import Decimal
+from typing import Any, Dict, Iterable, List, Optional, cast
 
 import boto3
 from botocore.exceptions import ClientError
@@ -28,6 +29,17 @@ def generate_artifact_id() -> ArtifactID:
 
 def _normalized(name: Optional[str]) -> Optional[str]:
     return name.strip().lower() if isinstance(name, str) else None
+
+
+def _convert_floats_to_decimal(obj: Any) -> Any:
+    """Recursively convert all float values to Decimal for DynamoDB compatibility."""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: _convert_floats_to_decimal(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_convert_floats_to_decimal(v) for v in obj]
+    return obj
 
 
 def _serialize_artifact(artifact: Artifact) -> Dict:
@@ -123,6 +135,8 @@ def save_artifact(
         _update_models_with_code(artifact_id, artifact.metadata.name, artifact.data.url)
 
     try:
+        # Convert all floats to Decimal for DynamoDB compatibility
+        item = _convert_floats_to_decimal(item)
         table.put_item(Item=item)
         print(f"[DynamoDB] Saved artifact: {artifact_type.value}:{artifact_id}")
     except ClientError as e:
@@ -376,7 +390,8 @@ def artifact_exists(artifact_type: ArtifactType, url: str) -> bool:
     """Check if an artifact with the given URL exists."""
     try:
         response = table.scan(
-            FilterExpression="artifact_type = :type AND url = :url",
+            FilterExpression="artifact_type = :type AND #u = :url",
+            ExpressionAttributeNames={"#u": "url"},
             ExpressionAttributeValues={":type": artifact_type.value, ":url": url},
         )
         return len(response.get("Items", [])) > 0
@@ -388,12 +403,16 @@ def artifact_exists(artifact_type: ArtifactType, url: str) -> bool:
 def save_model_rating(artifact_id: ArtifactID, rating: ModelRating) -> None:
     """Save or update a model rating."""
     try:
+        rating_dict = _serialize_rating(rating)
+        if rating_dict is not None:
+            # Convert floats to Decimal for DynamoDB compatibility
+            rating_dict = _convert_floats_to_decimal(rating_dict)
         table.update_item(
             Key={"artifact_id": artifact_id},
             UpdateExpression="SET rating = :rating",
             ConditionExpression="artifact_type = :type",
             ExpressionAttributeValues={
-                ":rating": _serialize_rating(rating),
+                ":rating": rating_dict,
                 ":type": ArtifactType.MODEL.value,
             },
         )

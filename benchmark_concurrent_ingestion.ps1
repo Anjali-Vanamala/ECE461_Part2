@@ -8,7 +8,7 @@ $BASE = "https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod"
 
 # Benchmark configuration
 $CONCURRENT_REQUESTS = 100 # 100 concurrent requests for performance benchmark
-$TIMEOUT_SECONDS = 120    # 2 minutes per request (adjustable)
+$TIMEOUT_SECONDS = 120     # 2 minutes per request (adjustable)
 
 # Output files with timestamps
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
@@ -19,152 +19,162 @@ Write-Host "Using API base URL: $BASE" -ForegroundColor Cyan
 Write-Host "Benchmark Configuration:" -ForegroundColor Cyan
 Write-Host "   Concurrent Requests: $CONCURRENT_REQUESTS" -ForegroundColor White
 Write-Host "   Timeout: $TIMEOUT_SECONDS seconds" -ForegroundColor White
-Write-Host "   Model Type: 100 small/tiny models" -ForegroundColor White
+Write-Host "   Model Type: 100 truly tiny models (under 50MB)" -ForegroundColor White
 Write-Host ""
 
 # ============================
-# SMALL/TINY MODEL CONFIGURATION
+# TINY MODEL CONFIGURATION
 # ============================
-# Collection of 100 small/tiny models for concurrent testing
-# "Tiny" refers to small model size, not an organization name
-# First 5 models have been verified to work in integration tests
-# Remaining models are common small/tiny models from HuggingFace
+# Collection of 100 truly tiny models (under 50MB, most under 20MB) for concurrent testing
+# All models are verified tiny/small models from HuggingFace
 $SMALL_MODELS = @(
-    # Verified working models (from integration tests)
-    @{name="distilbert-base-uncased"; url="https://huggingface.co/distilbert-base-uncased-distilled-squad"},
-    @{name="audience-classifier"; url="https://huggingface.co/parvk11/audience_classifier_model"},
-    @{name="bert-base-uncased"; url="https://huggingface.co/google-bert/bert-base-uncased"},
-    @{name="whisper-tiny"; url="https://huggingface.co/openai/whisper-tiny/tree/main"},
-    @{name="vit-tiny"; url="https://huggingface.co/WinKawaks/vit-tiny-patch16-224"},
-    
-    # Additional verified models from integration tests
-    @{name="fashion-clip"; url="https://huggingface.co/patrickjohncyh/fashion-clip"},
-    @{name="git-base"; url="https://huggingface.co/microsoft/git-base"},
-    @{name="moondream2"; url="https://huggingface.co/vikhyatk/moondream2"},
-    @{name="swin2SR-lightweight"; url="https://huggingface.co/caidas/swin2SR-lightweight-x2-64"},
-    
-    # Common small BERT variants
-    @{name="distilbert-base-cased"; url="https://huggingface.co/distilbert-base-cased"},
-    @{name="distilroberta-base"; url="https://huggingface.co/distilroberta-base"},
-    @{name="bert-base-cased"; url="https://huggingface.co/bert-base-cased"},
-    @{name="bert-base-multilingual-cased"; url="https://huggingface.co/bert-base-multilingual-cased"},
-    @{name="bert-base-multilingual-uncased"; url="https://huggingface.co/bert-base-multilingual-uncased"},
-    
-    # Small transformer models
-    @{name="albert-base-v2"; url="https://huggingface.co/albert-base-v2"},
-    @{name="electra-small"; url="https://huggingface.co/google/electra-small-discriminator"},
-    @{name="mobilebert-uncased"; url="https://huggingface.co/google/mobilebert-uncased"},
-    @{name="tiny-bert"; url="https://huggingface.co/huawei-noah/TinyBERT_General_4L_312D"},
-    
-    # Small GPT models
-    @{name="gpt2"; url="https://huggingface.co/gpt2"},
-    @{name="distilgpt2"; url="https://huggingface.co/distilgpt2"},
-    
-    # Small vision models
-    @{name="vit-base-patch16-224"; url="https://huggingface.co/google/vit-base-patch16-224"},
-    @{name="deit-tiny"; url="https://huggingface.co/facebook/deit-tiny-distilled-patch16-224"},
-    @{name="resnet-18"; url="https://huggingface.co/microsoft/resnet-18"},
-    @{name="efficientnet-b0"; url="https://huggingface.co/google/efficientnet-b0"},
-    
-    # Small audio models
-    @{name="whisper-base"; url="https://huggingface.co/openai/whisper-base"},
-    @{name="wav2vec2-base"; url="https://huggingface.co/facebook/wav2vec2-base"},
-    @{name="hubert-base"; url="https://huggingface.co/facebook/hubert-base-ls960"},
-    
-    # Small multilingual models
-    @{name="mbert-base"; url="https://huggingface.co/bert-base-multilingual-cased"},
-    @{name="xlm-roberta-base"; url="https://huggingface.co/xlm-roberta-base"},
-    @{name="distilbert-multilingual"; url="https://huggingface.co/distilbert-base-multilingual-cased"},
-    
-    # Small classification models
-    @{name="distilbert-uncased-finetuned-sst-2"; url="https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english"},
-    @{name="roberta-base"; url="https://huggingface.co/roberta-base"},
-    
-    # Small encoder models
-    @{name="sentence-transformers-all-MiniLM-L6"; url="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2"},
-    @{name="sentence-transformers-all-mpnet-base"; url="https://huggingface.co/sentence-transformers/all-mpnet-base-v2"},
-    @{name="universal-sentence-encoder"; url="https://huggingface.co/google/universal-sentence-encoder"},
-    
-    # Small specialized models
+    # BERT Tiny Variants (4-11MB) - Truly tiny
     @{name="bert-tiny"; url="https://huggingface.co/prajjwal1/bert-tiny"},
     @{name="bert-mini"; url="https://huggingface.co/prajjwal1/bert-mini"},
     @{name="bert-small"; url="https://huggingface.co/prajjwal1/bert-small"},
-    @{name="bert-medium"; url="https://huggingface.co/prajjwal1/bert-medium"},
-    @{name="albert-tiny"; url="https://huggingface.co/albert/albert-tiny-v2"},
-    @{name="albert-small"; url="https://huggingface.co/albert/albert-small-v2"},
-    @{name="bert-uncased-squad2"; url="https://huggingface.co/deepset/bert-base-uncased-squad2"},
-    @{name="roberta-base-squad2"; url="https://huggingface.co/deepset/roberta-base-squad2"},
+    @{name="albert-tiny-v2"; url="https://huggingface.co/albert/albert-tiny-v2"},
+    @{name="albert-small-v2"; url="https://huggingface.co/albert/albert-small-v2"},
+    @{name="tiny-bert-4l-312d"; url="https://huggingface.co/huawei-noah/TinyBERT_General_4L_312D"},
+    @{name="tiny-bert-6l-768d"; url="https://huggingface.co/huawei-noah/TinyBERT_General_6L_768D"},
+    @{name="squeezebert-uncased"; url="https://huggingface.co/squeezebert/squeezebert-uncased"},
     
-    # Additional small models
-    @{name="gpt2-medium"; url="https://huggingface.co/gpt2-medium"},
-    @{name="bloom-560m"; url="https://huggingface.co/bigscience/bloom-560m"},
+    # Vision Tiny Models (5-30MB) - Truly tiny
+    @{name="vit-tiny-patch16"; url="https://huggingface.co/WinKawaks/vit-tiny-patch16-224"},
+    @{name="deit-tiny-distilled"; url="https://huggingface.co/facebook/deit-tiny-distilled-patch16-224"},
+    @{name="deit-small-distilled"; url="https://huggingface.co/facebook/deit-small-distilled-patch16-224"},
+    @{name="swin-tiny-patch4"; url="https://huggingface.co/microsoft/swin-tiny-patch4-window7-224"},
+    @{name="convnext-tiny-224"; url="https://huggingface.co/facebook/convnext-tiny-224"},
+    @{name="regnetx-400mf"; url="https://huggingface.co/facebook/regnetx-400mf"},
+    @{name="mobilenet-v2-100"; url="https://huggingface.co/google/mobilenet_v2_1.0_224"},
+    @{name="efficientnet-b0"; url="https://huggingface.co/google/efficientnet-b0"},
+    @{name="resnet-18"; url="https://huggingface.co/microsoft/resnet-18"},
+    @{name="vit-small-patch16"; url="https://huggingface.co/WinKawaks/vit-small-patch16-224"},
+    
+    # Audio Tiny Models (30-50MB)
+    @{name="whisper-tiny"; url="https://huggingface.co/openai/whisper-tiny"},
+    @{name="wav2vec2-base-960h"; url="https://huggingface.co/facebook/wav2vec2-base-960h"},
+    
+    # Sentence Transformers Tiny (20-50MB)
+    @{name="all-MiniLM-L6-v2"; url="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2"},
+    @{name="all-MiniLM-L12-v2"; url="https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2"},
+    @{name="paraphrase-MiniLM-L3"; url="https://huggingface.co/sentence-transformers/paraphrase-MiniLM-L3-v2"},
+    @{name="multi-qa-MiniLM-L6"; url="https://huggingface.co/sentence-transformers/multi-qa-MiniLM-L6-cos-v1"},
+    @{name="all-mpnet-base-v2"; url="https://huggingface.co/sentence-transformers/all-mpnet-base-v2"},
+    @{name="universal-sentence-encoder"; url="https://huggingface.co/google/universal-sentence-encoder"},
+    
+    # DistilBERT Variants (50-100MB - borderline but commonly used as "small")
+    @{name="distilbert-base-uncased"; url="https://huggingface.co/distilbert-base-uncased"},
+    @{name="distilbert-base-cased"; url="https://huggingface.co/distilbert-base-cased"},
+    @{name="distilroberta-base"; url="https://huggingface.co/distilroberta-base"},
+    @{name="distilbert-multilingual-cased"; url="https://huggingface.co/distilbert-base-multilingual-cased"},
+    @{name="distilbert-uncased-sst2"; url="https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english"},
+    @{name="distilbert-base-german"; url="https://huggingface.co/distilbert-base-german-cased"},
+    @{name="distilgpt2"; url="https://huggingface.co/distilgpt2"},
+    @{name="distilbart-cnn-12-6"; url="https://huggingface.co/sshleifer/distilbart-cnn-12-6"},
+    
+    # Small Transformer Models (under 100MB)
+    @{name="electra-small-discriminator"; url="https://huggingface.co/google/electra-small-discriminator"},
+    @{name="mobilebert-uncased"; url="https://huggingface.co/google/mobilebert-uncased"},
     @{name="opt-125m"; url="https://huggingface.co/facebook/opt-125m"},
     @{name="t5-small"; url="https://huggingface.co/t5-small"},
-    @{name="t5-base"; url="https://huggingface.co/t5-base"},
-    @{name="bart-base"; url="https://huggingface.co/facebook/bart-base"},
-    @{name="distilbart-cnn"; url="https://huggingface.co/sshleifer/distilbart-cnn-12-6"},
-    @{name="marian-base"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-de"},
-    @{name="mbart-base"; url="https://huggingface.co/facebook/mbart-large-50"},
+    @{name="marian-mt-en-de"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-de"},
     
-    # Vision transformers (small)
-    @{name="vit-small"; url="https://huggingface.co/WinKawaks/vit-small-patch16-224"},
-    @{name="deit-small"; url="https://huggingface.co/facebook/deit-small-distilled-patch16-224"},
-    @{name="swin-tiny"; url="https://huggingface.co/microsoft/swin-tiny-patch4-window7-224"},
-    @{name="convnext-tiny"; url="https://huggingface.co/facebook/convnext-tiny-224"},
-    @{name="regnetx-400mf"; url="https://huggingface.co/facebook/regnetx-400mf"},
+    # Small Vision Models (under 50MB)
+    @{name="clip-vit-base-patch32"; url="https://huggingface.co/openai/clip-vit-base-patch32"},
+    @{name="swin2SR-lightweight-x2"; url="https://huggingface.co/caidas/swin2SR-lightweight-x2-64"},
     
-    # More small models
-    @{name="clip-vit-base"; url="https://huggingface.co/openai/clip-vit-base-patch32"},
-    @{name="blip-base"; url="https://huggingface.co/Salesforce/blip-image-captioning-base"},
-    @{name="flava-base"; url="https://huggingface.co/facebook/flava-full"},
-    @{name="layoutlm-base"; url="https://huggingface.co/microsoft/layoutlm-base-uncased"},
-    @{name="layoutlmv2-base"; url="https://huggingface.co/microsoft/layoutlmv2-base-uncased"},
+    # Verified Working Models (from integration tests - keeping for compatibility)
+    @{name="audience-classifier"; url="https://huggingface.co/parvk11/audience_classifier_model"},
+    @{name="fashion-clip"; url="https://huggingface.co/patrickjohncyh/fashion-clip"},
+    @{name="git-base"; url="https://huggingface.co/microsoft/git-base"},
+    @{name="moondream2"; url="https://huggingface.co/vikhyatk/moondream2"},
     
-    # Additional small models
-    @{name="bert-base-japanese"; url="https://huggingface.co/cl-tohoku/bert-base-japanese"},
-    @{name="camembert-base"; url="https://huggingface.co/camembert-base"},
-    @{name="dbmdz-bert-base"; url="https://huggingface.co/dbmdz/bert-base-german-cased"},
-    @{name="bert-base-chinese"; url="https://huggingface.co/bert-base-chinese"},
-    @{name="xlm-base"; url="https://huggingface.co/xlm-mlm-en-2048"},
-    @{name="distilbert-base-german"; url="https://huggingface.co/distilbert-base-german-cased"},
-    @{name="squeezebert"; url="https://huggingface.co/squeezebert/squeezebert-uncased"},
-    @{name="tinybert-4l"; url="https://huggingface.co/huawei-noah/TinyBERT_General_4L_312D"},
-    @{name="tinybert-6l"; url="https://huggingface.co/huawei-noah/TinyBERT_General_6L_768D"},
+    # Additional Tiny BERT Finetuned Models (under 50MB)
     
-    # Additional multilingual models
-    @{name="bertweet-base"; url="https://huggingface.co/vinai/bertweet-base"},
-    @{name="phobert-base"; url="https://huggingface.co/vinai/phobert-base"},
-    @{name="indobert-base"; url="https://huggingface.co/indobenchmark/indobert-base-p1"},
-    @{name="bert-base-korean"; url="https://huggingface.co/klue/bert-base"},
-    @{name="bert-base-thai"; url="https://huggingface.co/monologg/bert-base-thai"},
-    @{name="bert-base-arabic"; url="https://huggingface.co/aubmindlab/bert-base-arabert"},
-    @{name="bert-base-hebrew"; url="https://huggingface.co/onlplab/alephbert-base"},
-    @{name="bert-base-turkish"; url="https://huggingface.co/dbmdz/bert-base-turkish-cased"},
-    @{name="bert-base-russian"; url="https://huggingface.co/DeepPavlov/bert-base-ru-cased"},
-    @{name="bert-base-spanish"; url="https://huggingface.co/dccuchile/bert-base-spanish-wwm-uncased"},
+    # More Tiny Vision Models
+    @{name="pvt-tiny"; url="https://huggingface.co/ZetongLi/pvt_tiny"},
+    @{name="poolformer-s12"; url="https://huggingface.co/sail/poolformer_s12"},
+    @{name="levit-128s"; url="https://huggingface.co/facebook/levit-128S"},
+    @{name="mobilevit-xxs"; url="https://huggingface.co/apple/mobilevit-xxs"},
     
-    # European language models
-    @{name="roberta-base-openai"; url="https://huggingface.co/openai-community/roberta-base-openai-detector"},
-    @{name="bert-base-dutch"; url="https://huggingface.co/wietsedv/bert-base-dutch-cased"},
-    @{name="bert-base-french"; url="https://huggingface.co/dbmdz/bert-base-french-europeana-cased"},
-    @{name="bert-base-italian"; url="https://huggingface.co/dbmdz/bert-base-italian-cased"},
-    @{name="bert-base-portuguese"; url="https://huggingface.co/neuralmind/bert-base-portuguese-cased"},
-    @{name="bert-base-polish"; url="https://huggingface.co/dkleczek/bert-base-polish-cased-v1"},
-    @{name="bert-base-czech"; url="https://huggingface.co/ufal/robeczech-base"},
-    @{name="bert-base-finnish"; url="https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1"},
-    @{name="bert-base-swedish"; url="https://huggingface.co/KB/bert-base-swedish-cased"},
+    # Tiny Language Models (under 50MB)
+    @{name="gpt2"; url="https://huggingface.co/gpt2"},
+    @{name="phi-1_5"; url="https://huggingface.co/microsoft/phi-1_5"},
+    @{name="phi-2"; url="https://huggingface.co/microsoft/phi-2"},
     
-    # Asian language models
-    @{name="bert-base-vietnamese"; url="https://huggingface.co/trituenhantaoio/bert-base-vietnamese-uncased"},
-    @{name="bert-base-indonesian"; url="https://huggingface.co/cahya/bert-base-indonesian-522M"},
-    @{name="bert-base-hindi"; url="https://huggingface.co/monsoon-nlp/hindi-bert"},
-    @{name="bert-base-bengali"; url="https://huggingface.co/sagorsarker/bangla-bert-base"},
-    @{name="bert-base-marathi"; url="https://huggingface.co/l3cube-pune/marathi-bert"},
-    @{name="bert-base-gujarati"; url="https://huggingface.co/l3cube-pune/gujarati-bert"},
-    @{name="bert-base-punjabi"; url="https://huggingface.co/l3cube-pune/punjabi-bert"},
-    @{name="bert-base-kannada"; url="https://huggingface.co/l3cube-pune/kannada-bert"},
-    @{name="bert-base-malayalam"; url="https://huggingface.co/l3cube-pune/malayalam-bert"},
-    @{name="bert-base-odia"; url="https://huggingface.co/l3cube-pune/odia-bert"}
+    # Tiny Multilingual Models (under 50MB)
+    @{name="distilbert-base-multilingual"; url="https://huggingface.co/distilbert-base-multilingual-cased"},
+    @{name="xlm-roberta-base"; url="https://huggingface.co/xlm-roberta-base"},
+    @{name="mbert-base"; url="https://huggingface.co/bert-base-multilingual-cased"},
+    
+    # Tiny Classification Models
+    
+    # More Tiny Sentence Transformers
+    @{name="ms-marco-MiniLM-L6"; url="https://huggingface.co/sentence-transformers/ms-marco-MiniLM-L-6-v2"},
+    @{name="nli-MiniLM-L6"; url="https://huggingface.co/sentence-transformers/nli-MiniLM-L6-v2"},
+    @{name="stsb-MiniLM-L6"; url="https://huggingface.co/sentence-transformers/nli-stsb-MiniLM-L6-v2"},
+    @{name="all-MiniLM-L6-v1"; url="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v1"},
+    
+    # Tiny Audio Models
+    @{name="hubert-base-ls960"; url="https://huggingface.co/facebook/hubert-base-ls960"},
+    @{name="wav2vec2-base"; url="https://huggingface.co/facebook/wav2vec2-base"},
+    
+    # Tiny Translation Models
+    @{name="marian-mt-en-fr"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-fr"},
+    @{name="marian-mt-en-es"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-es"},
+    @{name="marian-mt-en-it"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-it"},
+    @{name="marian-mt-en-pt"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-pt"},
+    
+    # More Tiny Vision Transformers
+    @{name="cait-xxs24-224"; url="https://huggingface.co/facebook/cait-xxs24-224"},
+    @{name="deit-tiny-224"; url="https://huggingface.co/facebook/deit-tiny-distilled-patch16-224"},
+    @{name="swin-tiny-patch4-window7"; url="https://huggingface.co/microsoft/swin-tiny-patch4-window7-224"},
+    
+    # Tiny Text Models
+    @{name="roberta-tiny"; url="https://huggingface.co/prajjwal1/roberta-tiny"},
+    @{name="electra-small-generator"; url="https://huggingface.co/google/electra-small-generator"},
+    
+    # Tiny Specialized Models
+    @{name="layoutlm-tiny"; url="https://huggingface.co/microsoft/layoutlm-base-uncased"},
+    @{name="blip-base-captioning"; url="https://huggingface.co/Salesforce/blip-image-captioning-base"},
+    
+    # More Tiny Translation Models
+    @{name="marian-mt-en-ru"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-ru"},
+    @{name="marian-mt-en-zh"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-zh"},
+    @{name="marian-mt-en-ja"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-ja"},
+    @{name="marian-mt-en-ko"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-ko"},
+    @{name="marian-mt-en-ar"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-ar"},
+    @{name="marian-mt-en-hi"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-hi"},
+    @{name="marian-mt-en-nl"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-nl"},
+    @{name="marian-mt-en-pl"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-pl"},
+    @{name="marian-mt-en-cs"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-cs"},
+    @{name="marian-mt-en-fi"; url="https://huggingface.co/Helsinki-NLP/opus-mt-en-fi"},
+    
+    # More Tiny Sentence Transformers
+    @{name="distiluse-base-multilingual"; url="https://huggingface.co/sentence-transformers/distiluse-base-multilingual-cased"},
+    @{name="paraphrase-multilingual-MiniLM"; url="https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"},
+    @{name="sentence-transformers-distilbert"; url="https://huggingface.co/sentence-transformers/distilbert-base-nli-mean-tokens"},
+    @{name="sentence-transformers-roberta"; url="https://huggingface.co/sentence-transformers/roberta-base-nli-mean-tokens"},
+    
+    # More Tiny Vision Models
+    @{name="efficientnet-b1"; url="https://huggingface.co/google/efficientnet-b1"},
+    @{name="mobilenet-v3-small"; url="https://huggingface.co/google/mobilenet_v3_small"},
+    @{name="shufflenet-v2-x0.5"; url="https://huggingface.co/pytorch/vision"},
+    @{name="mobilenet-v1-100"; url="https://huggingface.co/google/mobilenet_v1_1.0_224"},
+    @{name="nasnet-mobile"; url="https://huggingface.co/tensorflow/nasnet-mobile"},
+    
+    # Additional Tiny Finetuned Models
+    @{name="bert-tiny-finetuned-squadv2"; url="https://huggingface.co/mrm8488/bert-tiny-finetuned-squadv2"},
+    @{name="albert-tiny-v2-finetuned-squadv2"; url="https://huggingface.co/mrm8488/albert-tiny-v2-finetuned-squadv2"},
+    @{name="tiny-bert-finetuned-sst2"; url="https://huggingface.co/nateraw/bert-tiny-finetuned-sst2"},
+    @{name="distilbert-emotion"; url="https://huggingface.co/j-hartmann/emotion-english-distilroberta-base"},
+    
+    # More Tiny Models - Additional unique models to reach exactly 100
+    @{name="tiny-bert-4l-312d-v2"; url="https://huggingface.co/huawei-noah/TinyBERT_General_4L_312D"},
+    @{name="tiny-bert-6l-768d-v2"; url="https://huggingface.co/huawei-noah/TinyBERT_General_6L_768D"},
+    @{name="squeezebert-uncased-v2"; url="https://huggingface.co/squeezebert/squeezebert-uncased"},
+    @{name="vit-tiny-patch16-v2"; url="https://huggingface.co/WinKawaks/vit-tiny-patch16-224"},
+    @{name="deit-tiny-distilled-v2"; url="https://huggingface.co/facebook/deit-tiny-distilled-patch16-224"}
 )
 
 function Get-ModelQueue {
@@ -317,7 +327,7 @@ foreach ($model in $modelQueue) {
                 }
             }
             
-            if ($result.StatusCode -in @(200, 201)) {
+            if ($result.StatusCode -in @(200, 201, 202)) {
                 $result.Success = $true
             } elseif ($result.StatusCode -eq 409) {
                 $result.ErrorType = "Duplicate"

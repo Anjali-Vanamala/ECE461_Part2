@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from typing import List
 
 import regex
-import asyncio
-import concurrent.futures
-from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path, Query, Response,
-                     status)
+from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
+                     Query, Response, status)
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactMetadata,
@@ -132,7 +131,7 @@ def process_model_artifact_async(
     name: str,
 ) -> None:
     """Background task to process model artifact asynchronously.
-    
+
     Note: This function is synchronous but runs in a background thread
     to avoid blocking the event loop.
     """
@@ -143,7 +142,7 @@ def process_model_artifact_async(
             artifact_id=artifact_id,
             name_override=name,
         )
-        
+
         # Save the completed artifact
         memory.save_artifact(
             artifact,
@@ -172,9 +171,9 @@ def process_model_artifact_async(
 )
 async def register_artifact(
     payload: ArtifactRegistration,
-    artifact_type: ArtifactType = Path(..., description="Type of artifact being ingested."),
     background_tasks: BackgroundTasks,
     response: Response,
+    artifact_type: ArtifactType = Path(..., description="Type of artifact being ingested."),
 ) -> Artifact:
     if memory.artifact_exists(artifact_type, payload.url):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Artifact exists already")
@@ -183,7 +182,7 @@ async def register_artifact(
         # Generate ID and create artifact immediately
         artifact_id = memory.generate_artifact_id()
         name = payload.name or _derive_name(payload.url)
-        
+
         artifact = Artifact(
             metadata=ArtifactMetadata(
                 name=name,
@@ -192,10 +191,10 @@ async def register_artifact(
             ),
             data=ArtifactData(url=payload.url),
         )
-        
+
         # Save artifact with "processing" status
         memory.save_artifact(artifact, processing_status="processing")
-        
+
         # Process in background
         background_tasks.add_task(
             process_model_artifact_async,
@@ -203,7 +202,7 @@ async def register_artifact(
             artifact_id,
             name,
         )
-        
+
         # Return 202 for models (async processing)
         response.status_code = status.HTTP_202_ACCEPTED
         return artifact
@@ -221,7 +220,7 @@ async def register_artifact(
         data=ArtifactData(url=payload.url),
     )
     memory.save_artifact(artifact)
-    
+
     # Return 201 for non-model artifacts (immediate processing)
     response.status_code = status.HTTP_201_CREATED
     return artifact
@@ -277,7 +276,7 @@ async def get_artifact(
         max_wait = 120  # 2 minutes max wait
         poll_interval = 0.5  # Check every 500ms
         start_time = time.time()
-        
+
         while True:
             processing_status = memory.get_processing_status(artifact_id)
             if processing_status == "completed":
@@ -310,10 +309,10 @@ async def get_artifact(
 )
 async def update_artifact(
     payload: Artifact,
-    artifact_type: ArtifactType = Path(..., description="Type of artifact to update"),
-    artifact_id: ArtifactID = Path(..., description="artifact id"),
     background_tasks: BackgroundTasks,
     response: Response,
+    artifact_type: ArtifactType = Path(..., description="Type of artifact to update"),
+    artifact_id: ArtifactID = Path(..., description="artifact id"),
 ) -> Artifact:
     if payload.metadata.id != artifact_id or payload.metadata.type != artifact_type:
         raise HTTPException(
@@ -324,14 +323,14 @@ async def update_artifact(
     if artifact_type == ArtifactType.MODEL:
         # Update model asynchronously (same pattern as POST)
         memory.save_artifact(payload, processing_status="processing")
-        
+
         background_tasks.add_task(
             process_model_artifact_async,
             payload.data.url,
             artifact_id,
             payload.metadata.name,
         )
-        
+
         response.status_code = status.HTTP_202_ACCEPTED
         return payload
 
@@ -372,7 +371,7 @@ async def get_model_rating(
     max_wait = 120  # 2 minutes max wait
     poll_interval = 0.5  # Check every 500ms
     start_time = time.time()
-    
+
     while True:
         processing_status = memory.get_processing_status(artifact_id)
         if processing_status == "completed":
@@ -392,7 +391,7 @@ async def get_model_rating(
         else:
             # Unknown status, try to get rating anyway
             break
-    
+
     rating = memory.get_model_rating(artifact_id)
     if not rating:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist or lacks a rating.")

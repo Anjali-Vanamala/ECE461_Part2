@@ -102,7 +102,6 @@ def main():
             model_url = f'https://huggingface.co/api/models/{model_path}'
             try:
                 api_response = rq.get(model_url)
-                
                 if api_response.status_code == 200:
                     model_info = api_response.json()  # api info for dataset
             except Exception:

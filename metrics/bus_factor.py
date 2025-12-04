@@ -2,9 +2,28 @@
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
-from metrics_helpers.get_github_url import extract_github_url
+
 import requests
+
 import logger
+from metrics_helpers.get_github_url import extract_github_url
+
+# Rate limiting constants
+RATE_LIMIT_DELAY = 0.1  # 100ms between API calls
+_last_api_call_time = 0.0
+
+
+def _rate_limit() -> None:
+    """Ensure we don't exceed GitHub API rate limits."""
+    global _last_api_call_time
+    current_time = time.time()
+    time_since_last = current_time - _last_api_call_time
+
+    if time_since_last < RATE_LIMIT_DELAY:
+        sleep_time = RATE_LIMIT_DELAY - time_since_last
+        time.sleep(sleep_time)
+
+    _last_api_call_time = time.time()
 
 
 def calculate_active_maintenance_score(api_info: Dict[str, Any]) -> float:
@@ -59,7 +78,7 @@ def calculate_contributor_diversity_score(api_info: Dict[str, Any]) -> float:
     # 1. Try to get GitHub repo URL
     # ---------------------------------------
     github_url = extract_github_url(api_info)
-    print(github_url)
+
     if github_url:
         # Example: https://github.com/org/repo
         try:
@@ -68,20 +87,23 @@ def calculate_contributor_diversity_score(api_info: Dict[str, Any]) -> float:
 
             # Optional: Add a GitHub token header here to avoid rate limits
             resp = requests.get(api_url, timeout=5)
-            print(resp)
             if resp.status_code == 200:
                 contributors = resp.json()
-                print(resp.json())
+
                 # GitHub returns a list of contributor objects
                 if isinstance(contributors, list):
                     num_contributors = len(contributors)
-                    return min(num_contributors / 10.0, 1.0)
+                    return min(num_contributors / 5.0, 1.0)
 
         except Exception:
-            pass  
-    fallback_contributors = 0.5
+            pass  # fall back to spaces if anything fails
 
-    return min(fallback_contributors / 10.0, 1.0)
+    # ---------------------------------------
+    # 2. Fallback: HuggingFace 'spaces'
+    # ---------------------------------------
+    fallback_contributors = len(api_info.get("spaces", []))
+
+    return min(fallback_contributors / 5.0, 1.0)
 
 
 def calculate_org_backing_score(api_info: Dict[str, Any]) -> float:

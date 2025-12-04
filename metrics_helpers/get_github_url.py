@@ -1,5 +1,5 @@
 import re
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 import requests
 
@@ -8,6 +8,7 @@ GITHUB_REGEX = re.compile(
     r"https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*",
     re.IGNORECASE
 )
+
 
 def extract_github_url(model_info: Dict[str, Any]) -> Optional[str]:
     """
@@ -141,7 +142,7 @@ def _normalize_github_repo_url(url: str) -> str:
     # GitHub repo root should be:
     # https: / github.com / owner / repo
     # indices: 0     1        2      3     4
-    if len(parts) >= 5: 
+    if len(parts) >= 5:
         base = "/".join(parts[:5])
         return base.rstrip("/")
 

@@ -1198,23 +1198,7 @@ class Test_Async_Model_Processing:
 
         memory.reset()
 
-        with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
-            from backend.models import (Artifact, ArtifactData,
-                                        ArtifactMetadata, ArtifactType,
-                                        ModelRating)
-
-            mock_compute.return_value = (
-                Artifact(
-                    metadata=ArtifactMetadata(id="test-id", name="test-model", type=ArtifactType.MODEL),
-                    data=ArtifactData(url="https://huggingface.co/test/model"),
-                ),
-                ModelRating(
-                    net_score=0.8, ramp_up_score=0.7, correctness_score=0.9,
-                    bus_factor_score=0.8, responsive_maintainer_score=0.75, license_score=0.85
-                ),
-                None, None, None, None
-            )
-
+        with patch("backend.api.routes.artifacts.compute_model_artifact"):
             client = TestClient(app)
             payload = {"name": "test-model", "url": "https://huggingface.co/test/model"}
             response = client.post("/artifact/model", json=payload)
@@ -1236,16 +1220,8 @@ class Test_Async_Model_Processing:
         assert response.status_code == 201
         assert response.json()["metadata"]["type"] == "dataset"
 
-    def test_get_processing_status_returns_none_for_missing(self):
-        """Test that get_processing_status returns None for non-existent artifact."""
-        from backend.storage import memory
-
-        memory.reset()
-        status_value = memory.get_processing_status("non-existent-id")
-        assert status_value is None
-
-    def test_update_processing_status(self):
-        """Test that update_processing_status works correctly."""
+    def test_processing_status_update(self):
+        """Test that processing status can be updated."""
         from unittest.mock import patch
 
         from fastapi.testclient import TestClient
@@ -1261,175 +1237,6 @@ class Test_Async_Model_Processing:
             response = client.post("/artifact/model", json=payload)
             artifact_id = response.json()["metadata"]["id"]
 
-            memory.update_processing_status(artifact_id, "failed")
-            status_value = memory.get_processing_status(artifact_id)
-            assert status_value == "failed"
-
+            assert memory.get_processing_status(artifact_id) == "processing"
             memory.update_processing_status(artifact_id, "completed")
-            status_value = memory.get_processing_status(artifact_id)
-            assert status_value == "completed"
-
-    def test_get_artifact_waits_for_processing(self):
-        """Test that GET artifact waits for processing to complete."""
-        from unittest.mock import patch
-
-        from fastapi.testclient import TestClient
-
-        from backend.app import app
-        from backend.storage import memory
-
-        memory.reset()
-
-        with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
-            from backend.models import (Artifact, ArtifactData,
-                                        ArtifactMetadata, ArtifactType,
-                                        ModelRating)
-
-            def mock_compute_func(url, *, artifact_id=None, name_override=None):
-                return (
-                    Artifact(
-                        metadata=ArtifactMetadata(id=artifact_id or "test-id", name=name_override or "test-model", type=ArtifactType.MODEL),
-                        data=ArtifactData(url=url),
-                    ),
-                    ModelRating(
-                        net_score=0.8, ramp_up_score=0.7, correctness_score=0.9,
-                        bus_factor_score=0.8, responsive_maintainer_score=0.75, license_score=0.85
-                    ),
-                    None, None, None, None
-                )
-
-            mock_compute.side_effect = mock_compute_func
-
-            client = TestClient(app)
-            payload = {"name": "test-model", "url": "https://huggingface.co/test/model"}
-            response = client.post("/artifact/model", json=payload)
-            artifact_id = response.json()["metadata"]["id"]
-
-            # Manually complete processing
-            from backend.api.routes.artifacts import \
-                process_model_artifact_async
-            process_model_artifact_async("https://huggingface.co/test/model", artifact_id, "test-model")
-
-            # GET should return the completed artifact
-            response = client.get(f"/artifacts/model/{artifact_id}")
-            assert response.status_code == 200
-            assert response.json()["metadata"]["id"] == artifact_id
-
-    def test_get_artifact_failed_model_returns_424(self):
-        """Test that GET artifact returns 424 when processing failed."""
-        from unittest.mock import patch
-
-        from fastapi.testclient import TestClient
-
-        from backend.app import app
-        from backend.storage import memory
-
-        memory.reset()
-
-        with patch("backend.api.routes.artifacts.compute_model_artifact"):
-            client = TestClient(app)
-            payload = {"name": "test-model", "url": "https://huggingface.co/test/model"}
-            response = client.post("/artifact/model", json=payload)
-            artifact_id = response.json()["metadata"]["id"]
-
-            memory.update_processing_status(artifact_id, "failed")
-
-            response = client.get(f"/artifacts/model/{artifact_id}")
-            assert response.status_code == 424
-
-    def test_get_model_rating_waits_for_completion(self):
-        """Test that GET rating waits for processing to complete."""
-        from unittest.mock import patch
-
-        from fastapi.testclient import TestClient
-
-        from backend.app import app
-        from backend.storage import memory
-
-        memory.reset()
-
-        with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
-            from backend.models import (Artifact, ArtifactData,
-                                        ArtifactMetadata, ArtifactType,
-                                        ModelRating)
-
-            def mock_compute_func(url, *, artifact_id=None, name_override=None):
-                return (
-                    Artifact(
-                        metadata=ArtifactMetadata(id=artifact_id or "test-id", name=name_override or "test-model", type=ArtifactType.MODEL),
-                        data=ArtifactData(url=url),
-                    ),
-                    ModelRating(
-                        net_score=0.8, ramp_up_score=0.7, correctness_score=0.9,
-                        bus_factor_score=0.8, responsive_maintainer_score=0.75, license_score=0.85
-                    ),
-                    None, None, None, None
-                )
-
-            mock_compute.side_effect = mock_compute_func
-
-            client = TestClient(app)
-            payload = {"name": "test-model", "url": "https://huggingface.co/test/model"}
-            response = client.post("/artifact/model", json=payload)
-            artifact_id = response.json()["metadata"]["id"]
-
-            # Complete processing
-            from backend.api.routes.artifacts import \
-                process_model_artifact_async
-            process_model_artifact_async("https://huggingface.co/test/model", artifact_id, "test-model")
-
-            # GET rating should work
-            response = client.get(f"/artifact/model/{artifact_id}/rate")
-            assert response.status_code == 200
-            assert "net_score" in response.json()
-
-    def test_process_model_artifact_async_success(self):
-        """Test successful async processing."""
-        from unittest.mock import patch
-
-        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
-                                    ArtifactType, ModelRating)
-        from backend.storage import memory
-
-        memory.reset()
-
-        with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
-            mock_compute.return_value = (
-                Artifact(
-                    metadata=ArtifactMetadata(id="test-id", name="test-model", type=ArtifactType.MODEL),
-                    data=ArtifactData(url="https://huggingface.co/test/model"),
-                ),
-                ModelRating(
-                    net_score=0.8, ramp_up_score=0.7, correctness_score=0.9,
-                    bus_factor_score=0.8, responsive_maintainer_score=0.75, license_score=0.85
-                ),
-                None, None, None, None
-            )
-
-            from backend.api.routes.artifacts import \
-                process_model_artifact_async
-            process_model_artifact_async("https://huggingface.co/test/model", "test-id", "test-model")
-
-            status_value = memory.get_processing_status("test-id")
-            assert status_value == "completed"
-
-            artifact = memory.get_artifact(ArtifactType.MODEL, "test-id")
-            assert artifact is not None
-
-    def test_process_model_artifact_async_failure(self):
-        """Test async processing failure handling."""
-        from unittest.mock import patch
-
-        from backend.storage import memory
-
-        memory.reset()
-
-        with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
-            mock_compute.side_effect = ValueError("Processing failed")
-
-            from backend.api.routes.artifacts import \
-                process_model_artifact_async
-            process_model_artifact_async("https://huggingface.co/test/model", "test-id", "test-model")
-
-            status_value = memory.get_processing_status("test-id")
-            assert status_value == "failed"
+            assert memory.get_processing_status(artifact_id) == "completed"

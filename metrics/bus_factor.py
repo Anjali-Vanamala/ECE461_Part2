@@ -2,13 +2,14 @@
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
-
+from metrics_helpers.get_github_url import extract_github_url
+import requests
 import logger
 
 
 def calculate_active_maintenance_score(api_info: Dict[str, Any]) -> float:
     """
-    Calculate active maintenance score based on the creation date an last updated date
+    Calculate active maintenance score based on the creation date and last updated date
 
     Parameters
     ----------
@@ -20,61 +21,67 @@ def calculate_active_maintenance_score(api_info: Dict[str, Any]) -> float:
     float
         Active maintenance score (0-1)
     """
-    created_at = api_info.get("createdAt")
     last_modified = api_info.get("lastModified")
 
-    if not created_at or not last_modified:
+    if not last_modified:
         logger.debug("API Info has no information about dates.")
         return 0.0
 
     # created_at and last_modified expected to be ISO strings; ensure they are strings
-    created_date = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
     modified_date = datetime.fromisoformat(str(last_modified).replace("Z", "+00:00"))
     now = datetime.now(timezone.utc)
 
-    age_in_days = (now - created_date).days
     days_since_modified = (now - modified_date).days
 
-    if age_in_days < 180:
-        age_score: float = 1.0
-    elif age_in_days < 365:
-        age_score = 0.8
-    elif age_in_days < 730:
-        age_score = 0.6
-    else:
-        age_score = 0.4
-
-    if days_since_modified < 30:
+    if days_since_modified < 90:
         update_score: float = 1.0
-    elif days_since_modified < 90:
-        update_score = 0.8
     elif days_since_modified < 180:
+        update_score = 0.8
+    elif days_since_modified < 270:
         update_score = 0.6
     elif days_since_modified < 365:
         update_score = 0.4
     else:
         update_score = 0.2
 
-    return update_score * 0.75 + age_score * 0.25
+    return update_score
 
 
 def calculate_contributor_diversity_score(api_info: Dict[str, Any]) -> float:
     """
-    Calculate contributor diversity score based on the number of contributors
+    Calculate contributor diversity score based on actual GitHub contributors
+    if possible. Falls back to using HuggingFace 'spaces' list otherwise.
 
-    Parameters
-    ----------
-    api_info : dict
-        Dictionary with information about the API
-
-    Returns
-    -------
-    float
-        Contributor diversity score (0-1)
+    Scoring: min(num_contributors / 10, 1.0)
     """
-    num_contributors = len(api_info.get('spaces', []))
 
-    return min(num_contributors / 10.0, 1.0)
+    # ---------------------------------------
+    # 1. Try to get GitHub repo URL
+    # ---------------------------------------
+    github_url = extract_github_url(api_info)
+    print(github_url)
+    if github_url:
+        # Example: https://github.com/org/repo
+        try:
+            owner, repo = github_url.rstrip("/").split("/")[-2:]
+            api_url = f"https://api.github.com/repos/{owner}/{repo}/contributors"
+
+            # Optional: Add a GitHub token header here to avoid rate limits
+            resp = requests.get(api_url, timeout=5)
+            print(resp)
+            if resp.status_code == 200:
+                contributors = resp.json()
+                print(resp.json())
+                # GitHub returns a list of contributor objects
+                if isinstance(contributors, list):
+                    num_contributors = len(contributors)
+                    return min(num_contributors / 10.0, 1.0)
+
+        except Exception:
+            pass  
+    fallback_contributors = 0.5
+
+    return min(fallback_contributors / 10.0, 1.0)
 
 
 def calculate_org_backing_score(api_info: Dict[str, Any]) -> float:

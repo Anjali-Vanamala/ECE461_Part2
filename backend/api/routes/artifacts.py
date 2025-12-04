@@ -153,6 +153,8 @@ def process_model_artifact_async(
             code_url=code_url,
             processing_status="completed",
         )
+        # Explicitly ensure processing status is set to completed
+        memory.update_processing_status(artifact_id, "completed")
         if rating:
             memory.save_model_rating(artifact.metadata.id, rating)
     except Exception as e:
@@ -288,7 +290,8 @@ async def get_artifact(
                     status_code=status.HTTP_424_FAILED_DEPENDENCY,
                     detail="Model processing failed.",
                 )
-            elif processing_status == "processing":
+            elif processing_status == "processing" or processing_status is None:
+                # None means artifact not yet initialized - treat as processing
                 if time.time() - start_time > max_wait:
                     raise HTTPException(
                         status_code=status.HTTP_504_GATEWAY_TIMEOUT,
@@ -381,7 +384,8 @@ async def get_model_rating(
                 status_code=status.HTTP_424_FAILED_DEPENDENCY,
                 detail="Model processing failed.",
             )
-        elif processing_status == "processing":
+        elif processing_status == "processing" or processing_status is None:
+            # None means artifact not yet initialized - treat as processing
             if time.time() - start_time > max_wait:
                 raise HTTPException(
                     status_code=status.HTTP_504_GATEWAY_TIMEOUT,

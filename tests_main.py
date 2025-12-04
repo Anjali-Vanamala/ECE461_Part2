@@ -1196,7 +1196,7 @@ class Test_Async_Model_Processing:
         from backend.app import app
         from backend.storage import memory
 
-        memory.reset_registry()
+        memory.reset()
 
         with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
             from backend.models import (Artifact, ArtifactData,
@@ -1228,7 +1228,7 @@ class Test_Async_Model_Processing:
         from backend.app import app
         from backend.storage import memory
 
-        memory.reset_registry()
+        memory.reset()
 
         client = TestClient(app)
         payload = {"name": "test-dataset", "url": "https://huggingface.co/datasets/test/dataset"}
@@ -1240,7 +1240,7 @@ class Test_Async_Model_Processing:
         """Test that get_processing_status returns None for non-existent artifact."""
         from backend.storage import memory
 
-        memory.reset_registry()
+        memory.reset()
         status_value = memory.get_processing_status("non-existent-id")
         assert status_value is None
 
@@ -1253,7 +1253,7 @@ class Test_Async_Model_Processing:
         from backend.app import app
         from backend.storage import memory
 
-        memory.reset_registry()
+        memory.reset()
 
         with patch("backend.api.routes.artifacts.compute_model_artifact"):
             client = TestClient(app)
@@ -1278,24 +1278,27 @@ class Test_Async_Model_Processing:
         from backend.app import app
         from backend.storage import memory
 
-        memory.reset_registry()
+        memory.reset()
 
         with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
             from backend.models import (Artifact, ArtifactData,
                                         ArtifactMetadata, ArtifactType,
                                         ModelRating)
 
-            mock_compute.return_value = (
-                Artifact(
-                    metadata=ArtifactMetadata(id="test-id", name="test-model", type=ArtifactType.MODEL),
-                    data=ArtifactData(url="https://huggingface.co/test/model"),
-                ),
-                ModelRating(
-                    net_score=0.8, ramp_up_score=0.7, correctness_score=0.9,
-                    bus_factor_score=0.8, responsive_maintainer_score=0.75, license_score=0.85
-                ),
-                None, None, None, None
-            )
+            def mock_compute_func(url, *, artifact_id=None, name_override=None):
+                return (
+                    Artifact(
+                        metadata=ArtifactMetadata(id=artifact_id or "test-id", name=name_override or "test-model", type=ArtifactType.MODEL),
+                        data=ArtifactData(url=url),
+                    ),
+                    ModelRating(
+                        net_score=0.8, ramp_up_score=0.7, correctness_score=0.9,
+                        bus_factor_score=0.8, responsive_maintainer_score=0.75, license_score=0.85
+                    ),
+                    None, None, None, None
+                )
+
+            mock_compute.side_effect = mock_compute_func
 
             client = TestClient(app)
             payload = {"name": "test-model", "url": "https://huggingface.co/test/model"}
@@ -1321,7 +1324,7 @@ class Test_Async_Model_Processing:
         from backend.app import app
         from backend.storage import memory
 
-        memory.reset_registry()
+        memory.reset()
 
         with patch("backend.api.routes.artifacts.compute_model_artifact"):
             client = TestClient(app)
@@ -1343,24 +1346,27 @@ class Test_Async_Model_Processing:
         from backend.app import app
         from backend.storage import memory
 
-        memory.reset_registry()
+        memory.reset()
 
         with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
             from backend.models import (Artifact, ArtifactData,
                                         ArtifactMetadata, ArtifactType,
                                         ModelRating)
 
-            mock_compute.return_value = (
-                Artifact(
-                    metadata=ArtifactMetadata(id="test-id", name="test-model", type=ArtifactType.MODEL),
-                    data=ArtifactData(url="https://huggingface.co/test/model"),
-                ),
-                ModelRating(
-                    net_score=0.8, ramp_up_score=0.7, correctness_score=0.9,
-                    bus_factor_score=0.8, responsive_maintainer_score=0.75, license_score=0.85
-                ),
-                None, None, None, None
-            )
+            def mock_compute_func(url, *, artifact_id=None, name_override=None):
+                return (
+                    Artifact(
+                        metadata=ArtifactMetadata(id=artifact_id or "test-id", name=name_override or "test-model", type=ArtifactType.MODEL),
+                        data=ArtifactData(url=url),
+                    ),
+                    ModelRating(
+                        net_score=0.8, ramp_up_score=0.7, correctness_score=0.9,
+                        bus_factor_score=0.8, responsive_maintainer_score=0.75, license_score=0.85
+                    ),
+                    None, None, None, None
+                )
+
+            mock_compute.side_effect = mock_compute_func
 
             client = TestClient(app)
             payload = {"name": "test-model", "url": "https://huggingface.co/test/model"}
@@ -1385,7 +1391,7 @@ class Test_Async_Model_Processing:
                                     ArtifactType, ModelRating)
         from backend.storage import memory
 
-        memory.reset_registry()
+        memory.reset()
 
         with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
             mock_compute.return_value = (
@@ -1416,7 +1422,7 @@ class Test_Async_Model_Processing:
 
         from backend.storage import memory
 
-        memory.reset_registry()
+        memory.reset()
 
         with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
             mock_compute.side_effect = ValueError("Processing failed")

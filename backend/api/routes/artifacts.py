@@ -173,8 +173,8 @@ def process_model_artifact_async(
 async def register_artifact(
     payload: ArtifactRegistration,
     artifact_type: ArtifactType = Path(..., description="Type of artifact being ingested."),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    response: Response = Response(),
+    background_tasks: BackgroundTasks,
+    response: Response,
 ) -> Artifact:
     if memory.artifact_exists(artifact_type, payload.url):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Artifact exists already")
@@ -279,17 +279,17 @@ async def get_artifact(
         start_time = time.time()
         
         while True:
-            status = memory.get_processing_status(artifact_id)
-            if status == "completed":
+            processing_status = memory.get_processing_status(artifact_id)
+            if processing_status == "completed":
                 # Refresh artifact to get latest data
                 artifact = memory.get_artifact(artifact_type_enum, artifact_id)
                 break
-            elif status == "failed":
+            elif processing_status == "failed":
                 raise HTTPException(
                     status_code=status.HTTP_424_FAILED_DEPENDENCY,
                     detail="Model processing failed.",
                 )
-            elif status == "processing":
+            elif processing_status == "processing":
                 if time.time() - start_time > max_wait:
                     raise HTTPException(
                         status_code=status.HTTP_504_GATEWAY_TIMEOUT,
@@ -312,8 +312,8 @@ async def update_artifact(
     payload: Artifact,
     artifact_type: ArtifactType = Path(..., description="Type of artifact to update"),
     artifact_id: ArtifactID = Path(..., description="artifact id"),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    response: Response = Response(),
+    background_tasks: BackgroundTasks,
+    response: Response,
 ) -> Artifact:
     if payload.metadata.id != artifact_id or payload.metadata.type != artifact_type:
         raise HTTPException(

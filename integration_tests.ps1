@@ -116,7 +116,7 @@ $resp_distilbert = Test-Call "POST /artifact/model distilbert-base-uncased-disti
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"distilbert-base-uncased-distilled-squad","url":"https://huggingface.co/distilbert-base-uncased-distilled-squad"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 
 $distilbertModelId = $resp_distilbert.metadata.id
 
@@ -129,7 +129,7 @@ $resp_audience = Test-Call "POST /artifact/model audience_classifier_model" {
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"audience_classifier_model","url":"https://huggingface.co/parvk11/audience_classifier_model"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 $audienceClassifierModelId = $resp_audience.metadata.id
 
 # ====================================
@@ -141,7 +141,7 @@ $resp_bert = Test-Call "POST /artifact/model bert-base-uncased" {
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"bert-base-uncased","url":"https://huggingface.co/google-bert/bert-base-uncased"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 $bertBaseId = $resp_bert.metadata.id
 
 # ====================================
@@ -188,7 +188,7 @@ $resp_patrickClip = Test-Call "POST /artifact/model patrickjohncyh-fashion-clip"
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"patrickjohncyh-fashion-clip","url":"https://huggingface.co/patrickjohncyh/fashion-clip"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 $patrickFashionClipModelId = $resp_patrickClip.metadata.id
 
 # ====================================
@@ -200,7 +200,7 @@ $resp_winKawaks = Test-Call "POST /artifact/model WinKawaks-vit-tiny-patch16-224
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"WinKawaks-vit-tiny-patch16-224","url":"https://huggingface.co/WinKawaks/vit-tiny-patch16-224"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 $winKawaksVitModelId = $resp_winKawaks.metadata.id
 
 # ====================================
@@ -212,7 +212,7 @@ $resp_msGitBase = Test-Call "POST /artifact/model microsoft-git-base" {
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"microsoft-git-base","url":"https://huggingface.co/microsoft/git-base"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 $microsoftGitBaseModelId = $resp_msGitBase.metadata.id
 
 # ====================================
@@ -224,7 +224,7 @@ $resp_moondream2 = Test-Call "POST /artifact/model vikhyatk-moondream2" {
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"vikhyatk-moondream2","url":"https://huggingface.co/vikhyatk/moondream2"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 $vikhyatMoondream2ModelId = $resp_moondream2.metadata.id
 
 # ====================================
@@ -236,7 +236,7 @@ $resp_swin2 = Test-Call "POST /artifact/model caidas-swin2SR-lightweight-x2-64" 
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"caidas-swin2SR-lightweight-x2-64","url":"https://huggingface.co/caidas/swin2SR-lightweight-x2-64"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 $caidasSwin2ModelId = $resp_swin2.metadata.id
 
 # ====================================
@@ -386,7 +386,7 @@ $resp_longNameModel = Test-Call "POST /artifact/model long aaaaa..." {
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab","url":"https://huggingface.co/parthvpatil18/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 $longNameModelId = $resp_longNameModel.metadata.id
 
 $resp_lerobotDiffusion = Test-Call "POST /artifact/model lerobot-diffusion_pusht" {
@@ -395,7 +395,7 @@ $resp_lerobotDiffusion = Test-Call "POST /artifact/model lerobot-diffusion_pusht
         -Method Post `
         -ContentType "application/json" `
         -Body '{"name":"lerobot-diffusion_pusht","url":"https://huggingface.co/lerobot/diffusion_pusht"}'
-} -ExpectedStatus @(200, 201)
+} -ExpectedStatus @(200, 201, 202)
 $lerobotDiffusionModelId = $resp_lerobotDiffusion.metadata.id
 
 

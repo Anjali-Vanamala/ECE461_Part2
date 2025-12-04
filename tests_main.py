@@ -1182,3 +1182,59 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
 
             assert result.status_code == 200
             assert mock_logger.info.called
+
+
+class Test_Async_Model_Processing:
+    """Tests for async model artifact processing functionality."""
+
+    def test_register_model_returns_202(self):
+        """Test that registering a model returns 202 Accepted."""
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        with patch("backend.api.routes.artifacts.compute_model_artifact"):
+            client = TestClient(app)
+            payload = {"name": "test-model", "url": "https://huggingface.co/test/model"}
+            response = client.post("/artifact/model", json=payload)
+            assert response.status_code == 202
+            assert response.json()["metadata"]["type"] == "model"
+
+    def test_register_dataset_returns_201(self):
+        """Test that registering a dataset returns 201 Created (synchronous)."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        client = TestClient(app)
+        payload = {"name": "test-dataset", "url": "https://huggingface.co/datasets/test/dataset"}
+        response = client.post("/artifact/dataset", json=payload)
+        assert response.status_code == 201
+        assert response.json()["metadata"]["type"] == "dataset"
+
+    def test_processing_status_update(self):
+        """Test that processing status can be updated."""
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create an artifact record manually to test status updates
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="processing")
+
+        assert memory.get_processing_status("test-id") == "processing"
+        memory.update_processing_status("test-id", "completed")
+        assert memory.get_processing_status("test-id") == "completed"

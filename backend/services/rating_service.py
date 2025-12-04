@@ -72,11 +72,10 @@ def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
 
     # Last Modified — normalize to ISO string
     lm = (
-        rest_info.get("lastModified")
-        or hfhub_info.get("lastModified")
+        rest_info.get("lastModified") or hfhub_info.get("lastModified")
     )
     if hasattr(lm, "isoformat"):
-        lm = lm.isoformat()
+        lm = lm.isoformat()  # type: ignore[union-attr]
     model_info["lastModified"] = lm or None
 
     # Tags (HFHub reliable)
@@ -119,7 +118,7 @@ def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
     datasets = card.get("datasets")
     if not datasets:
         tags = model_info.get("tags", [])
-        dataset_tags = [t.replace("dataset:", "") for t in tags if t.startswith("dataset:")]
+        dataset_tags = [t.replace("dataset:", "") for t in tags if t.startswith("dataset:")]  # type: ignore[union-attr]
         datasets = dataset_tags if dataset_tags else []
     model_info["datasets"] = datasets
 

@@ -1,0 +1,148 @@
+Debug:
+Begin processing input
+Info:Raw code url:https://github.com/google-research/bert
+Raw dataset url: https://huggingface.co/datasets/bookcorpus/bookcorpus
+Raw model url: https://huggingface.co/google-bert/bert-base-uncased
+Info:Begin processing metrics.
+Info:Calculating data_quality metric
+Debug:Starting completeness check
+Info:Calculating code_quality metric
+Info:Calculating dataset_and_score metric
+Info:Completeness keywords found: 9
+Debug:Found 4 code blocks in README
+Info:Calculating performance_claims metric
+Debug:Documentation length: 1371, Reusability score: 1.0
+Debug:Starting correctness check
+Info:Calculating license score for: google-bert/bert-base-uncased
+Info: Calculating bus factor metric
+Info: Calculating ramp up time metric
+Info:eval ments found: 4
+Info:Calculating reproducibility metric
+Info:Calculating reviewedness metric
+Debug:Model downloads: 59901009, Reliability score: 1.0
+Info:accuracy: 2.0
+Info:Calculating treescore metric
+Debug:Found 4 code blocks in README
+Debug:No GitHub repository information
+Debug:Test mentions: 2, Testability score: 0.4
+Debug:Starting coverage check
+Info:No GitHub repo - score: -1.0
+Info:No parent models found - score: 0.0
+Debug:Found valid Python code with imports
+Info:Final code quality score: 0.8800000000000001
+Info:Treescore: 0.0, latency: 2ms
+Info:Reviewedness score: -1.0, latency: 4ms
+Info:Reproducibility score: 1.0, latency: 7ms
+Debug:Starting relevance check
+Info:Model: google-bert/bert-base-uncased
+Info:Pattern-adjusted size: 1.60 GB
+Info:  raspberry_pi: 0.20
+Info:  jetson_nano: 0.60
+Info:  desktop_pc: 0.90
+Info:  aws_server: 1.0
+Info:Net size score: 0.78
+Info:Size calculation latency: 91 ms
+Info:Successfully downloaded README for google-bert/bert-base-uncased
+Info:Found license using pattern: apache-2.0
+Info:Compatible license found: apache-2.0
+Info:Compatible license (apache-2.0) found without incompatibles - returning 1.0
+Info:License score calculated: 1.0 (latency: 113ms)
+Info:Got performance claims score from GenAI Studio.
+Info:Concurrent thread results unpacked
+Info:Raw code url:
+Raw dataset url: 
+Raw model url: https://huggingface.co/parvk11/audience_classifier_model
+Debug:Dataset url not given. Search in previously seen.
+Debug:Found dataset url?:
+Info:Begin processing metrics.
+Info:Calculating data_quality metric
+Info:Calculating dataset_and_score metric
+Info:Calculating code_quality metric
+Debug:Starting completeness check
+Debug:No Python code blocks found in README
+Info:Completeness keywords found: 8
+Info:Calculating performance_claims metric
+Debug:Documentation length: 741, Reusability score: 0.7
+Info:Calculating license score for: parvk11/audience_classifier_model
+Info: Calculating bus factor metric
+Info:Calculating reproducibility metric
+Info: Calculating ramp up time metric
+Debug:Model downloads: 1207, Reliability score: 0.1
+Info:Calculating reviewedness metric
+Info:Calculating treescore metric
+Info:eval ments found: 4
+Debug:No Python code blocks found in README
+Debug:Test mentions: 3, Testability score: 0.6
+Debug:No GitHub repository information
+Info:No parent models found - score: 0.0
+Info:accuracy: 2.0
+Info:No example code found - score: 0.0
+Info:Final code quality score: 0.43999999999999995
+Info:No GitHub repo - score: -1.0
+Info:Reproducibility score: 0.0, latency: 11ms
+Info:Reviewedness score: -1.0, latency: 7ms
+Debug:Starting coverage check
+Debug:Starting relevance check
+Info:Successfully downloaded README for parvk11/audience_classifier_model
+Info:Found license using pattern: ** [More Information Needed]
+Info:No clear license found - returning 0.0
+Info:License score calculated: 0.0 (latency: 82ms)
+Info:Model: parvk11/audience_classifier_model
+Info:Pattern-adjusted size: 0.50 GB
+Info:  raspberry_pi: 0.75
+Info:  jetson_nano: 0.88
+Info:  desktop_pc: 0.97
+Info:  aws_server: 1.0
+Info:Net size score: 0.93
+Info:Size calculation latency: 118 ms
+Info:Got performance claims score from GenAI Studio.
+Info:Concurrent thread results unpacked
+Info:Raw code url:
+Raw dataset url: 
+Raw model url: https://huggingface.co/openai/whisper-tiny/tree/main
+Debug:Dataset url not given. Search in previously seen.
+Debug:Found dataset url?:
+Info:Begin processing metrics.
+Info:Calculating data_quality metric
+Info:Calculating code_quality metric
+Debug:Starting completeness check
+Info:Calculating dataset_and_score metric
+Info:Calculating performance_claims metric
+Debug:Documentation length: 2474, Reusability score: 1.0
+Info:Calculating license score for: openai/whisper-tiny
+Info:Completeness keywords found: 8
+Debug:Model downloads: 997928, Reliability score: 1.0
+Debug:Found 6 code blocks in README
+Info: Calculating bus factor metric
+Info: Calculating ramp up time metric
+Debug:Test mentions: 3, Testability score: 0.6
+Info:Calculating reviewedness metric
+Info:Calculating reproducibility metric
+Info:Calculating treescore metric
+Debug:Starting correctness check
+Debug:No GitHub repository information
+Info:eval ments found: 5
+Info:No parent models found - score: 0.0
+Debug:Found 6 code blocks in README
+Info:No GitHub repo - score: -1.0
+Info:accuracy: 7.54
+Info:Treescore: 0.0, latency: 13ms
+Info:No example code found - score: 0.0
+Info:Reviewedness score: -1.0, latency: 16ms
+Debug:Starting coverage check
+Info:Reproducibility score: 0.0, latency: 19ms
+Debug:Starting relevance check
+Info:Successfully downloaded README for openai/whisper-tiny
+Info:Found license using pattern: apache-2.0
+Info:Compatible license found: apache-2.0
+Info:Model: openai/whisper-tiny
+Info:Compatible license (apache-2.0) found without incompatibles - returning 1.0
+Info:Pattern-adjusted size: 0.20 GB
+Info:License score calculated: 1.0 (latency: 110ms)
+Info:  raspberry_pi: 0.90
+Info:  jetson_nano: 0.95
+Info:  desktop_pc: 0.99
+Info:  aws_server: 1.0
+Info:Net size score: 0.97
+Info:Size calculation latency: 119 ms
+Info:Concurrent thread results unpacked

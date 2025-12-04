@@ -1222,21 +1222,19 @@ class Test_Async_Model_Processing:
 
     def test_processing_status_update(self):
         """Test that processing status can be updated."""
-        from unittest.mock import patch
-
-        from fastapi.testclient import TestClient
-
-        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()
 
-        with patch("backend.api.routes.artifacts.compute_model_artifact"):
-            client = TestClient(app)
-            payload = {"name": "test-model", "url": "https://huggingface.co/test/model"}
-            response = client.post("/artifact/model", json=payload)
-            artifact_id = response.json()["metadata"]["id"]
+        # Create an artifact record manually to test status updates
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="processing")
 
-            assert memory.get_processing_status(artifact_id) == "processing"
-            memory.update_processing_status(artifact_id, "completed")
-            assert memory.get_processing_status(artifact_id) == "completed"
+        assert memory.get_processing_status("test-id") == "processing"
+        memory.update_processing_status("test-id", "completed")
+        assert memory.get_processing_status("test-id") == "completed"

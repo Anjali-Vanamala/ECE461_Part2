@@ -103,9 +103,10 @@ $SMALL_MODELS = @(
     @{name="phi-2"; url="https://huggingface.co/microsoft/phi-2"},
     
     # Tiny Multilingual Models (under 50MB)
-    @{name="distilbert-base-multilingual"; url="https://huggingface.co/distilbert-base-multilingual-cased"},
     @{name="xlm-roberta-base"; url="https://huggingface.co/xlm-roberta-base"},
     @{name="mbert-base"; url="https://huggingface.co/bert-base-multilingual-cased"},
+    @{name="camembert-base"; url="https://huggingface.co/camembert-base"},
+    @{name="xlm-roberta-small"; url="https://huggingface.co/xlm-roberta-small"},
     
     # Tiny Classification Models
     
@@ -127,8 +128,8 @@ $SMALL_MODELS = @(
     
     # More Tiny Vision Transformers
     @{name="cait-xxs24-224"; url="https://huggingface.co/facebook/cait-xxs24-224"},
-    @{name="deit-tiny-224"; url="https://huggingface.co/facebook/deit-tiny-distilled-patch16-224"},
-    @{name="swin-tiny-patch4-window7"; url="https://huggingface.co/microsoft/swin-tiny-patch4-window7-224"},
+    @{name="regnet-y-400mf"; url="https://huggingface.co/facebook/regnet-y-400mf"},
+    @{name="resnet-34"; url="https://huggingface.co/microsoft/resnet-34"},
     
     # Tiny Text Models
     @{name="roberta-tiny"; url="https://huggingface.co/prajjwal1/roberta-tiny"},
@@ -170,11 +171,11 @@ $SMALL_MODELS = @(
     @{name="distilbert-emotion"; url="https://huggingface.co/j-hartmann/emotion-english-distilroberta-base"},
     
     # More Tiny Models - Additional unique models to reach exactly 100
-    @{name="tiny-bert-4l-312d-v2"; url="https://huggingface.co/huawei-noah/TinyBERT_General_4L_312D"},
-    @{name="tiny-bert-6l-768d-v2"; url="https://huggingface.co/huawei-noah/TinyBERT_General_6L_768D"},
-    @{name="squeezebert-uncased-v2"; url="https://huggingface.co/squeezebert/squeezebert-uncased"},
-    @{name="vit-tiny-patch16-v2"; url="https://huggingface.co/WinKawaks/vit-tiny-patch16-224"},
-    @{name="deit-tiny-distilled-v2"; url="https://huggingface.co/facebook/deit-tiny-distilled-patch16-224"}
+    @{name="bert-uncased-L2-H128"; url="https://huggingface.co/google/bert_uncased_L-2_H-128_A-2"},
+    @{name="albert-base-v2"; url="https://huggingface.co/albert/albert-base-v2"},
+    @{name="squeezebert-cased"; url="https://huggingface.co/squeezebert/squeezebert-cased"},
+    @{name="convnext-tiny-384"; url="https://huggingface.co/facebook/convnext-tiny-384"},
+    @{name="mobilevit-small"; url="https://huggingface.co/apple/mobilevit-small"}
 )
 
 function Get-ModelQueue {
@@ -183,13 +184,25 @@ function Get-ModelQueue {
     $queue = New-Object System.Collections.ArrayList
     $modelCount = $SMALL_MODELS.Count
     
-    for ($i = 0; $i -lt $Count; $i++) {
+    # Use 99 unique models, then 1 duplicate
+    $uniqueCount = $Count - 1  # 99 unique models
+    $duplicateIndex = 0        # Duplicate the first model
+    
+    # Add 99 unique models
+    for ($i = 0; $i -lt $uniqueCount; $i++) {
         $model = $SMALL_MODELS[$i % $modelCount]
         [void]$queue.Add(@{
             name = "$($model.name)-$i"
             url = $model.url
         })
     }
+    
+    # Add 1 duplicate (same URL as first model, but different name to track it)
+    $duplicateModel = $SMALL_MODELS[$duplicateIndex % $modelCount]
+    [void]$queue.Add(@{
+        name = "$($duplicateModel.name)-duplicate"
+        url = $duplicateModel.url  # Same URL = will trigger 409 duplicate
+    })
     
     return $queue
 }

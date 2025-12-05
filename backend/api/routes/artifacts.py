@@ -182,24 +182,32 @@ async def register_artifact(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Artifact exists already")
 
     if artifact_type == ArtifactType.MODEL:
-        try:
-            artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(payload.url)
-        except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(exc)) from exc
+        # Generate ID and create artifact immediately
+        artifact_id = memory.generate_artifact_id()
+        name = payload.name or _derive_name(payload.url)
 
-        if payload.name:
-            artifact.metadata.name = payload.name
-
-        memory.save_artifact(
-            artifact,
-            rating=rating,
-            dataset_name=dataset_name,
-            dataset_url=dataset_url,
-            code_name=code_name,
-            code_url=code_url,
+        artifact = Artifact(
+            metadata=ArtifactMetadata(
+                name=name,
+                id=artifact_id,
+                type=artifact_type,
+            ),
+            data=ArtifactData(url=payload.url),
         )
-        if rating:
-            memory.save_model_rating(artifact.metadata.id, rating)
+
+        # Save artifact with "processing" status
+        memory.save_artifact(artifact, processing_status="processing")
+
+        # Process in background
+        background_tasks.add_task(
+            process_model_artifact_async,
+            payload.url,
+            artifact_id,
+            name,
+        )
+
+        # Return 202 for models (async processing)
+        response.status_code = status.HTTP_202_ACCEPTED
         return artifact
 
     # Dataset/Code artifacts are processed immediately

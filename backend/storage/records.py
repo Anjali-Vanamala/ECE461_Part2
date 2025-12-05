@@ -15,8 +15,8 @@ class ModelRecord:
     code_id: Optional[ArtifactID] = None
     code_name: Optional[str] = None
     code_url: Optional[str] = None
-    rating: Optional[ModelRating] = None
-
+    rating: Optional[ModelRating] = None,
+    license: Optional[str] = None
 
 @dataclass
 class DatasetRecord:

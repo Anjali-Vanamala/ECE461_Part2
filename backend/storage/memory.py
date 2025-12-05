@@ -77,6 +77,7 @@ def save_artifact(
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
     code_url: Optional[str] = None,
+    license: Optional[str] = None
 ) -> Artifact:
     """Insert or update an artifact entry in the appropriate store."""
     if artifact.metadata.type == ArtifactType.MODEL:
@@ -88,6 +89,7 @@ def save_artifact(
             record.dataset_url = dataset_url or record.dataset_url
             record.code_name = code_name or record.code_name
             record.code_url = code_url or record.code_url
+            record.license = license or record.license
         else:
             record = ModelRecord(
                 artifact=artifact,
@@ -96,6 +98,7 @@ def save_artifact(
                 dataset_url=dataset_url,
                 code_name=code_name,
                 code_url=code_url,
+                license=license
             )
             _MODELS[artifact.metadata.id] = record
         _link_dataset_code(record)
@@ -184,11 +187,24 @@ def save_model_rating(artifact_id: ArtifactID, rating: ModelRating) -> None:
         record.rating = rating
 
 
+def save_model_license(artifact_id: ArtifactID, license: str) -> None:
+    if artifact_id in _MODELS:
+        record = _MODELS[artifact_id]
+        record.license = license
+
+
 def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
     record = _MODELS.get(artifact_id)
     if not record:
         return None
     return record.rating
+
+
+def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
+    record = _MODELS.get(artifact_id)
+    if not record:
+        return None
+    return record.license
 
 
 def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:

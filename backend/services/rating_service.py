@@ -225,6 +225,60 @@ def _resolve_code(code_repo: Optional[str], code_name: Optional[str]) -> Tuple[O
     return resolved_name, resolved_url, code_info, code_readme
 
 
+def _extract_model_license(model_info, readme_text: str):
+    """Extract license from model metadata or cardData."""
+    # Priority 1: cardData.license
+    card = model_info.get("cardData", {}) or {}
+    lic = card.get("license")
+    if isinstance(lic, str) and lic.strip():
+        return lic.strip()
+
+    # Priority 2: look at tags: license:mit, license:gpl-3.0, etc.
+    tags = model_info.get("tags", [])
+    for t in tags:
+        if t.lower().startswith("license:"):
+            return t.split(":", 1)[1].strip()
+
+    if readme_text:
+        readme_license = _extract_license_from_readme(readme_text)
+        if readme_license:
+            return readme_license
+        
+    return None  # unknown license
+
+
+def _extract_license_from_readme(readme: str) -> str | None:
+    """Search README text for license declarations."""
+    text = readme.lower()
+
+    # simple direct keywords
+    patterns = [
+        r"licensed under the ([a-z0-9\.\-\s]+) license",
+        r"released under the ([a-z0-9\.\-\s]+) license",
+        r"under the ([a-z0-9\.\-\s]+) license",
+        r"\bmit license\b",
+        r"\bapache license\b",
+        r"\bapache 2\.0\b",
+        r"\bapachel\s*2\b",
+        r"\bgplv?3\b",
+        r"\bgplv?2\b",
+        r"\blgplv?3\b",
+        r"\blgplv?2\.1\b",
+        r"\bbsd license\b",
+        r"\bcc\-by\-nc\b",
+        r"\bcc\-by\b",
+    ]
+
+    for pat in patterns:
+        match = re.search(pat, text)
+        if match:
+            # group(1) if available, otherwise whole match
+            lic = match.group(1) if match.groups() else match.group(0)
+            return lic.strip()
+
+    return None
+
+
 def compute_model_artifact(
     url: str,
     *,
@@ -358,4 +412,6 @@ def compute_model_artifact(
         data=ArtifactData(url=url),
     )
 
-    return artifact, rating, dataset_name, dataset_url, code_name, code_url
+    license = _extract_model_license(model_info, readme_text)
+
+    return artifact, rating, dataset_name, dataset_url, code_name, code_url, license

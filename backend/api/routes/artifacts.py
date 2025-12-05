@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import time
 from typing import List
+import requests
 
 import regex
 from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
@@ -11,7 +12,7 @@ from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactMetadata,
                             ArtifactQuery, ArtifactRegistration, ArtifactType,
-                            ModelRating)
+                            ModelRating, SimpleLicenseCheckRequest)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory
 
@@ -139,7 +140,7 @@ async def register_artifact(
 
     if artifact_type == ArtifactType.MODEL:
         try:
-            artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(payload.url)
+            artifact, rating, dataset_name, dataset_url, code_name, code_url, license = compute_model_artifact(payload.url)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(exc)) from exc
 
@@ -153,9 +154,12 @@ async def register_artifact(
             dataset_url=dataset_url,
             code_name=code_name,
             code_url=code_url,
+            license=license,
         )
         if rating:
             memory.save_model_rating(artifact.metadata.id, rating)
+        if license:
+            memory.save_model_license(artifact.metadata.id, license)
         return artifact
 
     artifact_name = payload.name or _derive_name(payload.url)
@@ -322,3 +326,118 @@ async def get_artifact_cost(
         entry = ArtifactCostEntry(standalone_cost=0.0, total_cost=0.0)
 
     return ArtifactCost({artifact_id: entry})
+
+
+
+COMPATIBLE_LICENSES = {
+    "apache-2.0", "apache 2.0", "apache license 2.0", "apache",
+    "mit", "mit license",
+    "bsd-3-clause", "bsd-3", "bsd 3-clause", "bsd",
+    "bsl-1.0", "boost software license",
+    "lgpl-2.1", "lgpl 2.1", "lgplv2.1"   # only LGPL 2.1 allowed
+}
+
+INCOMPATIBLE_LICENSES = {
+    "gpl", "gpl-2", "gpl-3", "gplv2", "gplv3", "gnu general public license",
+    "agpl", "agpl-3", "affero gpl",
+    "lgpl", "lgpl-3", "lgplv3",   # anything except LGPL 2.1
+    "non-commercial", "non commercial", "commercial", "proprietary",
+    "creative commons", "cc-by", "cc-by-nc"
+}
+
+def normalize_license(name: str) -> str:
+    """
+    Normalize a license string so it can be compared reliably.
+    Handles: case, hyphens, underscores, punctuation, repeated spaces.
+    """
+    if not name:
+        return "unknown"
+
+    name = name.lower()
+
+    # Replace punctuation with spaces
+    name = re.sub(r"[_\-/,]+", " ", name)
+
+    # Remove parentheses + version qualifiers
+    name = re.sub(r"\(.*?\)", "", name)
+
+    # Remove extra spaces
+    name = " ".join(name.split())
+
+    return name
+
+
+def is_license_compatible(model_license: str, github_license: str) -> bool:
+    """
+    Return True if the model artifact license is compatible with the GitHub repo license.
+
+    Compatibility rules:
+      - Both must be in COMPATIBLE_LICENSES after normalization.
+      - Anything in INCOMPATIBLE_LICENSES → immediately false.
+      - Unknown → false.
+    """
+    model_norm = normalize_license(model_license)
+    repo_norm = normalize_license(github_license)
+
+    # Unknown license → incompatible
+    if model_norm == "unknown":
+        return False
+    
+    if repo_norm == "unknown":
+        return False
+
+    # Explicit incompatibility check
+    if model_norm in INCOMPATIBLE_LICENSES or repo_norm in INCOMPATIBLE_LICENSES:
+        return False
+
+    # Both must be compatible
+    if model_norm in COMPATIBLE_LICENSES and repo_norm in COMPATIBLE_LICENSES:
+        return True
+
+    # Otherwise incompatible
+    return False
+
+
+@router.post(
+    "/artifact/model/{artifact_id}/license-check",
+    summary="Assess license compatibility between model artifact and GitHub repo. (BASELINE)",
+)
+async def license_check(
+    artifact_id: ArtifactID,
+    payload: SimpleLicenseCheckRequest,
+):
+    # 1. Check artifact exists
+    artifact = memory.get_artifact(ArtifactType.MODEL, artifact_id)
+    if not artifact:
+        raise HTTPException(404, "Artifact does not exist.")
+
+    # 2. Extract model license
+    model_license = memory.get_model_license(artifact_id)
+    if not model_license:
+        return False  # unknown → incompatible
+
+    # 3. Parse GitHub URL
+    match = re.search(r"github\.com/([^/]+)/([^/]+)", payload.github_url)
+    if not match:
+        raise HTTPException(400, "Malformed GitHub repository URL.")
+    owner, repo = match.groups()
+
+    # 4. Fetch GitHub license
+    try:
+        resp = requests.get(
+            f"https://api.github.com/repos/{owner}/{repo}/license",
+            timeout=10
+        )
+    except:
+        raise HTTPException(502, "External license information could not be retrieved.")
+
+    if resp.status_code == 404:
+        raise HTTPException(404, "GitHub repository not found.")
+
+    data = resp.json()
+    github_license = data.get("license", {}).get("spdx_id")
+
+    # 5. Compute compatibility
+    compatible = is_license_compatible(model_license, github_license)
+
+    return compatible

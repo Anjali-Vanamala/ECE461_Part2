@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from typing import List
 import requests
 
 import regex
-from fastapi import (APIRouter, Body, HTTPException, Path, Query, Response,
-                     status)
+from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
+                     Query, Response, status)
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactMetadata,
@@ -125,14 +126,56 @@ async def reset_registry() -> dict[str, str]:
     return {"status": "reset"}
 
 
+def process_model_artifact_async(
+    url: str,
+    artifact_id: str,
+    name: str,
+) -> None:
+    """Background task to process model artifact asynchronously.
+
+    Note: This function is synchronous but runs in a background thread
+    to avoid blocking the event loop.
+    """
+    try:
+        # Compute the artifact (this is the long-running operation)
+        artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(
+            url,
+            artifact_id=artifact_id,
+            name_override=name,
+        )
+
+        # Save the completed artifact
+        memory.save_artifact(
+            artifact,
+            rating=rating,
+            dataset_name=dataset_name,
+            dataset_url=dataset_url,
+            code_name=code_name,
+            code_url=code_url,
+            processing_status="completed",
+        )
+        # Explicitly ensure processing status is set to completed
+        memory.update_processing_status(artifact_id, "completed")
+        if rating:
+            memory.save_model_rating(artifact.metadata.id, rating)
+    except Exception as e:
+        # Mark as failed
+        memory.update_processing_status(artifact_id, "failed")
+        # Log the error but don't raise - the artifact is already registered
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to process model artifact {artifact_id}: {e}")
+
+
 @router.post(
     "/artifact/{artifact_type}",
     response_model=Artifact,
-    status_code=status.HTTP_201_CREATED,
     summary="Register a new artifact. (BASELINE)",
 )
 async def register_artifact(
     payload: ArtifactRegistration,
+    background_tasks: BackgroundTasks,
+    response: Response,
     artifact_type: ArtifactType = Path(..., description="Type of artifact being ingested."),
 ) -> Artifact:
     if memory.artifact_exists(artifact_type, payload.url):
@@ -140,7 +183,7 @@ async def register_artifact(
 
     if artifact_type == ArtifactType.MODEL:
         try:
-            artifact, rating, dataset_name, dataset_url, code_name, code_url, license = compute_model_artifact(payload.url)
+            artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(payload.url)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(exc)) from exc
 
@@ -154,14 +197,12 @@ async def register_artifact(
             dataset_url=dataset_url,
             code_name=code_name,
             code_url=code_url,
-            license=license,
         )
         if rating:
             memory.save_model_rating(artifact.metadata.id, rating)
-        if license:
-            memory.save_model_license(artifact.metadata.id, license)
         return artifact
 
+    # Dataset/Code artifacts are processed immediately
     artifact_name = payload.name or _derive_name(payload.url)
 
     artifact_id = memory.generate_artifact_id()
@@ -174,6 +215,9 @@ async def register_artifact(
         data=ArtifactData(url=payload.url),
     )
     memory.save_artifact(artifact)
+
+    # Return 201 for non-model artifacts (immediate processing)
+    response.status_code = status.HTTP_201_CREATED
     return artifact
 
 
@@ -185,6 +229,7 @@ async def register_artifact(
         400: {"description": "Malformed artifact_type or artifact_id."},
         404: {"description": "Artifact does not exist."},
         200: {"description": "Artifact retrieved successfully."},
+        504: {"description": "Processing timeout."},
     },
 )
 async def get_artifact(
@@ -220,6 +265,36 @@ async def get_artifact(
             detail="404: Artifact does not exist.",
         )
 
+    # If model is still processing, wait (with timeout)
+    if artifact_type_enum == ArtifactType.MODEL:
+        import time
+        max_wait = 120  # 2 minutes max wait
+        poll_interval = 0.5  # Check every 500ms
+        start_time = time.time()
+
+        while True:
+            processing_status = memory.get_processing_status(artifact_id)
+            if processing_status == "completed":
+                # Refresh artifact to get latest data
+                artifact = memory.get_artifact(artifact_type_enum, artifact_id)
+                break
+            elif processing_status == "failed":
+                raise HTTPException(
+                    status_code=status.HTTP_424_FAILED_DEPENDENCY,
+                    detail="Model processing failed.",
+                )
+            elif processing_status == "processing" or processing_status is None:
+                # None means artifact not yet initialized - treat as processing
+                if time.time() - start_time > max_wait:
+                    raise HTTPException(
+                        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                        detail="Model processing timeout.",
+                    )
+                await asyncio.sleep(poll_interval)
+            else:
+                # Unknown status, assume completed
+                break
+
     return artifact
 
 
@@ -230,6 +305,8 @@ async def get_artifact(
 )
 async def update_artifact(
     payload: Artifact,
+    background_tasks: BackgroundTasks,
+    response: Response,
     artifact_type: ArtifactType = Path(..., description="Type of artifact to update"),
     artifact_id: ArtifactID = Path(..., description="artifact id"),
 ) -> Artifact:
@@ -240,25 +317,20 @@ async def update_artifact(
         )
 
     if artifact_type == ArtifactType.MODEL:
-        try:
-            artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(
-                payload.data.url, artifact_id=artifact_id, name_override=payload.metadata.name
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_424_FAILED_DEPENDENCY, detail=str(exc)) from exc
+        # Update model asynchronously (same pattern as POST)
+        memory.save_artifact(payload, processing_status="processing")
 
-        memory.save_artifact(
-            artifact,
-            rating=rating,
-            dataset_name=dataset_name,
-            dataset_url=dataset_url,
-            code_name=code_name,
-            code_url=code_url,
+        background_tasks.add_task(
+            process_model_artifact_async,
+            payload.data.url,
+            artifact_id,
+            payload.metadata.name,
         )
-        if rating:
-            memory.save_model_rating(artifact_id, rating)
-        return artifact
 
+        response.status_code = status.HTTP_202_ACCEPTED
+        return payload
+
+    # Non-model artifacts are updated immediately
     existing = memory.get_artifact(artifact_type, artifact_id)
     if not existing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
@@ -290,6 +362,33 @@ async def delete_artifact(
 async def get_model_rating(
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
 ) -> ModelRating:
+    # Wait for processing to complete if still processing
+    import time
+    max_wait = 120  # 2 minutes max wait
+    poll_interval = 0.5  # Check every 500ms
+    start_time = time.time()
+
+    while True:
+        processing_status = memory.get_processing_status(artifact_id)
+        if processing_status == "completed":
+            break
+        elif processing_status == "failed":
+            raise HTTPException(
+                status_code=status.HTTP_424_FAILED_DEPENDENCY,
+                detail="Model processing failed.",
+            )
+        elif processing_status == "processing" or processing_status is None:
+            # None means artifact not yet initialized - treat as processing
+            if time.time() - start_time > max_wait:
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail="Model processing timeout.",
+                )
+            await asyncio.sleep(poll_interval)
+        else:
+            # Unknown status, try to get rating anyway
+            break
+
     rating = memory.get_model_rating(artifact_id)
     if not rating:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist or lacks a rating.")

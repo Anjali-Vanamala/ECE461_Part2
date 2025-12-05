@@ -15,8 +15,9 @@ class ModelRecord:
     code_id: Optional[ArtifactID] = None
     code_name: Optional[str] = None
     code_url: Optional[str] = None
-    rating: Optional[ModelRating] = None,
-    license: Optional[str] = None
+    rating: Optional[ModelRating] = None
+    processing_status: str = "completed"  # "processing", "completed", "failed"
+
 
 @dataclass
 class DatasetRecord:

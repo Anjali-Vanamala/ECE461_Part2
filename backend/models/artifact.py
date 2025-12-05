@@ -106,6 +106,10 @@ class SizeScore(BaseModel):
     aws_server: float
 
 
+class ModelLicense(BaseModel):
+    license_name: Optional[str] = None
+
+
 class ModelRating(BaseModel):
     name: ArtifactName
     category: str

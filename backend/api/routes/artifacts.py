@@ -4,9 +4,9 @@ import asyncio
 import re
 import time
 from typing import List
-import requests
 
 import regex
+import requests
 from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
                      Query, Response, status)
 
@@ -436,7 +436,6 @@ async def get_artifact_cost(
     return ArtifactCost({artifact_id: entry})
 
 
-
 COMPATIBLE_LICENSES = {
     "apache-2.0", "apache 2.0", "apache license 2.0", "apache",
     "mit", "mit license",
@@ -452,6 +451,7 @@ INCOMPATIBLE_LICENSES = {
     "non-commercial", "non commercial", "commercial", "proprietary",
     "creative commons", "cc-by", "cc-by-nc"
 }
+
 
 def normalize_license(name: str) -> str:
     """
@@ -490,7 +490,7 @@ def is_license_compatible(model_license: str, github_license: str) -> bool:
     # Unknown license → incompatible
     if model_norm == "unknown":
         return False
-    
+
     if repo_norm == "unknown":
         return False
 
@@ -536,7 +536,7 @@ async def license_check(
             f"https://api.github.com/repos/{owner}/{repo}/license",
             timeout=10
         )
-    except:
+    except Exception:
         raise HTTPException(502, "External license information could not be retrieved.")
 
     if resp.status_code == 404:

@@ -243,7 +243,7 @@ def _extract_model_license(model_info, readme_text: str):
         readme_license = _extract_license_from_readme(readme_text)
         if readme_license:
             return readme_license
-        
+
     return None  # unknown license
 
 
@@ -284,7 +284,7 @@ def compute_model_artifact(
     *,
     artifact_id: Optional[str] = None,
     name_override: Optional[str] = None,
-) -> tuple[Artifact, ModelRating, Optional[str], Optional[str], Optional[str], Optional[str]]:
+) -> tuple[Artifact, ModelRating, Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     name = name_override or _derive_name_from_url(url)
     artifact_id = artifact_id or memory.generate_artifact_id()
 

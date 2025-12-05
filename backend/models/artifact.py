@@ -105,8 +105,10 @@ class SizeScore(BaseModel):
     desktop_pc: float
     aws_server: float
 
+
 class ModelLicense(BaseModel):
     license_name: Optional[str] = None
+
 
 class ModelRating(BaseModel):
     name: ArtifactName
@@ -137,7 +139,6 @@ class ModelRating(BaseModel):
     size_score_latency: float
 
 
-
 __all__ = [
     "Artifact",
     "ArtifactAuditEntry",
@@ -156,4 +157,3 @@ __all__ = [
     "ModelRating",
     "SimpleLicenseCheckRequest",
 ]
-

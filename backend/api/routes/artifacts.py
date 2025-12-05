@@ -138,7 +138,7 @@ def process_model_artifact_async(
     """
     try:
         # Compute the artifact (this is the long-running operation)
-        artifact, rating, dataset_name, dataset_url, code_name, code_url = compute_model_artifact(
+        artifact, rating, dataset_name, dataset_url, code_name, code_url, license = compute_model_artifact(
             url,
             artifact_id=artifact_id,
             name_override=name,
@@ -148,6 +148,7 @@ def process_model_artifact_async(
         memory.save_artifact(
             artifact,
             rating=rating,
+            license=license,
             dataset_name=dataset_name,
             dataset_url=dataset_url,
             code_name=code_name,

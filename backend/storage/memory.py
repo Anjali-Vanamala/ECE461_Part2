@@ -73,6 +73,7 @@ def save_artifact(
     artifact: Artifact,
     *,
     rating: Optional[ModelRating] = None,
+    license: Optional[str] = None,
     dataset_name: Optional[str] = None,
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
@@ -89,12 +90,14 @@ def save_artifact(
             record.dataset_url = dataset_url or record.dataset_url
             record.code_name = code_name or record.code_name
             record.code_url = code_url or record.code_url
+            record.license = license or record.license
             if processing_status is not None:
                 record.processing_status = processing_status
         else:
             record = ModelRecord(
                 artifact=artifact,
                 rating=rating,
+                license=license,
                 dataset_name=dataset_name,
                 dataset_url=dataset_url,
                 code_name=code_name,
@@ -200,6 +203,12 @@ def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
         return None
     return record.rating
 
+
+def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
+    record = _MODELS.get(artifact_id)
+    if not record:
+        return None
+    return record.license
 
 def get_processing_status(artifact_id: ArtifactID) -> Optional[str]:
     """Get the processing status of a model artifact."""

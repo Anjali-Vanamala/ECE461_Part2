@@ -631,6 +631,7 @@ class _StoreDict:
                 )
         except ClientError as e:
             print(f"[DynamoDB] Error getting values for {self.artifact_type}: {e}")
+            raise  # Re-raise to prevent silent data loss
 
 
 _TYPE_TO_STORE = {

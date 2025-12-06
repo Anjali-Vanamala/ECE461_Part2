@@ -77,6 +77,7 @@ def save_artifact(
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
     code_url: Optional[str] = None,
+    processing_status: Optional[str] = None,
 ) -> Artifact:
     """Insert or update an artifact entry in the appropriate store."""
     if artifact.metadata.type == ArtifactType.MODEL:
@@ -88,6 +89,8 @@ def save_artifact(
             record.dataset_url = dataset_url or record.dataset_url
             record.code_name = code_name or record.code_name
             record.code_url = code_url or record.code_url
+            if processing_status is not None:
+                record.processing_status = processing_status
         else:
             record = ModelRecord(
                 artifact=artifact,
@@ -96,6 +99,7 @@ def save_artifact(
                 dataset_url=dataset_url,
                 code_name=code_name,
                 code_url=code_url,
+                processing_status=processing_status or "completed",
             )
             _MODELS[artifact.metadata.id] = record
         _link_dataset_code(record)
@@ -194,6 +198,21 @@ def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
 def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
     """Get full model record with relationships (dataset_id, code_id)."""
     return _MODELS.get(artifact_id)
+
+
+def get_processing_status(artifact_id: ArtifactID) -> Optional[str]:
+    """Get the processing status of a model artifact."""
+    record = _MODELS.get(artifact_id)
+    if not record:
+        return None
+    return record.processing_status
+
+
+def update_processing_status(artifact_id: ArtifactID, status: str) -> None:
+    """Update the processing status of a model artifact."""
+    record = _MODELS.get(artifact_id)
+    if record:
+        record.processing_status = status
 
 
 def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:

@@ -81,6 +81,7 @@ def _item_to_record(item: Dict) -> CodeRecord | DatasetRecord | ModelRecord:
             code_id=item.get("code_id"),
             code_name=item.get("code_name"),
             code_url=item.get("code_url"),
+            processing_status=item.get("processing_status", "completed"),
         )
     elif artifact_type == ArtifactType.DATASET:
         return DatasetRecord(artifact=artifact)
@@ -96,6 +97,7 @@ def save_artifact(
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
     code_url: Optional[str] = None,
+    processing_status: Optional[str] = None,
 ) -> Artifact:
     """Insert or update an artifact entry in DynamoDB."""
     artifact_id = artifact.metadata.id
@@ -134,6 +136,8 @@ def save_artifact(
                 item["code_name_normalized"] = normalized_code
         if code_url is not None:
             item["code_url"] = code_url
+        # Set processing_status: use provided value, or default to "completed"
+        item["processing_status"] = processing_status if processing_status is not None else "completed"
 
     # Update dataset/code IDs for models that reference this
     if artifact_type == ArtifactType.DATASET:
@@ -462,6 +466,39 @@ def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
     except ClientError as e:
         print(f"[DynamoDB] Error getting model record: {e}")
         return None
+
+
+def get_processing_status(artifact_id: ArtifactID) -> Optional[str]:
+    """Get the processing status of a model artifact."""
+    try:
+        response = table.get_item(Key={"artifact_id": artifact_id})
+        if "Item" not in response:
+            return None
+        item = response["Item"]
+        if item.get("artifact_type") != ArtifactType.MODEL.value:
+            return None
+        return item.get("processing_status", "completed")
+    except ClientError as e:
+        print(f"[DynamoDB] Error getting processing status: {e}")
+        return None
+
+
+def update_processing_status(artifact_id: ArtifactID, status: str) -> None:
+    """Update the processing status of a model artifact."""
+    try:
+        table.update_item(
+            Key={"artifact_id": artifact_id},
+            UpdateExpression="SET processing_status = :status",
+            ConditionExpression="artifact_type = :type",
+            ExpressionAttributeValues={
+                ":status": status,
+                ":type": ArtifactType.MODEL.value,
+            },
+        )
+        print(f"[DynamoDB] Updated processing status for model: {artifact_id}")
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            print(f"[DynamoDB] Error updating processing status: {e}")
 
 
 def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:

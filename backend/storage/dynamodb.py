@@ -107,9 +107,12 @@ def save_artifact(
         "artifact_type": artifact_type.value,
         "artifact": _serialize_artifact(artifact),
         "name": artifact.metadata.name,
-        "name_normalized": _normalized(artifact.metadata.name) or "",
         "url": artifact.data.url,
     }
+    # Only store normalized name if it's not empty
+    normalized_name = _normalized(artifact.metadata.name)
+    if normalized_name:
+        item["name_normalized"] = normalized_name
 
     # Add model-specific fields
     if artifact_type == ArtifactType.MODEL:
@@ -119,12 +122,16 @@ def save_artifact(
                 item["rating"] = rating_dict
         if dataset_name is not None:
             item["dataset_name"] = dataset_name
-            item["dataset_name_normalized"] = _normalized(dataset_name) or ""
+            normalized_dataset = _normalized(dataset_name)
+            if normalized_dataset:  # Only store if not empty
+                item["dataset_name_normalized"] = normalized_dataset
         if dataset_url is not None:
             item["dataset_url"] = dataset_url
         if code_name is not None:
             item["code_name"] = code_name
-            item["code_name_normalized"] = _normalized(code_name) or ""
+            normalized_code = _normalized(code_name)
+            if normalized_code:  # Only store if not empty
+                item["code_name_normalized"] = normalized_code
         if code_url is not None:
             item["code_url"] = code_url
 

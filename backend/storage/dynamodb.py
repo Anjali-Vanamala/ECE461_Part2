@@ -103,7 +103,16 @@ def save_artifact(
     artifact_id = artifact.metadata.id
     artifact_type = artifact.metadata.type
 
-    # Prepare base item
+    # Check if item already exists to preserve existing fields during update
+    existing_item = None
+    try:
+        response = table.get_item(Key={"artifact_id": artifact_id})
+        if "Item" in response:
+            existing_item = response["Item"]
+    except ClientError as e:
+        print(f"[DynamoDB] Error checking existing artifact: {e}")
+
+    # Prepare base item (always update these fields)
     item = {
         "artifact_id": artifact_id,
         "artifact_type": artifact_type.value,
@@ -118,26 +127,63 @@ def save_artifact(
 
     # Add model-specific fields
     if artifact_type == ArtifactType.MODEL:
+        # Preserve existing rating if not provided (matching memory backend behavior)
         if rating is not None:
             rating_dict = _serialize_rating(rating)
             if rating_dict is not None:
                 item["rating"] = rating_dict
+        elif existing_item and "rating" in existing_item:
+            item["rating"] = existing_item["rating"]
+
+        # Preserve existing dataset fields if not provided
         if dataset_name is not None:
             item["dataset_name"] = dataset_name
             normalized_dataset = _normalized(dataset_name)
             if normalized_dataset:  # Only store if not empty
                 item["dataset_name_normalized"] = normalized_dataset
+        elif existing_item:
+            if "dataset_name" in existing_item:
+                item["dataset_name"] = existing_item["dataset_name"]
+            if "dataset_name_normalized" in existing_item:
+                item["dataset_name_normalized"] = existing_item["dataset_name_normalized"]
+
         if dataset_url is not None:
             item["dataset_url"] = dataset_url
+        elif existing_item and "dataset_url" in existing_item:
+            item["dataset_url"] = existing_item["dataset_url"]
+
+        # Preserve existing dataset_id if present
+        if existing_item and "dataset_id" in existing_item:
+            item["dataset_id"] = existing_item["dataset_id"]
+
+        # Preserve existing code fields if not provided
         if code_name is not None:
             item["code_name"] = code_name
             normalized_code = _normalized(code_name)
             if normalized_code:  # Only store if not empty
                 item["code_name_normalized"] = normalized_code
+        elif existing_item:
+            if "code_name" in existing_item:
+                item["code_name"] = existing_item["code_name"]
+            if "code_name_normalized" in existing_item:
+                item["code_name_normalized"] = existing_item["code_name_normalized"]
+
         if code_url is not None:
             item["code_url"] = code_url
-        # Set processing_status: use provided value, or default to "completed"
-        item["processing_status"] = processing_status if processing_status is not None else "completed"
+        elif existing_item and "code_url" in existing_item:
+            item["code_url"] = existing_item["code_url"]
+
+        # Preserve existing code_id if present
+        if existing_item and "code_id" in existing_item:
+            item["code_id"] = existing_item["code_id"]
+
+        # Preserve existing processing_status if not provided, or default to "completed"
+        if processing_status is not None:
+            item["processing_status"] = processing_status
+        elif existing_item and "processing_status" in existing_item:
+            item["processing_status"] = existing_item["processing_status"]
+        else:
+            item["processing_status"] = "completed"
 
     # Update dataset/code IDs for models that reference this
     if artifact_type == ArtifactType.DATASET:

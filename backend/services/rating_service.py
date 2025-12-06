@@ -25,53 +25,109 @@ def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
     parsed = urlparse(raw_model_url)
     model_path = parsed.path.strip("/")
     parts = model_path.split("/")
-    if "tree" in parts:
-        tree_index = parts.index("tree")
-        model_path = "/".join(parts[:tree_index])
 
-    model_info: dict = {}
+    # Remove "tree/main" or similar
+    if "tree" in parts:
+        model_path = "/".join(parts[: parts.index("tree")])
+
+    hfhub_info = {}
+    rest_info = {}
     model_readme_text = ""
 
-    # Use huggingface_hub library which handles auth automatically
-    # If auth fails, we'll gracefully degrade (no dataset/code extraction)
+    # -------------------------------------------------------
+    # 1. Get model info from huggingface_hub (fast + reliable)
+    # -------------------------------------------------------
     try:
         api = HfApi()
-        model_info_obj = api.model_info(repo_id=model_path)
-        # Convert to dict format expected by metrics
-        model_info = {
-            "id": model_info_obj.id,
-            "modelId": getattr(model_info_obj, "modelId", None),
-            "author": getattr(model_info_obj, "author", None),
-            "sha": getattr(model_info_obj, "sha", None),
-            "lastModified": str(getattr(model_info_obj, "lastModified", "")),
-            "private": getattr(model_info_obj, "private", False),
-            "disabled": getattr(model_info_obj, "disabled", False),
-            "gated": getattr(model_info_obj, "gated", False),
-            "pipeline_tag": getattr(model_info_obj, "pipeline_tag", None),
-            "tags": getattr(model_info_obj, "tags", []),
-            "downloads": getattr(model_info_obj, "downloads", 0),
-            "likes": getattr(model_info_obj, "likes", 0),
-            "library_name": getattr(model_info_obj, "library_name", None),
-            "cardData": getattr(model_info_obj, "cardData", {}),
-            "siblings": [{"rfilename": s.rfilename} for s in getattr(model_info_obj, "siblings", [])],
-        }
-        # Extract datasets from cardData if available
-        card_data = getattr(model_info_obj, "cardData", {}) or {}
-        if isinstance(card_data, dict) and "datasets" in card_data:
-            model_info["datasets"] = card_data.get("datasets")
-
-        # Also check tags for dataset references
-        tags = getattr(model_info_obj, "tags", [])
-        dataset_tags = [tag.replace("dataset:", "") for tag in tags if tag.startswith("dataset:")]
-        if dataset_tags and "datasets" not in model_info:
-            model_info["datasets"] = dataset_tags
+        info = api.model_info(repo_id=model_path)
+        hfhub_info = info.__dict__
     except Exception:
-        model_info = {}
+        hfhub_info = {}
 
-    # Fetch README using huggingface_hub
+    # -------------------------------------------------------
+    # 2. Get REST API model info (this has spaces, author, modelId)
+    # -------------------------------------------------------
+    try:
+        rest_url = f"https://huggingface.co/api/models/{model_path}"
+        rest_response = rq.get(rest_url, timeout=15)
+        if rest_response.status_code == 200:
+            rest_info = rest_response.json()
+    except Exception:
+        rest_info = {}
+
+    # -------------------------------------------------------
+    # 3. Merge HFHub + REST into unified model_info
+    # -------------------------------------------------------
+    model_info = {}
+
+    # Always include ID
+    model_info["id"] = hfhub_info.get("id", rest_info.get("id", model_path))
+    model_info["modelId"] = rest_info.get("modelId", model_info["id"])
+
+    # Author (REST is more reliable)
+    model_info["author"] = rest_info.get(
+        "author",
+        hfhub_info.get("author", None)
+    )
+
+    # Last Modified — normalize to ISO string
+    lm = (
+        rest_info.get("lastModified") or hfhub_info.get("lastModified")
+    )
+    if hasattr(lm, "isoformat"):
+        lm = lm.isoformat()  # type: ignore[union-attr]
+    model_info["lastModified"] = lm or None
+
+    # Tags (HFHub reliable)
+    model_info["tags"] = rest_info.get("tags", hfhub_info.get("tags", []))
+
+    # Spaces — only REST provides this!
+    model_info["spaces"] = rest_info.get("spaces", [])
+
+    # Likes, downloads (REST reliable)
+    model_info["likes"] = rest_info.get("likes", hfhub_info.get("likes", 0))
+    model_info["downloads"] = rest_info.get("downloads", hfhub_info.get("downloads", 0))
+
+    # Card data (HFHub reliable)
+    model_info["cardData"] = hfhub_info.get("cardData", {})
+    if not isinstance(model_info["cardData"], dict):
+        model_info["cardData"] = {}
+
+    # Siblings (REST and HFHub both have this)
+    if "siblings" in rest_info:
+        model_info["siblings"] = rest_info["siblings"]
+    else:
+        model_info["siblings"] = [
+            {"rfilename": s.rfilename} for s in hfhub_info.get("siblings", [])
+        ]
+
+    # Pipeline tag (HFHub mostly)
+    model_info["pipeline_tag"] = rest_info.get(
+        "pipeline_tag", hfhub_info.get("pipeline_tag")
+    )
+
+    # Library name (HFHub)
+    model_info["library_name"] = hfhub_info.get("library_name")
+
+    # Private / gated (REST reliable)
+    model_info["private"] = rest_info.get("private", hfhub_info.get("private", False))
+    model_info["gated"] = rest_info.get("gated", hfhub_info.get("gated", False))
+
+    # Extract datasets from cardData or tags
+    card = model_info["cardData"] or {}
+    datasets = card.get("datasets")
+    if not datasets:
+        tags = model_info.get("tags", [])
+        dataset_tags = [t.replace("dataset:", "") for t in tags if t.startswith("dataset:")]  # type: ignore[union-attr]
+        datasets = dataset_tags if dataset_tags else []
+    model_info["datasets"] = datasets
+
+    # -------------------------------------------------------
+    # 4. Fetch README via huggingface_hub
+    # -------------------------------------------------------
     try:
         readme_url = hf_hub_url(repo_id=model_path, filename="README.md", repo_type="model")
-        readme_response = rq.get(readme_url, timeout=30)
+        readme_response = rq.get(readme_url, timeout=15)
         if readme_response.status_code == 200:
             model_readme_text = readme_response.text.lower()
     except Exception:

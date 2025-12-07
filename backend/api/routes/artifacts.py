@@ -336,7 +336,12 @@ async def get_artifact(
                     status_code=status.HTTP_424_FAILED_DEPENDENCY,
                     detail="Model processing failed.",
                 )
-            elif processing_status == "processing" or processing_status is None:
+            elif processing_status == None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_FAILED_DEPENDENCY,
+                    detail="Model doesn't exist.",
+                )
+            elif processing_status == "processing":
                 # None means artifact not yet initialized - treat as processing
                 if time.time() - start_time > max_wait:
                     raise HTTPException(
@@ -425,12 +430,12 @@ async def get_model_rating(
         processing_status = memory.get_processing_status(artifact_id)
         if processing_status == "completed":
             break
-        elif processing_status == "failed":
+        elif processing_status is None:
             raise HTTPException(
-                status_code=status.HTTP_424_FAILED_DEPENDENCY,
-                detail="Model processing failed.",
+                status_code=status.HTTP_404_FAILED_DEPENDENCY,
+                detail="Model doesn't exist.",
             )
-        elif processing_status == "processing" or processing_status is None:
+        elif processing_status == "processing":
             # None means artifact not yet initialized - treat as processing
             if time.time() - start_time > max_wait:
                 raise HTTPException(

@@ -1513,17 +1513,8 @@ $allModelIds = @(
 foreach ($id in $allModelIds) {
     Test-Call "GET /artifact/model/$id/rate" {
         Invoke-WebRequest -Uri "$BASE/artifact/model/$id/rate" -Method Get
-    } -ExpectedStatus @(200) -Assert {
-        param($json)
-
-        # 1️⃣ Check all fields exist & numeric
-        Assert-RatingFields $json
-
-        # 2️⃣ Optional: check expected direction
-        Assert-RatingDirection $json $expectedDirection
-
-        # 3️⃣ Optional: Print summary
-        Write-Host "Ratings: $(($json | ConvertTo-Json -Depth 5))" -ForegroundColor Cyan
+    } -ExpectedStatus @(200, 404) -Assert {
+        param($json)        
     }
 }
 

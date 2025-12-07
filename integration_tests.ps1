@@ -41,7 +41,7 @@ function Test-Call {
                 try { $json = $resp.Content | ConvertFrom-Json } catch {}
             }
         }
-        catch [System.Net.WebException], [Microsoft.PowerShell.Commands.HttpResponseException] {
+        catch [System.Net.WebException] {
             # Non-2xx (error) responses arrive here
             $response = $_.Exception.Response
             $actualStatus = [int]$response.StatusCode
@@ -1496,5 +1496,35 @@ Test-Call "POST /artifact/byRegEx ece461rules" {
         -ContentType "application/json" `
         -Body '{"regex":"ece461rules"}'
 } -ExpectedStatus @(404)
+
+$allModelIds = @(
+    $distilbertModelId,
+    $audienceClassifierModelId,
+    $bertBaseId,
+    $patrickFashionClipModelId,
+    $winKawaksVitModelId,
+    $microsoftGitBaseModelId,
+    $vikhyatMoondream2ModelId,
+    $caidasSwin2ModelId,
+    $longNameModelId,
+    $lerobotDiffusionModelId
+)
+
+foreach ($id in $allModelIds) {
+    Test-Call "GET /artifact/model/$id/rate" {
+        Invoke-WebRequest -Uri "$BASE/artifact/model/$id/rate" -Method Get
+    } -ExpectedStatus @(200) -Assert {
+        param($json)
+
+        # 1️⃣ Check all fields exist & numeric
+        Assert-RatingFields $json
+
+        # 2️⃣ Optional: check expected direction
+        Assert-RatingDirection $json $expectedDirection
+
+        # 3️⃣ Optional: Print summary
+        Write-Host "Ratings: $(($json | ConvertTo-Json -Depth 5))" -ForegroundColor Cyan
+    }
+}
 
 Write-Host "`n🎉 ALL TESTS COMPLETE" -ForegroundColor Green

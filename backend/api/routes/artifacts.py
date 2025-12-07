@@ -131,25 +131,63 @@ async def reset_registry() -> dict[str, str]:
     return {"status": "reset"}
 
 
+def validate_model_rating(rating: ModelRating) -> bool:
+    """
+    Returns True if ALL subratings are >= 0.5, otherwise False.
+    
+    Works generically across nested rating fields, including:
+        - performance_claims
+        - size_score.* 
+        - dataset_quality
+        - code_quality
+        - dataset_and_code_score
+        - ramp_up_time
+        - bus_factor
+        - etc.
+    """
+
+    def check(obj):
+        for attr, value in obj.__dict__.items():
+            if isinstance(value, (int, float)):
+                if value < 0.5:
+                    return False
+            elif hasattr(value, "__dict__"):  
+                if not check(value):
+                    return False
+        return True
+
+    return check(rating)
+
+
 def process_model_artifact_async(
     url: str,
     artifact_id: str,
     name: str,
 ) -> None:
-    """Background task to process model artifact asynchronously.
-
-    Note: This function is synchronous but runs in a background thread
-    to avoid blocking the event loop.
-    """
     try:
-        # Compute the artifact (this is the long-running operation)
+        # Compute the artifact (long-running)
         artifact, rating, dataset_name, dataset_url, code_name, code_url, license = compute_model_artifact(
             url,
             artifact_id=artifact_id,
             name_override=name,
         )
 
-        # Save the completed artifact
+        # 🔍 NEW: Validate rating before saving it
+        if rating and not validate_model_rating(rating):
+            # Mark as failed and DO NOT save final artifact or rating
+            memory.update_processing_status(artifact_id, "failed")
+
+            # Optionally discard partial model entirely:
+            memory.delete_artifact(ArtifactType.MODEL, artifact_id)
+
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Model {artifact_id} rejected: one or more subratings below 0.5."
+            )
+            return  # stops processing here
+
+        # Normal success path:
         memory.save_artifact(
             artifact,
             rating=rating,
@@ -160,14 +198,15 @@ def process_model_artifact_async(
             code_url=code_url,
             processing_status="completed",
         )
-        # Explicitly ensure processing status is set to completed
+
         memory.update_processing_status(artifact_id, "completed")
+
         if rating:
             memory.save_model_rating(artifact.metadata.id, rating)
+
     except Exception as e:
-        # Mark as failed
         memory.update_processing_status(artifact_id, "failed")
-        # Log the error but don't raise - the artifact is already registered
+
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Failed to process model artifact {artifact_id}: {e}")

@@ -338,7 +338,7 @@ async def get_artifact(
                 )
             elif processing_status == None:
                 raise HTTPException(
-                    status_code=status.HTTP_404_FAILED_DEPENDENCY,
+                    status_code=status.HTTP_404_NOT_FOUND,
                     detail="Model doesn't exist.",
                 )
             elif processing_status == "processing":
@@ -432,7 +432,7 @@ async def get_model_rating(
             break
         elif processing_status is None:
             raise HTTPException(
-                status_code=status.HTTP_404_FAILED_DEPENDENCY,
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail="Model doesn't exist.",
             )
         elif processing_status == "processing":

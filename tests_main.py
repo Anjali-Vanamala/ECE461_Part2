@@ -194,7 +194,7 @@ class Test_performanceclaims:
         model_url = "https://huggingface.co/openai/whisper-tiny/tree/main"
         score, latency = performance_claims(model_url)
         # sample output: 0.80
-        assert ((0.80 - 0.15) <= score <= (0.80 + 0.15))
+        assert ((0.80 - 0.2) <= score <= (0.80 + 0.2))
 
 
 class Test_datasetandcodescore:

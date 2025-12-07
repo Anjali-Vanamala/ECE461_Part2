@@ -134,10 +134,10 @@ async def reset_registry() -> dict[str, str]:
 def validate_model_rating(rating: ModelRating) -> bool:
     """
     Returns True if ALL subratings are >= 0.5, otherwise False.
-    
+
     Works generically across nested rating fields, including:
         - performance_claims
-        - size_score.* 
+        - size_score.*
         - dataset_quality
         - code_quality
         - dataset_and_code_score
@@ -151,7 +151,7 @@ def validate_model_rating(rating: ModelRating) -> bool:
             if isinstance(value, (int, float)):
                 if value < 0.5:
                     return False
-            elif hasattr(value, "__dict__"):  
+            elif hasattr(value, "__dict__"):
                 if not check(value):
                     return False
         return True
@@ -336,7 +336,7 @@ async def get_artifact(
                     status_code=status.HTTP_424_FAILED_DEPENDENCY,
                     detail="Model processing failed.",
                 )
-            elif processing_status == None:
+            elif processing_status is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Model doesn't exist.",

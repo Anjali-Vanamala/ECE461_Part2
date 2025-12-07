@@ -180,4 +180,4 @@ def performance_claims(model_url: str) -> tuple[float, float]:
 
     end = time.time()
     latency = end - start
-    return min(score+0.2, 1), latency * 1000
+    return min(score + 0.2, 1), latency * 1000

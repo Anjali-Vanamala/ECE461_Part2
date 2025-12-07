@@ -36,14 +36,19 @@ def calibrate_regex_timeout() -> float:
     The timeout is set to 2x the baseline to avoid false-positive timeouts.
     """
     test_pattern = r"a+"
+    test2_pattern = r"ece461"
     test_text = "a" * 5000
 
     start = time.perf_counter()
     regex.search(test_pattern, test_text)
     baseline = time.perf_counter() - start
 
+    start = time.perf_counter()
+    regex.search(test2_pattern, test_text)
+    baseline2 = time.perf_counter() - start
+
     # Never allow insanely tiny values
-    return max(0.0001, baseline * 2)
+    return max(0.0001, baseline * 4, baseline2 * 4)
 
 
 # Compute once at import time

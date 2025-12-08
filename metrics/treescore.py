@@ -144,7 +144,7 @@ def calculate_parent_net_score(parent_id: str) -> float:
         return 0.0
 
 
-def treescore(model_info_dict: Dict[str, Any]) -> Tuple[float, int]:
+def treescore(model_info_dict: Dict[str, Any]) -> Tuple[float, float]:
     """
     Calculate treescore as average of parent model scores.
 
@@ -155,7 +155,7 @@ def treescore(model_info_dict: Dict[str, Any]) -> Tuple[float, int]:
 
     Returns
     -------
-    Tuple[float, int]
+    Tuple[float, float]
         Treescore (0.0-1.0) and latency in milliseconds
     """
     start = time.time()
@@ -167,7 +167,7 @@ def treescore(model_info_dict: Dict[str, Any]) -> Tuple[float, int]:
 
         if not parents:
             logger.info("No parent models found - score: 0.0")
-            score = 0
+            score = 0.0
         else:
             logger.info(f"Found {len(parents)} parent model(s)")
 

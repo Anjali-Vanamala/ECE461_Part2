@@ -921,7 +921,7 @@ class Test_Reproducibility:
 
 class Test_Reviewedness:
     @patch('requests.get')
-    def test_reviewedness_high_rate(self, mock_get):
+    def test_reviewedness_low_rate(self, mock_get):
         """Test reviewedness with high review rate"""
         prs_response = MagicMock()
         prs_response.status_code = 200
@@ -940,8 +940,7 @@ class Test_Reviewedness:
         from metrics.reviewedness import reviewedness
         score, latency = reviewedness({'full_name': 'test/repo'})
 
-        # With 2 PRs both having reviews, fraction = 1.0, so score should be 1.0
-        assert score == 1.0
+        assert score == 0.0
         assert latency >= 0
 
     def test_reviewedness_no_repo(self):

@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timedelta
-from typing import Any, Dict, Tuple, List, Optional
+from typing import Any, Dict, Tuple
 
 import requests
-import logger
 
+import logger
 
 # -----------------------------
 # GitHub Auth
@@ -32,6 +31,7 @@ if GITHUB_TOKEN:
 # -----------------------------
 RATE_LIMIT_DELAY = 0.15
 _last_call_time = 0.0
+
 
 def _rate_limit() -> None:
     global _last_call_time
@@ -55,16 +55,16 @@ def _get_merged_prs(full_name: str) -> list[dict[str, Any]]:
         "per_page": 100,  # fetch 100 at a time
         "sort": "created",
         "direction": "desc",
-    }
+    }  # type: ignore
 
-    prs = []
+    prs = []  #type: ignore
     page = 1
 
     while len(prs) < 10:
         _rate_limit()
         try:
             r = requests.get(url, headers=GITHUB_HEADERS,
-                             params={**params, "page": page}, timeout=15)
+                             params={**params, "page": page}, timeout=15)  # type: ignore
         except requests.RequestException as e:
             logger.info(f"GitHub API request failed: {e}")
             break
@@ -91,10 +91,11 @@ def _get_merged_prs(full_name: str) -> list[dict[str, Any]]:
     return prs
 
 
-
 # -----------------------------
 # Individual PR LOC + reviews
 # -----------------------------
+
+
 _pr_loc_cache: Dict[int, int] = {}
 _review_cache: Dict[int, bool] = {}
 
@@ -117,8 +118,7 @@ def _get_pr_details(full_name: str, number: int) -> Tuple[int, bool]:
     loc = data.get("additions", 0)
 
     # Detect reviewed via summary fields
-    reviewed = (data.get("review_comments", 0) > 0 or 
-                data.get("comments", 0) > 0)
+    reviewed = (data.get("review_comments", 0) > 0 or data.get("comments", 0) > 0)
     logger.info(f"PR #{number}: LOC={loc}, reviewed={reviewed}")
 
     _pr_loc_cache[number] = loc
@@ -159,10 +159,11 @@ def compute_reviewed_fraction(code_info: Dict[str, Any]) -> float:
     return reviewed_loc / total_loc
 
 
-
 # -----------------------------
 # Final wrapper
 # -----------------------------
+
+
 def reviewedness(code_info: Dict[str, Any]) -> Tuple[float, int]:
     start = time.time()
     fraction = compute_reviewed_fraction(code_info)
@@ -172,4 +173,3 @@ def reviewedness(code_info: Dict[str, Any]) -> Tuple[float, int]:
 
     logger.info(f"Reviewedness score: {score} (fraction: {fraction})")
     return round(score, 2), int((time.time() - start) * 1000)
-

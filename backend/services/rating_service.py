@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from typing import Any, Optional, Tuple
 from urllib.parse import urlparse
@@ -12,7 +13,6 @@ from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
                             ArtifactType, ModelRating, SizeScore)
 from backend.storage import memory
 from metric_concurrent import main as run_metrics
-import os
 from metrics.size import calculate_size_score
 
 # -----------------------------
@@ -255,7 +255,6 @@ def _fetch_code_metadata(code_url: str) -> Tuple[dict[str, Any], str]:
     return code_info, code_readme
 
 
-
 def _resolve_code(
     code_repo: Optional[str],
     code_name: Optional[str]
@@ -291,7 +290,6 @@ def _resolve_code(
     logger.info(f"Final code_info keys: {list(code_info.keys())}")
 
     return resolved_name, resolved_url, code_info, code_readme
-
 
 
 def _extract_model_license(model_info, readme_text: str):

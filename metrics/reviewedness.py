@@ -57,7 +57,7 @@ def _get_merged_prs(full_name: str) -> list[dict[str, Any]]:
         "direction": "desc",
     }  # type: ignore
 
-    prs = []  #type: ignore
+    prs = []  # type: ignore
     page = 1
 
     while len(prs) < 10:

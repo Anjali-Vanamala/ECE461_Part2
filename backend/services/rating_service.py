@@ -12,7 +12,19 @@ from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
                             ArtifactType, ModelRating, SizeScore)
 from backend.storage import memory
 from metric_concurrent import main as run_metrics
+import os
 from metrics.size import calculate_size_score
+
+# -----------------------------
+# GitHub Auth
+# -----------------------------
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_HEADERS = {
+    "Accept": "application/vnd.github+json",
+    "User-Agent": "ece461-model-registry",
+}
+if GITHUB_TOKEN:
+    GITHUB_HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
 
 def _derive_name_from_url(url: str) -> str:
@@ -162,19 +174,34 @@ def _extract_dataset_name(model_info: dict, readme_text: str) -> Optional[str]:
 
 def _extract_code_repo(model_info: dict, readme_text: str) -> Optional[str]:
     card_data = model_info.get("cardData") or {}
+
+    # 1. Prefer HF card metadata
     code_repo = card_data.get("code_repository")
-    if isinstance(code_repo, str) and code_repo:
-        return code_repo
+    if isinstance(code_repo, str) and code_repo.strip():
+        return code_repo.strip()
 
-    # Capture ANY GitHub repo root, even if README link includes tree/blob/etc.
-    match = re.search(
-        r"(https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)",
-        readme_text
+    # 2. Extract ALL GitHub repo URLs
+    all_matches = re.findall(
+        r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",
+        readme_text,
     )
-    if match:
-        return match.group(1)
+    if not all_matches:
+        return None
 
-    return None
+    logger.info(f"Found GitHub URLs in README: {all_matches}")
+
+    # 3. Filter out URLs that are likely NOT the code repo
+    def is_valid_repo(url: str) -> bool:
+        repo_name = url.rstrip("/").split("/")[-1].lower()
+        invalid = {"examples", "example", "demo", "test", "tutorial"}
+        return repo_name not in invalid
+
+    filtered = [u for u in all_matches if is_valid_repo(u)]
+    if filtered:
+        return filtered[0]  # best guess: first valid match
+
+    # fallback: return first match
+    return all_matches[0]
 
 
 def _resolve_dataset(dataset_name: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
@@ -190,62 +217,81 @@ def _resolve_dataset(dataset_name: Optional[str]) -> Tuple[Optional[str], Option
     return normalized, f"https://huggingface.co/datasets/{normalized}" if normalized else None
 
 
-def _fetch_code_metadata(code_url: str) -> Tuple[dict, str]:
+def _fetch_code_metadata(code_url: str) -> Tuple[dict[str, Any], str]:
     code_info: dict[str, Any] = {}
     code_readme = ""
 
     if "github.com" not in code_url:
         return code_info, code_readme
 
-    # Normalize URL to extract only owner/repo
     m = re.search(r"github\.com/([^/]+)/([^/]+)", code_url)
     if not m:
         return code_info, code_readme
 
     owner, repo = m.groups()
     repo = repo.replace(".git", "")
-
     api_url = f"https://api.github.com/repos/{owner}/{repo}"
 
     try:
-        response = rq.get(api_url, timeout=30)
+        response = rq.get(api_url, headers=GITHUB_HEADERS, timeout=15)
         if response.status_code == 200:
             code_info = response.json()
-    except Exception:
-        code_info = {}
+        else:
+            logger.info(f"GitHub API error {response.status_code}: {response.text}")
+    except Exception as e:
+        logger.info(f"GitHub metadata error: {e}")
 
     try:
         readme_response = rq.get(
             f"{api_url}/readme",
-            headers={'Accept': 'application/vnd.github.v3.raw'},
-            timeout=30,
+            headers=GITHUB_HEADERS,
+            timeout=15,
         )
         if readme_response.status_code == 200:
             code_readme = readme_response.text
     except Exception:
-        code_readme = ""
+        pass
 
     return code_info, code_readme
 
 
-def _resolve_code(code_repo: Optional[str], code_name: Optional[str]) -> Tuple[Optional[str], Optional[str], dict, str]:
-    resolved_name = code_name
-    resolved_url = None
-    code_info: dict = {}
-    code_readme = ""
 
-    if code_repo:
-        resolved_url = code_repo
-        resolved_name = _derive_name_from_url(code_repo).lower()
-    if resolved_name:
-        record = memory.find_code_by_name(resolved_name)
-        if record:
-            resolved_url = record.artifact.data.url
+def _resolve_code(
+    code_repo: Optional[str],
+    code_name: Optional[str]
+) -> Tuple[Optional[str], Optional[str], dict[str, Any], str]:
 
-    if resolved_url:
-        code_info, code_readme = _fetch_code_metadata(resolved_url)
+    # If no repo detected → nothing to do
+    if not code_repo:
+        logger.info("No GitHub repo detected.")
+        return None, None, {}, ""
+
+    # Always use the extracted GitHub URL
+    resolved_url = code_repo.strip()
+    resolved_name = _derive_name_from_url(resolved_url)
+
+    logger.info(f"Resolving code repo: url={resolved_url}, name={resolved_name}")
+
+    # If user already registered this code artifact, replace URL
+    record = memory.find_code_by_name(resolved_name)
+    if record:
+        resolved_url = record.artifact.data.url
+        logger.info(f"Found existing code artifact in memory: {resolved_url}")
+
+    # Fetch metadata (with GitHub auth!)
+    code_info, code_readme = _fetch_code_metadata(resolved_url)
+
+    # If GitHub API returned something incomplete, patch missing full_name
+    if "full_name" not in code_info:
+        m = re.search(r"github\.com/([^/]+/[^/]+)", resolved_url)
+        if m:
+            code_info["full_name"] = m.group(1)
+            logger.info(f"Injected full_name into code_info: {code_info['full_name']}")
+
+    logger.info(f"Final code_info keys: {list(code_info.keys())}")
 
     return resolved_name, resolved_url, code_info, code_readme
+
 
 
 def _extract_model_license(model_info, readme_text: str):
@@ -319,6 +365,7 @@ def compute_model_artifact(
     dataset_name_hint = _extract_dataset_name(model_info, readme_text)
     code_repo_hint = _extract_code_repo(model_info, readme_text)
     code_name_hint = _derive_name_from_url(code_repo_hint).lower() if code_repo_hint else None
+    logger.info(f"code_repo_hint = {code_repo_hint}")
 
     # Now look up registered artifacts by these names
     dataset_url = None

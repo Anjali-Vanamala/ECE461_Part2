@@ -167,7 +167,7 @@ def treescore(model_info_dict: Dict[str, Any]) -> Tuple[float, int]:
 
         if not parents:
             logger.info("No parent models found - score: 0.0")
-            score = 0.0
+            score = 0
         else:
             logger.info(f"Found {len(parents)} parent model(s)")
 

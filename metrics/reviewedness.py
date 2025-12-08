@@ -1,165 +1,175 @@
 """
-Reviewedness Metric Calculator for GitHub Repositories.
+Reviewedness Metric Calculator.
 
-Calculates the fraction of code introduced via reviewed pull requests.
-Only considers PRs from the last 2 years.
-
-Scoring:
-    1.0 - 80%+ of PRs are reviewed
-    0.5 - 50-80% of PRs are reviewed
-    0.0 - <50% of PRs are reviewed, or no GitHub repo
+Measures the fraction of LOC introduced via reviewed pull requests.
 """
 
+from __future__ import annotations
+
+import os
 import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, List, Optional
 
 import requests
-
 import logger
 
-# Rate limiting constants
-RATE_LIMIT_DELAY = 0.1  # 100ms between API calls
-_last_api_call_time = 0.0
 
+# -----------------------------
+# GitHub Auth
+# -----------------------------
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_HEADERS = {
+    "Accept": "application/vnd.github.v3+json",
+    "User-Agent": "ece461-model-registry",
+}
+if GITHUB_TOKEN:
+    GITHUB_HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+
+
+# -----------------------------
+# Rate Limiting
+# -----------------------------
+RATE_LIMIT_DELAY = 0.15
+_last_call_time = 0.0
 
 def _rate_limit() -> None:
-    """Ensure we don't exceed GitHub API rate limits."""
-    global _last_api_call_time
-    current_time = time.time()
-    time_since_last = current_time - _last_api_call_time
-
-    if time_since_last < RATE_LIMIT_DELAY:
-        sleep_time = RATE_LIMIT_DELAY - time_since_last
-        time.sleep(sleep_time)
-
-    _last_api_call_time = time.time()
+    global _last_call_time
+    now = time.time()
+    delta = now - _last_call_time
+    if delta < RATE_LIMIT_DELAY:
+        time.sleep(RATE_LIMIT_DELAY - delta)
+    _last_call_time = time.time()
 
 
-def get_reviewed_pr_fraction(code_info: Dict[str, Any]) -> float:
+# -----------------------------
+# Fetch merged PRs (list)
+# -----------------------------
+def _get_merged_prs(full_name: str) -> list[dict[str, Any]]:
     """
-    Calculate fraction of reviewed PRs from last 2 years.
-
-    Parameters
-    ----------
-    code_info : dict
-        GitHub repository information
-
-    Returns
-    -------
-    float
-        Fraction of reviewed PRs (0.0-1.0)
+    Fetch up to the 10 most recent merged PRs from a GitHub repo.
     """
-    if not code_info or not code_info.get('full_name'):
-        logger.debug("No GitHub repository information")
+    url = f"https://api.github.com/repos/{full_name}/pulls"
+    params = {
+        "state": "closed",
+        "per_page": 100,  # fetch 100 at a time
+        "sort": "created",
+        "direction": "desc",
+    }
+
+    prs = []
+    page = 1
+
+    while len(prs) < 10:
+        _rate_limit()
+        try:
+            r = requests.get(url, headers=GITHUB_HEADERS,
+                             params={**params, "page": page}, timeout=15)
+        except requests.RequestException as e:
+            logger.info(f"GitHub API request failed: {e}")
+            break
+
+        if r.status_code != 200:
+            logger.info(f"GitHub API returned {r.status_code}: {r.text}")
+            break
+
+        items = r.json()
+        if not items:
+            break
+
+        merged_items = [p for p in items if p.get("merged_at")]
+        prs.extend(merged_items)
+        if len(merged_items) == 0:
+            # No more merged PRs in this page
+            break
+
+        page += 1
+
+    # Only return up to 10 PRs
+    prs = prs[:10]
+    logger.info(f"Total merged PRs fetched: {len(prs)}")
+    return prs
+
+
+
+# -----------------------------
+# Individual PR LOC + reviews
+# -----------------------------
+_pr_loc_cache: Dict[int, int] = {}
+_review_cache: Dict[int, bool] = {}
+
+
+def _get_pr_details(full_name: str, number: int) -> Tuple[int, bool]:
+    """Fetches LOC and review state for a PR with caching."""
+
+    if number in _pr_loc_cache and number in _review_cache:
+        return _pr_loc_cache[number], _review_cache[number]
+    logger.info(f"Fetching PR #{number} details...")
+
+    url = f"https://api.github.com/repos/{full_name}/pulls/{number}"
+    _rate_limit()
+    r = requests.get(url, headers=GITHUB_HEADERS, timeout=10)
+    if r.status_code != 200:
+        logger.info(f"Failed PR #{number}: {r.status_code}")
+        return 0, False
+
+    data = r.json()
+    loc = data.get("additions", 0)
+
+    # Detect reviewed via summary fields
+    reviewed = (data.get("review_comments", 0) > 0 or 
+                data.get("comments", 0) > 0)
+    logger.info(f"PR #{number}: LOC={loc}, reviewed={reviewed}")
+
+    _pr_loc_cache[number] = loc
+    _review_cache[number] = reviewed
+    return loc, reviewed
+
+
+# -----------------------------
+# Main computation
+# -----------------------------
+def compute_reviewed_fraction(code_info: Dict[str, Any]) -> float:
+    if not code_info or "full_name" not in code_info:
         return -1.0
 
-    full_name = code_info.get('full_name')
-    api_url = f"https://api.github.com/repos/{full_name}/pulls"
+    full_name = code_info["full_name"]
+    merged_prs = _get_merged_prs(full_name)
 
-    try:
-        # Get PRs from last 2 years
-        two_years_ago = datetime.now() - timedelta(days=730)
-
-        # Get closed PRs (merged or not)
-        params: Dict[str, str] = {
-            'state': 'closed',
-            'per_page': '100',  # Get up to 100 PRs
-            'sort': 'updated',
-            'direction': 'desc'
-        }
-
-        _rate_limit()  # Rate limit before API call
-        response = requests.get(api_url, params=params, timeout=10)
-
-        if response.status_code != 200:
-            logger.info(f"GitHub API error: {response.status_code}")
-            return 0.0
-
-        prs = response.json()
-
-        # Filter PRs from last 2 years
-        recent_prs = []
-        for pr in prs:
-            created_at = datetime.strptime(
-                pr['created_at'], '%Y-%m-%dT%H:%M:%SZ')
-            if created_at >= two_years_ago:
-                recent_prs.append(pr)
-
-        if not recent_prs:
-            logger.info("No PRs found in last 2 years")
-            return 0.0  # No recent PRs, so cannot measure review practices
-
-        logger.info(f"Found {len(recent_prs)} PRs in last 2 years")
-
-        # Count reviewed PRs
-        reviewed_count = 0
-        for pr in recent_prs:
-            # Check if PR has reviews
-            reviews_url = pr.get('url') + '/reviews'
-            _rate_limit()  # Rate limit before each review check
-            reviews_response = requests.get(reviews_url, timeout=10)
-
-            if reviews_response.status_code == 200:
-                reviews = reviews_response.json()
-                if len(reviews) > 0:
-                    reviewed_count += 1
-                    logger.debug(
-                        f"PR #{pr['number']} has {len(reviews)} reviews")
-
-        fraction = reviewed_count / len(recent_prs)
-        logger.info(
-            f"Reviewed PRs: {reviewed_count}/{len(recent_prs)} "
-            f"({fraction:.2%})")
-
-        return fraction
-
-    except Exception as e:
-        logger.info(f"Error getting PR data: {e}")
+    if not merged_prs:
         return 0.0
 
+    # 🔥 LIMIT TO MOST RECENT 50 MERGED PRs
+    merged_prs = merged_prs[:10]
 
+    total_loc = 0
+    reviewed_loc = 0
+
+    for pr in merged_prs:
+        number = pr["number"]
+        loc, reviewed = _get_pr_details(full_name, number)
+
+        total_loc += loc
+        if reviewed:
+            reviewed_loc += loc
+
+    if total_loc == 0:
+        return 0.0
+
+    return reviewed_loc / total_loc
+
+
+
+# -----------------------------
+# Final wrapper
+# -----------------------------
 def reviewedness(code_info: Dict[str, Any]) -> Tuple[float, int]:
-    """
-    Calculate reviewedness score based on reviewed PR fraction.
-
-    Parameters
-    ----------
-    code_info : dict
-        GitHub repository information
-
-    Returns
-    -------
-    Tuple[float, int]
-        Reviewedness score (0.0-1.0) and latency in milliseconds
-    """
     start = time.time()
-    logger.info("Calculating reviewedness metric")
+    fraction = compute_reviewed_fraction(code_info)
 
-    try:
-        fraction = get_reviewed_pr_fraction(code_info)
+    # 🔥 Score is directly the fraction
+    score = fraction
 
-        # Score based on review fraction
-        if fraction == -1.0:
-            score = -1.0
-            logger.info("No GitHub repo - score: -1.0")
-        elif fraction >= 0.8:
-            score = 1.0
-            logger.info(f"High review rate ({fraction:.2%}) - score: 1.0")
-        elif fraction >= 0.5:
-            score = 0.5
-            logger.info(f"Moderate review rate ({fraction:.2%}) - score: 0.5")
-        else:
-            score = 0.0
-            logger.info(f"Low review rate ({fraction:.2%}) - score: 0.0")
+    logger.info(f"Reviewedness score: {score} (fraction: {fraction})")
+    return round(score, 2), int((time.time() - start) * 1000)
 
-    except Exception as e:
-        logger.info(f"Error calculating reviewedness: {e}")
-        score = 0.0
-
-    end = time.time()
-    latency = int((end - start) * 1000)
-
-    logger.info(f"Reviewedness score: {score}, latency: {latency}ms")
-
-    return round(score, 2), latency

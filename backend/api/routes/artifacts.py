@@ -48,7 +48,7 @@ def calibrate_regex_timeout() -> float:
     baseline2 = time.perf_counter() - start
 
     # Never allow insanely tiny values
-    return max(0.0001, baseline * 4, baseline2 * 4)
+    return max(0.0001, baseline * 8, baseline2 * 8)
 
 
 # Compute once at import time
@@ -159,6 +159,13 @@ def validate_model_rating(rating: ModelRating) -> bool:
     return check(rating)
 
 
+def validate_net_score(rating: ModelRating) -> bool:
+    """
+    Returns True if net_score >= 0.5, otherwise False.
+    """
+    return getattr(rating, "net_score", 0.0) >= 0.5
+
+
 def process_model_artifact_async(
     url: str,
     artifact_id: str,
@@ -172,6 +179,7 @@ def process_model_artifact_async(
             name_override=name,
         )
         strict_check = False
+        soft_check = True
         # 🔍 NEW: Validate rating before saving it
         if rating and not validate_model_rating(rating) and strict_check:
             # Mark as failed and DO NOT save final artifact or rating
@@ -186,7 +194,19 @@ def process_model_artifact_async(
                 f"Model {artifact_id} rejected: one or more subratings below 0.5."
             )
             return  # stops processing here
+        if rating and not validate_net_score(rating) and soft_check:
+            # Mark as failed and DO NOT save final artifact or rating
+            memory.update_processing_status(artifact_id, "failed")
 
+            # Optionally discard partial model entirely:
+            memory.delete_artifact(ArtifactType.MODEL, artifact_id)
+
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Model {artifact_id} rejected: one or more subratings below 0.5."
+            )
+            return  # stops processing here
         # Normal success path:
         memory.save_artifact(
             artifact,

@@ -179,7 +179,7 @@ def process_model_artifact_async(
             name_override=name,
         )
         strict_check = False
-        soft_check = False
+        soft_check = True
         # 🔍 NEW: Validate rating before saving it
         if rating and not validate_model_rating(rating) and strict_check:
             # Mark as failed and DO NOT save final artifact or rating

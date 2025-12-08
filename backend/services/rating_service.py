@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import requests as rq
 from huggingface_hub import HfApi, hf_hub_url
 
+import logger
 from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
                             ArtifactType, ModelRating, SizeScore)
 from backend.storage import memory
@@ -15,10 +16,17 @@ from metrics.size import calculate_size_score
 
 
 def _derive_name_from_url(url: str) -> str:
-    stripped = url.strip().rstrip("/")
-    if not stripped:
+    url = url.strip().rstrip("/")
+    if not url:
         return "artifact"
-    return stripped.split("/")[-1]
+
+    # Special handling for GitHub: repo is always the *second* path component
+    if "github.com" in url:
+        parts = url.split("/")
+        if len(parts) >= 5:
+            return parts[4].replace(".git", "").lower()
+
+    return url.split("/")[-1].lower()
 
 
 def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
@@ -59,7 +67,6 @@ def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
     # 3. Merge HFHub + REST into unified model_info
     # -------------------------------------------------------
     model_info = {}
-
     # Always include ID
     model_info["id"] = hfhub_info.get("id", rest_info.get("id", model_path))
     model_info["modelId"] = rest_info.get("modelId", model_info["id"])
@@ -89,10 +96,15 @@ def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
     model_info["downloads"] = rest_info.get("downloads", hfhub_info.get("downloads", 0))
 
     # Card data (HFHub reliable)
-    model_info["cardData"] = hfhub_info.get("cardData", {})
-    if not isinstance(model_info["cardData"], dict):
-        model_info["cardData"] = {}
+    card_hf = hfhub_info.get("cardData", {})
+    card_rest = rest_info.get("cardData", {})
 
+    card = card_rest if isinstance(card_rest, dict) else None
+    if card is None:
+        card = card_hf if isinstance(card_hf, dict) else {}
+    model_info["cardData"] = card
+
+    logger.info(f"CardData keys: {list(card.keys())}")
     # Siblings (REST and HFHub both have this)
     if "siblings" in rest_info:
         model_info["siblings"] = rest_info["siblings"]
@@ -129,7 +141,7 @@ def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
         readme_url = hf_hub_url(repo_id=model_path, filename="README.md", repo_type="model")
         readme_response = rq.get(readme_url, timeout=15)
         if readme_response.status_code == 200:
-            model_readme_text = readme_response.text.lower()
+            model_readme_text = readme_response.text
     except Exception:
         model_readme_text = ""
 
@@ -153,9 +165,15 @@ def _extract_code_repo(model_info: dict, readme_text: str) -> Optional[str]:
     code_repo = card_data.get("code_repository")
     if isinstance(code_repo, str) and code_repo:
         return code_repo
-    match = re.search(r"https://github\.com/[\w\-]+/[\w\-]+", readme_text)
+
+    # Capture ANY GitHub repo root, even if README link includes tree/blob/etc.
+    match = re.search(
+        r"(https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)",
+        readme_text
+    )
     if match:
-        return match.group(0)
+        return match.group(1)
+
     return None
 
 
@@ -173,15 +191,20 @@ def _resolve_dataset(dataset_name: Optional[str]) -> Tuple[Optional[str], Option
 
 
 def _fetch_code_metadata(code_url: str) -> Tuple[dict, str]:
-    code_info: dict = {}
+    code_info: dict[str, Any] = {}
     code_readme = ""
 
-    match = re.search(r"github\.com/([^/]+)/([^/]+)", code_url)
-    if not match:
+    if "github.com" not in code_url:
         return code_info, code_readme
 
-    owner, repo = match.groups()
-    repo = repo.replace('.git', '')
+    # Normalize URL to extract only owner/repo
+    m = re.search(r"github\.com/([^/]+)/([^/]+)", code_url)
+    if not m:
+        return code_info, code_readme
+
+    owner, repo = m.groups()
+    repo = repo.replace(".git", "")
+
     api_url = f"https://api.github.com/repos/{owner}/{repo}"
 
     try:
@@ -198,7 +221,7 @@ def _fetch_code_metadata(code_url: str) -> Tuple[dict, str]:
             timeout=30,
         )
         if readme_response.status_code == 200:
-            code_readme = readme_response.text.lower()
+            code_readme = readme_response.text
     except Exception:
         code_readme = ""
 
@@ -321,7 +344,12 @@ def compute_model_artifact(
             code_name = code_name_hint  # Store the name for future linking
             # Try using the hint URL directly if it's a valid GitHub URL
             if code_repo_hint and 'github.com' in code_repo_hint:
-                code_url = code_repo_hint
+                # Normalize github URLs to repo root
+                m = re.search(r"(https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)", code_repo_hint)
+                if m:
+                    code_url = m.group(1)
+                else:
+                    code_url = code_repo_hint
 
     # Fetch code metadata if we have a URL
     if code_url:

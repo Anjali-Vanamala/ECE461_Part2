@@ -9,11 +9,11 @@ Scoring:
     Missing/non-existent parents count as 0.0
     Models with no parents get score 0.0
 """
-
+import json
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
-from huggingface_hub import model_info
+from huggingface_hub import hf_hub_download, model_info
 
 import logger
 
@@ -44,41 +44,35 @@ def _manage_cache_size() -> None:
             f"Cache size managed: removed {len(keys_to_remove)} entries")
 
 
-def get_parent_models(model_info_dict: Dict[str, Any]) -> List[str]:
-    """
-    Extract parent model IDs from model metadata.
-
-    Parameters
-    ----------
-    model_info_dict : dict
-        Model information from Hugging Face API
-
-    Returns
-    -------
-    List[str]
-        List of parent model IDs
-    """
-    if not model_info_dict:
-        logger.debug("No model_info provided")
-        return []
-
+def get_parent_models(model_info_dict: dict) -> list[str]:
+    model_id = model_info_dict.get("id")
     parents = []
 
-    # Check for base_model in cardData
-    card_data = model_info_dict.get('cardData', {})
-    base_model = card_data.get('base_model')
+    try:
+        # Download config.json
+        config_path = hf_hub_download(repo_id=str(model_id), filename="config.json")
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        logger.debug(f"Loaded config.json {config} for {model_id}")
+        # Potential parent fields
+        candidate_keys = [
+            "base_model_name_or_path",
+            "teacher_model_name",
+            "student_model_name",
+            "source_model",
+            "_name_or_path"
+        ]
 
-    if base_model:
-        # base_model can be string or list
-        if isinstance(base_model, str):
-            parents.append(base_model)
-            logger.debug(f"Found base_model: {base_model}")
-        elif isinstance(base_model, list):
-            parents.extend(base_model[:MAX_PARENTS])
-            logger.debug(f"Found {len(base_model)} base_models")
+        for key in candidate_keys:
+            parent = config.get(key)
+            if isinstance(parent, str) and "/" in parent:
+                parents.append(parent)
+        logger.debug(f"Found parents from config.json: {parents}")
 
-    # Limit to MAX_PARENTS
-    return parents[:MAX_PARENTS]
+    except Exception as e:
+        logger.debug(f"No config.json or parent extraction failed: {e}")
+
+    return parents[:5]
 
 
 def calculate_parent_net_score(parent_id: str) -> float:

@@ -89,14 +89,20 @@ jobs:
           
           # Update image URI using jq (pre-installed in GitHub Actions)
           jq --arg IMAGE "$IMAGE_URI" \
-           '.containerDefinitions[0].image = $IMAGE
+          '.containerDefinitions[0].image = $IMAGE
+            | .containerDefinitions[0].environment = [
+                {
+                  "name": "USE_DYNAMODB",
+                  "value": "true"
+                }
+              ]
             | .containerDefinitions[0].secrets = [
                 {
                   "name": "GEN_AI_STUDIO_API_KEY",
                   "valueFrom": "/ece461-backend/GEN_AI_STUDIO_API_KEY"
                 }
               ]' \
-           task-definition.json > task-definition-updated.json
+          task-definition.json > task-definition-updated.json
            
           # Ensure taskRoleArn is present (service requires it)
           # If it doesn't exist in current task definition, add it

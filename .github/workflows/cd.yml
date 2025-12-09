@@ -89,18 +89,11 @@ jobs:
           
           # Update image URI using jq (pre-installed in GitHub Actions)
           jq --arg IMAGE "$IMAGE_URI" \
+          --arg USE_DYNAMODB "true" \
           '.containerDefinitions[0].image = $IMAGE
-            | .containerDefinitions[0].environment = [
-                {
-                  "name": "USE_DYNAMODB",
-                  "value": "true"
-                }
-              ]
-            | .containerDefinitions[0].secrets = [
-                {
-                  "name": "GEN_AI_STUDIO_API_KEY",
-                  "valueFrom": "/ece461-backend/GEN_AI_STUDIO_API_KEY"
-                }
+            | .containerDefinitions[0].environment += [{"name":"USE_DYNAMODB","value":$USE_DYNAMODB}]
+            | .containerDefinitions[0].secrets += [
+                {"name":"GEN_AI_STUDIO_API_KEY","valueFrom":"/ece461-backend/GEN_AI_STUDIO_API_KEY"}
               ]' \
           task-definition.json > task-definition-updated.json
            

@@ -54,7 +54,7 @@ def extract_and_validate_readme_code(readme: str) -> bool:
         return False
 
     # Find Python code blocks
-    pattern = r'```python\s*(.*?)```'
+    pattern = r'```[^\n]*\n(.*?)```'
     code_blocks = re.findall(pattern, readme, re.DOTALL | re.IGNORECASE)
 
     if not code_blocks:

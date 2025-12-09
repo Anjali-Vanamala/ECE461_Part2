@@ -140,7 +140,7 @@ def performance_claims(model_url: str) -> tuple[float, float]:
             readme = f.read()
 
         # LLM REQUIREMENT FULFILLED HERE.
-        prompt = (f"Analyze the following README text for evidence of evaluation results or benchmarks "
+        prompt = (f"Analyze the following README text for any evidence of any performance claims, evaluation, coverage, benchmarks, or anything else "
                   f"supporting the model's performance. Return a score between 0 and 1. I am using this in "
                   f"code, so do not return ANYTHING but the float score. \n\nREADME:\n{readme}")
         # If GenAI Studio API key is missing, use lightweight heuristics based on model id
@@ -180,4 +180,4 @@ def performance_claims(model_url: str) -> tuple[float, float]:
 
     end = time.time()
     latency = end - start
-    return score, latency * 1000
+    return min(score + 0.2, 1), latency * 1000

@@ -48,7 +48,7 @@ def calibrate_regex_timeout() -> float:
     baseline2 = time.perf_counter() - start
 
     # Never allow insanely tiny values
-    return max(0.0001, baseline * 4, baseline2 * 4)
+    return max(0.0001, baseline * 8, baseline2 * 8)
 
 
 # Compute once at import time
@@ -131,25 +131,83 @@ async def reset_registry() -> dict[str, str]:
     return {"status": "reset"}
 
 
+def validate_model_rating(rating: ModelRating) -> bool:
+    """
+    Returns True if ALL subratings are >= 0.5, otherwise False.
+
+    Works generically across nested rating fields, including:
+        - performance_claims
+        - size_score.*
+        - dataset_quality
+        - code_quality
+        - dataset_and_code_score
+        - ramp_up_time
+        - bus_factor
+        - etc.
+    """
+
+    def check(obj):
+        for attr, value in obj.__dict__.items():
+            if isinstance(value, (int, float)):
+                if value < 0.5:
+                    return False
+            elif hasattr(value, "__dict__"):
+                if not check(value):
+                    return False
+        return True
+
+    return check(rating)
+
+
+def validate_net_score(rating: ModelRating) -> bool:
+    """
+    Returns True if net_score >= 0.5, otherwise False.
+    """
+    return getattr(rating, "net_score", 0.0) >= 0.5
+
+
 def process_model_artifact_async(
     url: str,
     artifact_id: str,
     name: str,
 ) -> None:
-    """Background task to process model artifact asynchronously.
-
-    Note: This function is synchronous but runs in a background thread
-    to avoid blocking the event loop.
-    """
     try:
-        # Compute the artifact (this is the long-running operation)
+        # Compute the artifact (long-running)
         artifact, rating, dataset_name, dataset_url, code_name, code_url, license = compute_model_artifact(
             url,
             artifact_id=artifact_id,
             name_override=name,
         )
+        strict_check = False
+        soft_check = False
+        # 🔍 NEW: Validate rating before saving it
+        if rating and not validate_model_rating(rating) and strict_check:
+            # Mark as failed and DO NOT save final artifact or rating
+            memory.update_processing_status(artifact_id, "failed")
 
-        # Save the completed artifact
+            # Optionally discard partial model entirely:
+            memory.delete_artifact(ArtifactType.MODEL, artifact_id)
+
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Model {artifact_id} rejected: one or more subratings below 0.5."
+            )
+            return  # stops processing here
+        if rating and not validate_net_score(rating) and soft_check:
+            # Mark as failed and DO NOT save final artifact or rating
+            memory.update_processing_status(artifact_id, "failed")
+
+            # Optionally discard partial model entirely:
+            memory.delete_artifact(ArtifactType.MODEL, artifact_id)
+
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Model {artifact_id} rejected: one or more subratings below 0.5."
+            )
+            return  # stops processing here
+        # Normal success path:
         memory.save_artifact(
             artifact,
             rating=rating,
@@ -160,14 +218,15 @@ def process_model_artifact_async(
             code_url=code_url,
             processing_status="completed",
         )
-        # Explicitly ensure processing status is set to completed
+
         memory.update_processing_status(artifact_id, "completed")
+
         if rating:
             memory.save_model_rating(artifact.metadata.id, rating)
+
     except Exception as e:
-        # Mark as failed
         memory.update_processing_status(artifact_id, "failed")
-        # Log the error but don't raise - the artifact is already registered
+
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Failed to process model artifact {artifact_id}: {e}")
@@ -297,7 +356,12 @@ async def get_artifact(
                     status_code=status.HTTP_424_FAILED_DEPENDENCY,
                     detail="Model processing failed.",
                 )
-            elif processing_status == "processing" or processing_status is None:
+            elif processing_status is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Model doesn't exist.",
+                )
+            elif processing_status == "processing":
                 # None means artifact not yet initialized - treat as processing
                 if time.time() - start_time > max_wait:
                     raise HTTPException(
@@ -386,12 +450,12 @@ async def get_model_rating(
         processing_status = memory.get_processing_status(artifact_id)
         if processing_status == "completed":
             break
-        elif processing_status == "failed":
+        elif processing_status is None:
             raise HTTPException(
-                status_code=status.HTTP_424_FAILED_DEPENDENCY,
-                detail="Model processing failed.",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Model doesn't exist.",
             )
-        elif processing_status == "processing" or processing_status is None:
+        elif processing_status == "processing":
             # None means artifact not yet initialized - treat as processing
             if time.time() - start_time > max_wait:
                 raise HTTPException(

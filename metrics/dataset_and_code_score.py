@@ -30,7 +30,7 @@ def extract_and_validate_readme_code(readme: str) -> bool:
         return False
 
     # Find Python code blocks
-    pattern = r'```python\s*(.*?)```'
+    pattern = r'```[^\n]*\n(.*?)```'
     code_blocks = re.findall(pattern, readme, re.DOTALL | re.IGNORECASE)
 
     if not code_blocks:
@@ -120,22 +120,22 @@ def dataset_and_code_score(
         repo_url = code_info.get("html_url") if isinstance(code_info, dict) else None
         if repo_url:
             logger.debug(f"Detected linked code repository: {repo_url}")
-            score += 0.1
+            score += 0.3
         stars = code_info.get("stargazers_count", 0) if isinstance(code_info, dict) else 0
         if stars and stars > 0:
-            score += 0.1
+            score += 0.3
 
     # Backend should have already resolved the dataset URL before calling metrics
     effective_dataset_url = dataset_url
 
     if dataset_name and not effective_dataset_url:
         # Still provide a small bump if we at least know the dataset name
-        score += 0.05
+        score += 0.2
 
     # Use AI to parse Dataset url based on this Piazza post:
     #   "Yes you are suppose to use GenAI to help parse the information from the dataset link"
     if effective_dataset_url:
-        score += .1  # add score for just having a dataset
+        score += .3  # add score for just having a dataset
 
         # now use AI since the dataset could be huggingface or not
         prompt = (f"Analyze the following dataset url to measure if the dataset used for training"

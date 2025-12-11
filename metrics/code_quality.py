@@ -44,12 +44,14 @@ def code_quality(
 
     # reusability check
     doc_length = len(model_readme.split()) if model_readme else 0
-    if doc_length > 1000:
+    if doc_length > 500:
         len_score = 1.0
-    elif doc_length > 500:
+    elif doc_length > 250:
         len_score = 0.7
-    elif doc_length > 200:
+    elif doc_length > 100:
         len_score = 0.4
+    elif doc_length > 50:
+        len_score = 0.2
     else:
         len_score = 0.1
 
@@ -59,12 +61,14 @@ def code_quality(
     if model_info and model_info.get('downloads') is not None:
         # MODEL case - downloads check from card_data
         popularity = model_info.get('downloads', 0)
-        if popularity > 700000:
+        if popularity > 10000:
             pop_score = 1.0
-        elif popularity > 500000:
+        elif popularity > 5000:
             pop_score = 0.7
-        elif popularity > 100000:
+        elif popularity > 1000:
             pop_score = 0.3
+        elif popularity > 500:
+            pop_score = 0.2
         else:
             pop_score = 0.1
         logger.debug(f"Model downloads: {popularity}, Reliability score: {pop_score}")
@@ -75,23 +79,25 @@ def code_quality(
         forks = code_info.get('forks_count', 0)
         total_engagement = stars + forks
 
-        if total_engagement > 90000:
+        if total_engagement > 1000:
             pop_score = 1.0
-        elif total_engagement > 60000:
+        elif total_engagement > 500:
             pop_score = 0.7
-        elif total_engagement > 30000:
+        elif total_engagement > 250:
             pop_score = 0.5
+        elif total_engagement > 10:
+            pop_score = 0.3
         else:
             pop_score = 0.1
         logger.debug(f"GitHub engagement: {total_engagement}, Reliability score: {pop_score}")
 
     # test keywords from readme
-    testability_indicators = ['test', 'tested', 'testing', 'pytest', 'unittest', 'unit test', 'ci', 'continuous integration']
+    testability_indicators = ['test', 'tested', 'testing', 'pytest', 'unittest', 'unit test', 'ci', 'continuous integration', 'score', 'benchmark', 'train', 'training', 'coverage']
     readme_to_check = code_readme if code_readme else model_readme
 
     if readme_to_check:
         test_mentions = sum(1 for indicator in testability_indicators if indicator in readme_to_check.lower())
-        test_score = min(test_mentions / 5, 1)  # 3 keywords = full points
+        test_score = min(test_mentions / 2, 1)  # 3 keywords = full points
         logger.debug(f"Test mentions: {test_mentions}, Testability score: {test_score}")
     else:
         logger.debug("No readme available for testability check")

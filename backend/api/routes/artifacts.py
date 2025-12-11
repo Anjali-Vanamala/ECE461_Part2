@@ -939,11 +939,15 @@ async def download_artifact(
         )
 
     # 6. Fetch from source with streaming
+    # Note: ALB idle timeout should be >= 600 seconds (10 minutes) for large downloads
+    # Configure via: aws elbv2 modify-load-balancer-attributes --load-balancer-arn <ARN> --attributes Key=idle_timeout.timeout_seconds,Value=600
+    DOWNLOAD_TIMEOUT = 300  # 5 minutes - sufficient for most files
+    
     try:
         source_response = requests.get(
             source_download_url,
             stream=True,
-            timeout=300,  # 5 minutes timeout
+            timeout=DOWNLOAD_TIMEOUT,
             allow_redirects=True
         )
         source_response.raise_for_status()
@@ -951,6 +955,11 @@ async def download_artifact(
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Download timeout from source.",
+        )
+    except requests.ConnectionError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Cannot connect to source server.",
         )
     except requests.HTTPError as e:
         if e.response and e.response.status_code == 404:
@@ -972,13 +981,18 @@ async def download_artifact(
     content_type = source_response.headers.get('Content-Type', 'application/octet-stream')
     filename = _get_download_filename(artifact, source_download_url)
     
-    # 8. Build headers (only include Content-Length if available)
+    # 8. Build headers
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
     }
+    
+    # Include Content-Length if available (helps with progress tracking)
     content_length = source_response.headers.get("Content-Length")
     if content_length:
         headers["Content-Length"] = content_length
+    
+    # Include Accept-Ranges for better client support
+    headers["Accept-Ranges"] = "bytes"
     
     # 9. Stream response to client
     return StreamingResponse(

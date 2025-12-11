@@ -1521,7 +1521,7 @@ class Test_Async_Model_Processing:
 # Health Endpoint Tests
 # =============================================================================
 
-class Test_Health_Endpoints:
+class Test_Health_Endpoints_Extended:
     """Test suite for health check endpoints using FastAPI TestClient."""
 
     def test_health_endpoint_returns_ok(self):

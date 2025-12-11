@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',  // Enable static export for S3 deployment
+  // Only use static export in production builds (for S3 deployment)
+  // In development, allow dynamic routes to work properly
+  ...(process.env.NODE_ENV === 'production' ? { output: 'export' } : {}),
   typescript: {
     ignoreBuildErrors: true,
   },

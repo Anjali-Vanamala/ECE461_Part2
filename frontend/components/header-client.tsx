@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Package2, Menu, X, Sun, Moon, Settings2 } from "lucide-react"
+import { Package2, Menu, X, Sun, Moon } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useTheme } from "@/providers/theme-provider"
 import { API_BASE_URL } from "@/lib/api"
@@ -80,23 +80,8 @@ export function HeaderClient() {
             >
               <Moon className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => setTheme("system")}
-              className={`p-2 rounded-md transition-colors ${
-                theme === "system"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              aria-label="System theme"
-              title="System"
-            >
-              <Settings2 className="h-4 w-4" />
-            </button>
           </div>
 
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/upload">Upload</Link>
-          </Button>
           <Button size="sm" asChild>
             <Link href="/ingest">Ingest</Link>
           </Button>
@@ -145,22 +130,8 @@ export function HeaderClient() {
               >
                 <Moon className="h-4 w-4" />
               </button>
-              <button
-                onClick={() => setTheme("system")}
-                className={`p-1.5 rounded transition-colors ${
-                  theme === "system"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-                aria-label="System theme"
-              >
-                <Settings2 className="h-4 w-4" />
-              </button>
             </div>
 
-            <Button variant="outline" size="sm" asChild className="w-full justify-center bg-transparent">
-              <Link href="/upload">Upload</Link>
-            </Button>
             <Button size="sm" asChild className="w-full justify-center">
               <Link href="/ingest">Ingest</Link>
             </Button>

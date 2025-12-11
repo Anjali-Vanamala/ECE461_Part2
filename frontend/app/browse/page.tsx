@@ -4,14 +4,18 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { useState, useEffect } from "react"
-import { Search, Download, Star, Loader2 } from "lucide-react"
-import { fetchModels, fetchModelRating } from "@/lib/api"
+import { Search, Download, Star, Loader2, Grid3x3, List } from "lucide-react"
+import { fetchArtifacts, fetchModelRating, type ArtifactType } from "@/lib/api"
 
-interface BrowseModel {
+export type ViewMode = "grid" | "list"
+
+interface BrowseArtifact {
   id: string
   name: string
+  type: ArtifactType
   rating: number
   downloads: number
   reproducibility: number
@@ -20,96 +24,112 @@ interface BrowseModel {
 }
 
 export default function BrowsePage() {
+  const [artifactType, setArtifactType] = useState<ArtifactType>("model")
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedTag, setSelectedTag] = useState<string | null>(null)
-  const [models, setModels] = useState<BrowseModel[]>([])
+  const [viewMode, setViewMode] = useState<ViewMode>("list")
+  const [artifacts, setArtifacts] = useState<BrowseArtifact[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function loadModels() {
+    async function loadArtifacts() {
       try {
         setLoading(true)
-        const artifacts = await fetchModels()
+        const fetchedArtifacts = await fetchArtifacts(artifactType)
         
-        // Fetch ratings for each model
-        const modelsWithRatings = await Promise.all(
-          artifacts.map(async (artifact: any) => {
+        // Fetch ratings for models only (datasets and code don't have ratings)
+        const artifactsWithRatings = await Promise.all(
+          fetchedArtifacts.map(async (artifact: any) => {
             let rating = null
+            if (artifact.type === 'model') {
             try {
               rating = await fetchModelRating(artifact.id)
             } catch (e) {
               // Rating might not exist, that's okay
+              }
             }
 
-            // Map backend artifact to frontend model format
-            const model: BrowseModel = {
+            // Map backend artifact to frontend format
+            const browseArtifact: BrowseArtifact = {
               id: artifact.id,
               name: artifact.name,
-              rating: rating?.overall_score ? rating.overall_score / 20 : 0, // Convert 0-100 to 0-5 scale
+              type: artifact.type,
+              rating: rating?.net_score ? rating.net_score * 5 : 0, // net_score is 0-1, convert to 0-5
               downloads: 0, // Not available in backend
-              reproducibility: rating?.reproducibility_score ? rating.reproducibility_score / 100 : 0,
-              reviewedness: rating?.code_review_score ? rating.code_review_score / 100 : 0,
+              reproducibility: rating?.reproducibility ? rating.reproducibility : 0, // reproducibility is 0-1
+              reviewedness: rating?.reviewedness ? rating.reviewedness : 0, // reviewedness is 0-1
               tags: [], // Not available in backend artifact metadata
             }
-            return model
+            return browseArtifact
           })
         )
         
-        setModels(modelsWithRatings)
+        setArtifacts(artifactsWithRatings)
         setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load models")
-        console.error("Error loading models:", err)
+        setError(err instanceof Error ? err.message : "Failed to load artifacts")
+        console.error("Error loading artifacts:", err)
       } finally {
         setLoading(false)
       }
     }
 
-    loadModels()
-  }, [])
+    loadArtifacts()
+  }, [artifactType])
 
-  const filteredModels = models.filter((model) => {
-    const matchesSearch = model.name.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesTag = !selectedTag || model.tags.includes(selectedTag)
-    return matchesSearch && matchesTag
+  const filteredArtifacts = artifacts.filter((artifact) => {
+    const matchesSearch = artifact.name.toLowerCase().includes(searchQuery.toLowerCase())
+    return matchesSearch
   })
 
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Browse Models</h1>
-        <p className="text-muted-foreground mb-8">Discover trusted machine learning models</p>
+        <h1 className="text-3xl font-bold text-foreground mb-2">Browse Artifacts</h1>
+        <p className="text-muted-foreground mb-8">Discover models, datasets, and code repositories</p>
 
-        {/* Search */}
-        <div className="mb-8 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="search-models"
-              aria-label="Search models"
-              placeholder="Search models..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+        <Tabs value={artifactType} onValueChange={(v) => setArtifactType(v as ArtifactType)} className="mb-8">
+          <TabsList>
+            <TabsTrigger value="model">Models</TabsTrigger>
+            <TabsTrigger value="dataset">Datasets</TabsTrigger>
+            <TabsTrigger value="code">Code</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-          {/* Tag Filters */}
-          <div className="flex flex-wrap gap-2">
-            {["NLP", "Vision", "Audio", "Production", "Fine-tuned"].map((tag) => (
-              <button
-                key={tag}
-                onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                  selectedTag === tag
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/30 text-foreground hover:bg-secondary/50"
-                }`}
+        {/* Search and View Toggle */}
+        <div className="mb-8">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="search-artifacts"
+                aria-label="Search artifacts"
+                placeholder={`Search ${artifactType}s...`}
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant={viewMode === "grid" ? "default" : "outline"}
+                size="icon"
+                onClick={() => setViewMode("grid")}
+                aria-label="Grid view"
+                className="bg-transparent"
               >
-                {tag}
-              </button>
-            ))}
+                <Grid3x3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "default" : "outline"}
+                size="icon"
+                onClick={() => setViewMode("list")}
+                aria-label="List view"
+                className="bg-transparent"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -128,59 +148,147 @@ export default function BrowsePage() {
           </Card>
         )}
 
-        {/* Models List */}
+        {/* Artifacts List/Grid */}
         {!loading && !error && (
-          <div className="space-y-3">
-            {filteredModels.length === 0 ? (
+          <>
+            {filteredArtifacts.length === 0 ? (
               <Card className="bg-card/40 border-border/50 backdrop-blur p-6 text-center">
-                <p className="text-muted-foreground">No models found</p>
+                <p className="text-muted-foreground">No {artifactType}s found</p>
               </Card>
+            ) : viewMode === "grid" ? (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {filteredArtifacts.map((artifact) => (
+                  <Card
+                    key={artifact.id}
+                    className="flex flex-col overflow-hidden border-border/50 bg-card/40 backdrop-blur hover:border-primary/50 hover:shadow-lg transition-all duration-300"
+                  >
+                    <div className="flex-1 p-6">
+                      <div className="mb-3 flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-foreground">{artifact.name}</h3>
+                          <Badge variant="secondary" className="text-xs mt-1">
+                            {artifact.type}
+                          </Badge>
+                        </div>
+                        {artifact.type === 'model' && (
+                          <div className="text-right">
+                            <div className="flex items-center gap-1">
+                              <Star className="h-4 w-4 fill-chart-2 text-chart-2" />
+                              <span className="text-sm font-medium">{artifact.rating.toFixed(1)}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {artifact.type === 'model' && (
+                        <>
+                          <div className="mb-4 grid grid-cols-2 gap-2 text-xs">
+                            <div className="rounded bg-secondary/20 p-2">
+                              <p className="text-muted-foreground">Reproducibility</p>
+                              <p className="font-semibold text-foreground">{(artifact.reproducibility * 100).toFixed(0)}%</p>
+                            </div>
+                            <div className="rounded bg-secondary/20 p-2">
+                              <p className="text-muted-foreground">Reviewed</p>
+                              <p className="font-semibold text-foreground">{(artifact.reviewedness * 100).toFixed(0)}%</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-4">
+                            <span className="flex items-center gap-1">
+                              <Download className="h-3 w-3" />
+                              {artifact.downloads.toLocaleString()}
+                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        {artifact.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-border/50 bg-card/80 p-4">
+                      <div className="flex gap-2">
+                        <Button asChild variant="outline" size="sm" className="flex-1 bg-transparent">
+                          <Link 
+                            href={`/artifacts/${artifact.type}/${artifact.id}`} 
+                            aria-label={`View details for ${artifact.name}`}
+                          >
+                            Details
+                          </Link>
+                        </Button>
+                        <Button asChild size="sm" className="flex-1">
+                          <Link 
+                            href={`/artifacts/${artifact.type}/${artifact.id}/download`} 
+                            aria-label={`Download ${artifact.name}`}
+                          >
+                            Download
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
             ) : (
-              filteredModels.map((model) => (
-            <Card
-              key={model.id}
-              className="bg-card/40 border-border/50 backdrop-blur p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:border-primary/50 transition-all"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <h2 className="text-lg font-semibold text-foreground">{model.name}</h2>
-                  <div className="flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-chart-2 text-chart-2" />
-                    <span className="text-sm font-medium">{model.rating}</span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {model.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-xs">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+              <div className="space-y-3">
+                {filteredArtifacts.map((artifact) => (
+                  <Card
+                    key={artifact.id}
+                    className="bg-card/40 border-border/50 backdrop-blur p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:border-primary/50 transition-all"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h2 className="text-lg font-semibold text-foreground">{artifact.name}</h2>
+                        {artifact.type === 'model' && (
+                          <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 fill-chart-2 text-chart-2" />
+                            <span className="text-sm font-medium">{artifact.rating.toFixed(1)}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {artifact.type}
+                        </Badge>
+                        {artifact.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
 
-              <div className="flex items-center gap-6 text-xs text-muted-foreground md:justify-end">
-                <span className="flex items-center gap-1">
-                  <Download className="h-3 w-3" />
-                  {model.downloads.toLocaleString()}
-                </span>
-                <span>Repro: {(model.reproducibility * 100).toFixed(0)}%</span>
-              </div>
+                    {artifact.type === 'model' && (
+                      <div className="flex items-center gap-6 text-xs text-muted-foreground md:justify-end">
+                        <span className="flex items-center gap-1">
+                          <Download className="h-3 w-3" />
+                          {artifact.downloads.toLocaleString()}
+                        </span>
+                        <span>Repro: {(artifact.reproducibility * 100).toFixed(0)}%</span>
+                      </div>
+                    )}
 
-              <div className="flex gap-2 md:ml-auto">
-                <Button asChild variant="outline" size="sm">
-                  <Link href={`/models/${model.id}`}
-                        aria-label={`View details for ${model.name}`}
-                        >Details</Link>
-                </Button>
-                <Button asChild size="sm">
-                  <Link href={`/models/${model.id}/download`}
-                        aria-label={`Download ${model.name}`}>Download</Link>
-                </Button>
+                    <div className="flex gap-2 md:ml-auto">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/artifacts/${artifact.type}/${artifact.id}`}
+                              aria-label={`View details for ${artifact.name}`}
+                              >Details</Link>
+                      </Button>
+                      <Button asChild size="sm">
+                        <Link href={`/artifacts/${artifact.type}/${artifact.id}/download`}
+                              aria-label={`Download ${artifact.name}`}>Download</Link>
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
               </div>
-            </Card>
-              ))
             )}
-          </div>
+          </>
         )}
       </div>
     </main>

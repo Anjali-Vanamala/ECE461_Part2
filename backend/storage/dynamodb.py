@@ -75,6 +75,7 @@ def _item_to_record(item: Dict) -> CodeRecord | DatasetRecord | ModelRecord:
         return ModelRecord(
             artifact=artifact,
             rating=_deserialize_rating(item.get("rating")),
+            license=item.get("license"),
             dataset_id=item.get("dataset_id"),
             dataset_name=item.get("dataset_name"),
             dataset_url=item.get("dataset_url"),
@@ -93,6 +94,7 @@ def save_artifact(
     artifact: Artifact,
     *,
     rating: Optional[ModelRating] = None,
+    license: Optional[str] = None,
     dataset_name: Optional[str] = None,
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
@@ -134,6 +136,12 @@ def save_artifact(
                 item["rating"] = rating_dict
         elif existing_item and "rating" in existing_item:
             item["rating"] = existing_item["rating"]
+
+        # Preserve existing license if not provided
+        if license is not None:
+            item["license"] = license
+        elif existing_item and "license" in existing_item:
+            item["license"] = existing_item["license"]
 
         # Preserve existing dataset fields if not provided
         if dataset_name is not None:
@@ -493,6 +501,41 @@ def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
         return _deserialize_rating(item.get("rating"))
     except ClientError as e:
         print(f"[DynamoDB] Error getting model rating: {e}")
+        return None
+
+
+def save_model_license(artifact_id: ArtifactID, license: str) -> None:
+    """Save or update a model license."""
+    try:
+        table.update_item(
+            Key={"artifact_id": artifact_id},
+            UpdateExpression="SET license = :license",
+            ConditionExpression="artifact_type = :type",
+            ExpressionAttributeValues={
+                ":license": license,
+                ":type": ArtifactType.MODEL.value,
+            },
+        )
+        print(f"[DynamoDB] Saved license for model: {artifact_id}")
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            print(f"[DynamoDB] Error saving model license: {e}")
+
+
+def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
+    """Get the license for a model."""
+    try:
+        response = table.get_item(Key={"artifact_id": artifact_id})
+        if "Item" not in response:
+            return None
+
+        item = response["Item"]
+        if item.get("artifact_type") != ArtifactType.MODEL.value:
+            return None
+
+        return item.get("license")
+    except ClientError as e:
+        print(f"[DynamoDB] Error getting model license: {e}")
         return None
 
 

@@ -34,21 +34,27 @@ def _derive_name(url: str) -> str:
 def _get_base_url(request: Request | None = None) -> str:
     """
     Get base URL from request, with fallback to BASE_URL environment variable.
-    
-    This ensures download_url is always correct regardless of server restarts
-    or environment changes (localhost vs AWS deployment).
+    Handles proxy headers (X-Forwarded-Host/Proto) for correct public URLs.
     """
-    # Check environment variable first (useful for AWS deployments)
+    # 1. Check environment variable first (best for production/AWS)
     env_base = os.getenv("BASE_URL")
     if env_base:
         return env_base.rstrip('/')
     
-    # Fallback to request base URL if available
+    # 2. Try to construct from request
     if request:
-        base_url = str(request.base_url).rstrip('/')
-        return base_url
+        # Check standard proxy headers (ALB, API Gateway)
+        forwarded_host = request.headers.get("X-Forwarded-Host")
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "http")
+        
+        if forwarded_host:
+            # Reconstruct public URL from headers
+            return f"{forwarded_proto}://{forwarded_host}".rstrip('/')
+            
+        # Fallback to direct request URL (local dev or direct access)
+        return str(request.base_url).rstrip('/')
     
-    # Last resort: return a default (shouldn't happen in production)
+    # 3. Last resort default
     return "http://localhost:8000"
 
 

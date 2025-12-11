@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import time
 from typing import List
@@ -8,7 +9,10 @@ from typing import List
 import regex
 import requests
 from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
-                     Query, Response, status)
+                     Query, Request, Response, status)
+from fastapi.responses import RedirectResponse, StreamingResponse
+from huggingface_hub import HfApi, hf_hub_url
+from urllib.parse import urlparse
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactMetadata,
@@ -27,7 +31,225 @@ def _derive_name(url: str) -> str:
     return stripped.split("/")[-1]
 
 
-router = APIRouter(tags=["artifacts"])
+def _get_base_url(request: Request | None = None) -> str:
+    """
+    Get base URL from request, with fallback to BASE_URL environment variable.
+    
+    This ensures download_url is always correct regardless of server restarts
+    or environment changes (localhost vs AWS deployment).
+    """
+    # Check environment variable first (useful for AWS deployments)
+    env_base = os.getenv("BASE_URL")
+    if env_base:
+        return env_base.rstrip('/')
+    
+    # Fallback to request base URL if available
+    if request:
+        base_url = str(request.base_url).rstrip('/')
+        return base_url
+    
+    # Last resort: return a default (shouldn't happen in production)
+    return "http://localhost:8000"
+
+
+def _extract_model_id_from_url(url: str) -> str:
+    """
+    Extract HuggingFace model/dataset ID from URL.
+    
+    Handles formats like:
+    - https://huggingface.co/namespace/model-name
+    - https://huggingface.co/namespace/model-name/tree/main
+    - https://huggingface.co/datasets/namespace/dataset-name
+    """
+    if 'huggingface.co' in url:
+        pattern = r'huggingface\.co/(?:datasets/)?([^/]+/[^/?]+)'
+        match = re.search(pattern, url)
+        if match:
+            model_id = match.group(1)
+            # Remove /tree/main or similar suffixes
+            if '/tree' in model_id:
+                model_id = model_id.split('/tree')[0]
+            return model_id
+    
+    # If it looks like 'namespace/model_name' without URL
+    if '/' in url and ' ' not in url and '://' not in url:
+        return url
+    
+    return url
+
+
+def _get_huggingface_download_url(model_id: str, is_dataset: bool = False) -> str:
+    """
+    Get actual download URL for HuggingFace model/dataset.
+    
+    Uses huggingface_hub to get the primary model file URL.
+    Falls back to constructing a /resolve/main/ URL for common model files.
+    """
+    try:
+        api = HfApi()
+        repo_type = "dataset" if is_dataset else "model"
+        
+        # Try to get model info to find the main model file
+        try:
+            info = api.model_info(repo_id=model_id, repo_type=repo_type)
+            
+            # Look for common model file patterns
+            model_files = [
+                "model.safetensors",
+                "pytorch_model.bin",
+                "model.bin",
+                "tf_model.h5",
+            ]
+            
+            # Check if any model files exist
+            for file_name in model_files:
+                try:
+                    # Use hf_hub_url to get the download URL
+                    download_url = hf_hub_url(
+                        repo_id=model_id,
+                        filename=file_name,
+                        repo_type=repo_type,
+                        revision="main"
+                    )
+                    # Verify the file exists by checking if URL is accessible
+                    test_response = requests.head(download_url, timeout=5, allow_redirects=True)
+                    if test_response.status_code == 200:
+                        return download_url
+                except Exception:
+                    continue
+            
+            # If no model file found, return a zip archive URL
+            # HuggingFace doesn't provide direct zip URLs, so we'll use the resolve URL for README
+            # and let the client handle it, or construct a repo snapshot URL
+            return f"https://huggingface.co/{model_id}/resolve/main/README.md"
+            
+        except Exception:
+            # Fallback: construct resolve URL for common files
+            for file_name in ["model.safetensors", "pytorch_model.bin", "model.bin"]:
+                fallback_url = f"https://huggingface.co/{model_id}/resolve/main/{file_name}"
+                try:
+                    test_response = requests.head(fallback_url, timeout=5, allow_redirects=True)
+                    if test_response.status_code == 200:
+                        return fallback_url
+                except Exception:
+                    continue
+            
+            # Last resort: return README URL
+            return f"https://huggingface.co/{model_id}/resolve/main/README.md"
+            
+    except Exception:
+        # Final fallback: return a constructed URL
+        return f"https://huggingface.co/{model_id}/resolve/main/README.md"
+
+
+def _get_github_download_url(repo_url: str) -> str:
+    """
+    Get zip download URL for GitHub repository.
+    
+    Extracts owner/repo from GitHub URL and constructs archive download URL.
+    Defaults to main branch (most modern repos use this).
+    """
+    parsed = urlparse(repo_url)
+    path = parsed.path.strip('/')
+    parts = path.split('/')
+    
+    # GitHub URLs: github.com/owner/repo or github.com/owner/repo/tree/branch
+    if len(parts) >= 2:
+        owner = parts[0]
+        repo = parts[1]
+        
+        # Remove .git suffix if present
+        if repo.endswith('.git'):
+            repo = repo[:-4]
+        
+        # Detect branch from URL if present, otherwise default to main
+        branch = "main"
+        if len(parts) >= 4 and parts[2] == "tree":
+            branch = parts[3]
+        
+        return f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
+    
+    # Fallback: return original URL
+    return repo_url
+
+
+def _get_source_download_url(artifact: Artifact) -> str:
+    """
+    Get actual download URL based on artifact type and source.
+    
+    Routes to appropriate helper based on URL pattern.
+    Returns downloadable file URL.
+    Validates the URL before returning.
+    """
+    source_url = artifact.data.url
+    
+    # Validate source URL is not empty
+    if not source_url or not source_url.strip():
+        raise ValueError("Source URL is empty")
+    
+    download_url = None
+    
+    # Check if it's a HuggingFace URL
+    if 'huggingface.co' in source_url:
+        is_dataset = '/datasets/' in source_url or artifact.metadata.type == ArtifactType.DATASET
+        model_id = _extract_model_id_from_url(source_url)
+        download_url = _get_huggingface_download_url(model_id, is_dataset=is_dataset)
+    
+    # Check if it's a GitHub URL
+    elif 'github.com' in source_url:
+        download_url = _get_github_download_url(source_url)
+    
+    # For other URLs, return as-is (assume it's already a direct download URL)
+    else:
+        download_url = source_url
+    
+    # Validate URL format
+    try:
+        parsed = urlparse(download_url)
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError(f"Invalid URL format: {download_url}")
+    except Exception as e:
+        raise ValueError(f"Invalid URL: {str(e)}")
+    
+    return download_url
+
+
+def _get_download_filename(artifact: Artifact, source_url: str) -> str:
+    """
+    Determine filename for download based on artifact and source URL.
+    Sanitizes filename to be safe for HTTP headers.
+    """
+    artifact_name = artifact.metadata.name or "artifact"
+    
+    # Sanitize artifact name (remove/replace unsafe characters)
+    # Remove quotes, backslashes, and other problematic chars
+    safe_name = artifact_name.replace('"', '').replace('\\', '').replace('\n', '').replace('\r', '')
+    # Replace spaces and other special chars with underscores
+    safe_name = re.sub(r'[^\w\-_\.]', '_', safe_name)
+    # Ensure name is not empty after sanitization
+    if not safe_name or safe_name.strip() == '':
+        safe_name = "artifact"
+    # Limit length to avoid header issues
+    if len(safe_name) > 200:
+        safe_name = safe_name[:200]
+    
+    # Try to extract extension from source URL
+    if '.zip' in source_url:
+        extension = '.zip'
+    elif '.safetensors' in source_url:
+        extension = '.safetensors'
+    elif '.bin' in source_url:
+        extension = '.bin'
+    elif '.h5' in source_url:
+        extension = '.h5'
+    else:
+        # Default based on artifact type
+        if artifact.metadata.type == ArtifactType.CODE:
+            extension = '.zip'
+        else:
+            extension = '.bin'
+    
+    return f"{safe_name}{extension}"
 
 
 def calibrate_regex_timeout() -> float:
@@ -238,6 +460,7 @@ def process_model_artifact_async(
     summary="Register a new artifact. (BASELINE)",
 )
 async def register_artifact(
+    request: Request,
     payload: ArtifactRegistration,
     background_tasks: BackgroundTasks,
     response: Response,
@@ -251,13 +474,17 @@ async def register_artifact(
         artifact_id = memory.generate_artifact_id()
         name = payload.name or _derive_name(payload.url)
 
+        # Construct download_url dynamically
+        base_url = _get_base_url(request)
+        download_url = f"{base_url}/artifacts/{artifact_type}/{artifact_id}/download"
+        
         artifact = Artifact(
             metadata=ArtifactMetadata(
                 name=name,
                 id=artifact_id,
                 type=artifact_type,
             ),
-            data=ArtifactData(url=payload.url),
+            data=ArtifactData(url=payload.url, download_url=download_url),
         )
 
         # Save artifact with "processing" status
@@ -279,13 +506,18 @@ async def register_artifact(
     artifact_name = payload.name or _derive_name(payload.url)
 
     artifact_id = memory.generate_artifact_id()
+    
+    # Construct download_url dynamically
+    base_url = _get_base_url(request)
+    download_url = f"{base_url}/artifacts/{artifact_type}/{artifact_id}/download"
+    
     artifact = Artifact(
         metadata=ArtifactMetadata(
             name=artifact_name,
             id=artifact_id,
             type=artifact_type,
         ),
-        data=ArtifactData(url=payload.url),
+        data=ArtifactData(url=payload.url, download_url=download_url),
     )
     memory.save_artifact(artifact)
 
@@ -306,6 +538,7 @@ async def register_artifact(
     },
 )
 async def get_artifact(
+    request: Request,
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
 ):
@@ -373,6 +606,11 @@ async def get_artifact(
                 # Unknown status, assume completed
                 break
 
+    # Populate download_url if missing (for backward compatibility)
+    if not artifact.data.download_url:
+        base_url = _get_base_url(request)
+        artifact.data.download_url = f"{base_url}/artifacts/{artifact_type}/{artifact_id}/download"
+    
     return artifact
 
 
@@ -618,3 +856,133 @@ async def license_check(
     compatible = is_license_compatible(model_license, github_license)
 
     return compatible
+
+
+@router.get(
+    "/artifacts/{artifact_type}/{artifact_id}/download",
+    summary="Download artifact bundle. (BASELINE)",
+    responses={
+        200: {"description": "Stream artifact file"},
+        202: {"description": "Artifact still processing"},
+        404: {"description": "Artifact does not exist"},
+        424: {"description": "Artifact processing failed"},
+        502: {"description": "Source download failed"},
+        504: {"description": "Download timeout"},
+    },
+)
+async def download_artifact(
+    request: Request,
+    artifact_type: ArtifactType = Path(..., description="Type of artifact to download"),
+    artifact_id: ArtifactID = Path(..., description="Artifact id"),
+):
+    """
+    Download endpoint for artifacts.
+    
+    Proxies download from source (HuggingFace/GitHub) and streams to client.
+    For model artifacts that are still processing, returns 202 Accepted.
+    """
+    # 1. Validate artifact_type
+    try:
+        artifact_type_enum = ArtifactType(artifact_type)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="400: There is missing field(s) in the artifact_type or artifact_id or it is formed improperly, or is invalid.",
+        )
+
+    # 2. Validate artifact_id format
+    id_pattern = r"^[a-zA-Z0-9\-]+$"
+    if not re.fullmatch(id_pattern, artifact_id):
+        raise HTTPException(
+            status_code=400,
+            detail="400: There is missing field(s) in the artifact_type or artifact_id or it is formed improperly, or is invalid.",
+        )
+
+    # 3. Check if artifact exists
+    artifact = memory.get_artifact(artifact_type_enum, artifact_id)
+    if not artifact:
+        raise HTTPException(
+            status_code=404,
+            detail="404: Artifact does not exist.",
+        )
+
+    # 4. For models, check processing status
+    if artifact_type_enum == ArtifactType.MODEL:
+        processing_status = memory.get_processing_status(artifact_id)
+        
+        if processing_status == "processing":
+            # Artifact is still being processed - return 202 Accepted
+            raise HTTPException(
+                status_code=status.HTTP_202_ACCEPTED,
+                detail="Artifact is still processing.",
+            )
+        
+        if processing_status == "failed":
+            # Artifact processing failed - return 424 Failed Dependency
+            raise HTTPException(
+                status_code=status.HTTP_424_FAILED_DEPENDENCY,
+                detail="Artifact processing failed.",
+            )
+
+    # 5. Get source download URL
+    try:
+        source_download_url = _get_source_download_url(artifact)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to determine source download URL.",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid artifact source URL.",
+        )
+
+    # 6. Fetch from source with streaming
+    try:
+        source_response = requests.get(
+            source_download_url,
+            stream=True,
+            timeout=300,  # 5 minutes timeout
+            allow_redirects=True
+        )
+        source_response.raise_for_status()
+    except requests.Timeout:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Download timeout from source.",
+        )
+    except requests.HTTPError as e:
+        if e.response and e.response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Source file not found.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Source download failed.",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Source download error.",
+        )
+
+    # 7. Determine content type and filename
+    content_type = source_response.headers.get('Content-Type', 'application/octet-stream')
+    filename = _get_download_filename(artifact, source_download_url)
+    
+    # 8. Build headers (only include Content-Length if available)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    }
+    content_length = source_response.headers.get("Content-Length")
+    if content_length:
+        headers["Content-Length"] = content_length
+    
+    # 9. Stream response to client
+    return StreamingResponse(
+        source_response.iter_content(chunk_size=8192),  # 8KB chunks
+        media_type=content_type,
+        headers=headers
+    )

@@ -1,0 +1,102 @@
+Info:CardData keys: []
+Info:code_repo_hint = None
+Info:Begin processing metrics.
+Info:Calculating data_quality metric
+Info:Calculating code_quality metric
+Info:Completeness keywords found: 0
+Info:Calculating performance_claims metric
+Info:Calculating dataset_and_score metric
+Info:Calculating license score for: test/model
+Info:Final code quality score: 0.08000000000000002
+Info:Error: 'createdAt' field not found in API info
+Info:Calculating reproducibility metric
+-1.0)
+Info: Calculating ramp up time metric
+Info:Calculating treescore metric
+Info:No tag - resorting to number of files
+Info:No example code found - score: 0.0
+Info:Reproducibility score: 0.0, latency: 2ms
+Info:Error getting model size for test/model: 401 Client Error. (Request ID: Root=1-693a2a47-726154842608514236e3c535;e3864d54-cde5-4776-8cb5-89bb54ef77c5)
+
+Repository Not Found for url: https://huggingface.co/api/models/test/model.
+Please make sure you specified the correct `repo_id` and `repo_type`.
+If you are trying to access a private or gated repo, make sure you are authenticated. For more details, see https://huggingface.co/docs/huggingface_hub/authentication
+Invalid username or password.
+Info:Model: test/model
+Info:Pattern-adjusted size: 0.50 GB
+Info:  raspberry_pi: 0.75
+Info:  jetson_nano: 0.88
+Info:  desktop_pc: 0.97
+Info:  aws_server: 1.0
+Info:Net size score: 0.93
+Info:Size calculation latency: 52 ms
+Info:No parent models found - score: 0.0
+Info:Treescore: 0.0, latency: 78ms
+Info:README not found for test/model
+Info:No README found for test/model - returning 0.0
+Info:Concurrent thread results unpacked
+Info:Error getting model size for test/model: 401 Client Error. (Request ID: Root=1-693a2a4a-50b8c6c80cf86026758e71e6;20c24f61-f3b5-460f-929e-75e6881bca53)
+
+Repository Not Found for url: https://huggingface.co/api/models/test/model.
+Please make sure you specified the correct `repo_id` and `repo_type`.
+If you are trying to access a private or gated repo, make sure you are authenticated. For more details, see https://huggingface.co/docs/huggingface_hub/authentication
+Invalid username or password.
+Info:Model: test/model
+Info:Pattern-adjusted size: 0.50 GB
+Info:  raspberry_pi: 0.75
+Info:  jetson_nano: 0.88
+Info:  desktop_pc: 0.97
+Info:  aws_server: 1.0
+Info:Net size score: 0.93
+Info:Size calculation latency: 48 ms
+Info:CardData keys: []
+Info:code_repo_hint = None
+Info:Begin processing metrics.
+Info:Calculating data_quality metric
+Info:Calculating code_quality metric
+Info:Calculating dataset_and_score metric
+Info:Completeness keywords found: 0
+Info:Calculating performance_claims metric
+Info:Final code quality score: 0.08000000000000002
+Info:Calculating license score for: test/model
+Info: Calculating bus factor metric
+Info: Calculating ramp up time metric
+Info:Error: 'createdAt' field not found in API info
+Info:Reviewedness score: -1.0 (fraction: -1.0)
+Info:No tag - resorting to number of files
+Info:Calculating reproducibility metric
+Info:No example code found - score: 0.0
+Info:Reproducibility score: 0.0, latency: 2ms
+Info:Error getting model size for test/model: 401 Client Error. (Request ID: Root=1-693a2a50-605088b837719b1a08fae915;839867a5-0bc9-45df-9f6d-ecf4bcd0d10e)
+
+Repository Not Found for url: https://huggingface.co/api/models/test/model.
+Please make sure you specified the correct `repo_id` and `repo_type`.
+If you are trying to access a private or gated repo, make sure you are authenticated. For more details, see https://huggingface.co/docs/huggingface_hub/authentication
+Invalid username or password.
+Info:Model: test/model
+Info:Pattern-adjusted size: 0.50 GB
+Info:  raspberry_pi: 0.75
+Info:  jetson_nano: 0.88
+Info:  desktop_pc: 0.97
+Info:  aws_server: 1.0
+Info:Net size score: 0.93
+Info:Size calculation latency: 52 ms
+Info:No parent models found - score: 0.0
+Info:Treescore: 0.0, latency: 91ms
+Info:README not found for test/model
+Info:No README found for test/model - returning 0.0
+Info:Concurrent thread results unpacked
+Info:Error getting model size for test/model: 401 Client Error. (Request ID: Root=1-693a2a51-0fcd9d983fc713805beb426d;b017e897-b10b-4ded-92a7-9437470bbaf8)
+
+Repository Not Found for url: https://huggingface.co/api/models/test/model.
+Please make sure you specified the correct `repo_id` and `repo_type`.
+If you are trying to access a private or gated repo, make sure you are authenticated. For more details, see https://huggingface.co/docs/huggingface_hub/authentication
+Invalid username or password.
+Info:Model: test/model
+Info:Pattern-adjusted size: 0.50 GB
+Info:  raspberry_pi: 0.75
+Info:  jetson_nano: 0.88
+Info:  desktop_pc: 0.97
+Info:  aws_server: 1.0
+Info:Net size score: 0.93
+Info:Size calculation latency: 49 ms

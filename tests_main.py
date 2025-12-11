@@ -1311,7 +1311,8 @@ class Test_Download_Endpoint:
         from fastapi.testclient import TestClient
 
         from backend.app import app
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()
@@ -1334,7 +1335,8 @@ class Test_Download_Endpoint:
         from fastapi.testclient import TestClient
 
         from backend.app import app
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()
@@ -1388,10 +1390,10 @@ class Test_Download_Endpoint:
     def test_download_endpoint_redirects_to_s3_successfully(self, mock_file_exists, mock_presigned_url):
         """Test that download endpoint redirects to S3 pre-signed URL when file exists in S3."""
         from fastapi.testclient import TestClient
-        from unittest.mock import MagicMock
 
         from backend.app import app
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()
@@ -1414,7 +1416,7 @@ class Test_Download_Endpoint:
         assert "Location" in response.headers
         assert "s3" in response.headers["Location"].lower()
         assert "test-dataset-id" in response.headers["Location"]
-        
+
         # Verify S3 functions were called
         mock_file_exists.assert_called_once_with("dataset", "test-dataset-id")
         mock_presigned_url.assert_called_once_with("dataset", "test-dataset-id", expiration=900)
@@ -1423,11 +1425,13 @@ class Test_Download_Endpoint:
     @patch("backend.storage.s3.file_exists_in_s3")
     def test_download_endpoint_falls_back_to_proxy_when_s3_missing(self, mock_file_exists, mock_requests_get):
         """Test that download endpoint falls back to proxy when file not in S3."""
-        from fastapi.testclient import TestClient
         from unittest.mock import MagicMock
 
+        from fastapi.testclient import TestClient
+
         from backend.app import app
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()
@@ -1441,7 +1445,7 @@ class Test_Download_Endpoint:
 
         # Mock S3 - file doesn't exist, should fallback to proxy
         mock_file_exists.return_value = False
-        
+
         # Mock the source download response for proxy fallback
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -1457,7 +1461,7 @@ class Test_Download_Endpoint:
         assert "Content-Disposition" in response.headers
         assert "attachment" in response.headers["Content-Disposition"]
         assert "test-dataset" in response.headers["Content-Disposition"]
-        
+
         # Verify S3 check was attempted
         mock_file_exists.assert_called_once_with("dataset", "test-dataset-id")
         # Verify proxy was used
@@ -1471,7 +1475,8 @@ class Test_Download_Endpoint:
         from requests import Timeout
 
         from backend.app import app
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()
@@ -1497,12 +1502,14 @@ class Test_Download_Endpoint:
     @patch("backend.storage.s3.file_exists_in_s3")
     def test_download_endpoint_handles_source_404(self, mock_file_exists, mock_requests_get):
         """Test that download endpoint returns 502 when source file not found in proxy fallback."""
-        from fastapi.testclient import TestClient
-        from requests import HTTPError
         from unittest.mock import MagicMock
 
+        from fastapi.testclient import TestClient
+        from requests import HTTPError
+
         from backend.app import app
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()
@@ -1536,7 +1543,8 @@ class Test_Download_Endpoint:
         from requests import ConnectionError
 
         from backend.app import app
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()
@@ -1565,7 +1573,8 @@ class Test_Download_Endpoint:
         from fastapi.testclient import TestClient
 
         from backend.app import app
-        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()

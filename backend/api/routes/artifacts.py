@@ -87,9 +87,6 @@ async def regex_artifact_search(payload: dict = Body(...)):
             if test:
                 results.append(record.artifact.metadata)
 
-    if not results:
-        raise HTTPException(404, "No artifact found under this regex.")
-
     return results
 
 

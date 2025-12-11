@@ -6,14 +6,14 @@ import time
 from typing import List
 
 import regex
-import requests
 from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
                      Query, Response, status)
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
-                            ArtifactData, ArtifactID, ArtifactMetadata,
-                            ArtifactQuery, ArtifactRegistration, ArtifactType,
-                            ModelRating, SimpleLicenseCheckRequest)
+                            ArtifactData, ArtifactID, ArtifactLineageEdge,
+                            ArtifactLineageGraph, ArtifactLineageNode,
+                            ArtifactMetadata, ArtifactQuery,
+                            ArtifactRegistration, ArtifactType, ModelRating)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory
 
@@ -27,28 +27,20 @@ def _derive_name(url: str) -> str:
     return stripped.split("/")[-1]
 
 
-router = APIRouter(tags=["artifacts"])
-
-
 def calibrate_regex_timeout() -> float:
     """
     Measures how long regex takes in this platform for a safe case.
     The timeout is set to 2x the baseline to avoid false-positive timeouts.
     """
     test_pattern = r"a+"
-    test2_pattern = r"ece461"
     test_text = "a" * 5000
 
     start = time.perf_counter()
     regex.search(test_pattern, test_text)
     baseline = time.perf_counter() - start
 
-    start = time.perf_counter()
-    regex.search(test2_pattern, test_text)
-    baseline2 = time.perf_counter() - start
-
     # Never allow insanely tiny values
-    return max(0.0001, baseline * 8, baseline2 * 8)
+    return max(0.0001, baseline * 2)
 
 
 # Compute once at import time
@@ -85,6 +77,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
     if initial_test is None:
         raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
+    # Works for both memory and DynamoDB storage
     for store in memory._TYPE_TO_STORE.values():
         for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name
@@ -131,83 +124,25 @@ async def reset_registry() -> dict[str, str]:
     return {"status": "reset"}
 
 
-def validate_model_rating(rating: ModelRating) -> bool:
-    """
-    Returns True if ALL subratings are >= 0.5, otherwise False.
-
-    Works generically across nested rating fields, including:
-        - performance_claims
-        - size_score.*
-        - dataset_quality
-        - code_quality
-        - dataset_and_code_score
-        - ramp_up_time
-        - bus_factor
-        - etc.
-    """
-
-    def check(obj):
-        for attr, value in obj.__dict__.items():
-            if isinstance(value, (int, float)):
-                if value < 0.5:
-                    return False
-            elif hasattr(value, "__dict__"):
-                if not check(value):
-                    return False
-        return True
-
-    return check(rating)
-
-
-def validate_net_score(rating: ModelRating) -> bool:
-    """
-    Returns True if net_score >= 0.5, otherwise False.
-    """
-    return getattr(rating, "net_score", 0.0) >= 0.5
-
-
 def process_model_artifact_async(
     url: str,
     artifact_id: str,
     name: str,
 ) -> None:
+    """Background task to process model artifact asynchronously.
+
+    Note: This function is synchronous but runs in a background thread
+    to avoid blocking the event loop.
+    """
     try:
-        # Compute the artifact (long-running)
+        # Compute the artifact (this is the long-running operation)
         artifact, rating, dataset_name, dataset_url, code_name, code_url, license = compute_model_artifact(
             url,
             artifact_id=artifact_id,
             name_override=name,
         )
-        strict_check = False
-        soft_check = False
-        # 🔍 NEW: Validate rating before saving it
-        if rating and not validate_model_rating(rating) and strict_check:
-            # Mark as failed and DO NOT save final artifact or rating
-            memory.update_processing_status(artifact_id, "failed")
 
-            # Optionally discard partial model entirely:
-            memory.delete_artifact(ArtifactType.MODEL, artifact_id)
-
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(
-                f"Model {artifact_id} rejected: one or more subratings below 0.5."
-            )
-            return  # stops processing here
-        if rating and not validate_net_score(rating) and soft_check:
-            # Mark as failed and DO NOT save final artifact or rating
-            memory.update_processing_status(artifact_id, "failed")
-
-            # Optionally discard partial model entirely:
-            memory.delete_artifact(ArtifactType.MODEL, artifact_id)
-
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(
-                f"Model {artifact_id} rejected: one or more subratings below 0.5."
-            )
-            return  # stops processing here
-        # Normal success path:
+        # Save the completed artifact
         memory.save_artifact(
             artifact,
             rating=rating,
@@ -218,15 +153,14 @@ def process_model_artifact_async(
             code_url=code_url,
             processing_status="completed",
         )
-
+        # Explicitly ensure processing status is set to completed
         memory.update_processing_status(artifact_id, "completed")
-
         if rating:
             memory.save_model_rating(artifact.metadata.id, rating)
-
     except Exception as e:
+        # Mark as failed
         memory.update_processing_status(artifact_id, "failed")
-
+        # Log the error but don't raise - the artifact is already registered
         import logging
         logger = logging.getLogger(__name__)
         logger.error(f"Failed to process model artifact {artifact_id}: {e}")
@@ -356,12 +290,7 @@ async def get_artifact(
                     status_code=status.HTTP_424_FAILED_DEPENDENCY,
                     detail="Model processing failed.",
                 )
-            elif processing_status is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Model doesn't exist.",
-                )
-            elif processing_status == "processing":
+            elif processing_status == "processing" or processing_status is None:
                 # None means artifact not yet initialized - treat as processing
                 if time.time() - start_time > max_wait:
                     raise HTTPException(
@@ -450,12 +379,12 @@ async def get_model_rating(
         processing_status = memory.get_processing_status(artifact_id)
         if processing_status == "completed":
             break
-        elif processing_status is None:
+        elif processing_status == "failed":
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Model doesn't exist.",
+                status_code=status.HTTP_424_FAILED_DEPENDENCY,
+                detail="Model processing failed.",
             )
-        elif processing_status == "processing":
+        elif processing_status == "processing" or processing_status is None:
             # None means artifact not yet initialized - treat as processing
             if time.time() - start_time > max_wait:
                 raise HTTPException(
@@ -471,6 +400,79 @@ async def get_model_rating(
     if not rating:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist or lacks a rating.")
     return rating
+
+
+@router.get(
+    "/artifact/model/{artifact_id}/lineage",
+    response_model=ArtifactLineageGraph,
+    summary="Retrieve the lineage graph for this artifact. (BASELINE)",
+    responses={
+        400: {"description": "The lineage graph cannot be computed because the artifact metadata is missing or malformed."},
+        404: {"description": "Artifact does not exist."},
+    },
+)
+async def get_model_lineage(
+    artifact_id: ArtifactID = Path(..., description="Artifact id"),
+) -> ArtifactLineageGraph:
+    """Get the lineage graph for a model artifact showing its dependencies."""
+    # Get model record with relationships
+    model_record = memory.get_model_record(artifact_id)
+    if not model_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
+
+    nodes: List[ArtifactLineageNode] = []
+    edges: List[ArtifactLineageEdge] = []
+
+    # Add model node
+    model_node = ArtifactLineageNode(
+        artifact_id=model_record.artifact.metadata.id,
+        name=model_record.artifact.metadata.name,
+        source="model_metadata",
+        metadata={"type": "model"},
+    )
+    nodes.append(model_node)
+
+    # Add dataset node and edge if dataset exists
+    if model_record.dataset_id:
+        dataset = memory.get_artifact(ArtifactType.DATASET, model_record.dataset_id)
+        if dataset:
+            dataset_node = ArtifactLineageNode(
+                artifact_id=dataset.metadata.id,
+                name=dataset.metadata.name,
+                source="model_metadata",
+                metadata={"type": "dataset"},
+            )
+            nodes.append(dataset_node)
+
+            # Edge: dataset -> model (dataset is upstream dependency)
+            dataset_edge = ArtifactLineageEdge(
+                from_node_artifact_id=dataset.metadata.id,
+                to_node_artifact_id=model_record.artifact.metadata.id,
+                relationship="training_dataset",
+            )
+            edges.append(dataset_edge)
+
+    # Add code node and edge if code exists
+    if model_record.code_id:
+        code = memory.get_artifact(ArtifactType.CODE, model_record.code_id)
+        if code:
+            code_node = ArtifactLineageNode(
+                artifact_id=code.metadata.id,
+                name=code.metadata.name,
+                source="model_metadata",
+                metadata={"type": "code"},
+            )
+            nodes.append(code_node)
+
+            # Edge: code -> model (code is upstream dependency)
+            code_edge = ArtifactLineageEdge(
+                from_node_artifact_id=code.metadata.id,
+                to_node_artifact_id=model_record.artifact.metadata.id,
+                relationship="implemented_with",
+            )
+            edges.append(code_edge)
+
+    return ArtifactLineageGraph(nodes=nodes, edges=edges)
 
 
 @router.get(
@@ -503,118 +505,3 @@ async def get_artifact_cost(
         entry = ArtifactCostEntry(standalone_cost=0.0, total_cost=0.0)
 
     return ArtifactCost({artifact_id: entry})
-
-
-COMPATIBLE_LICENSES = {
-    "apache-2.0", "apache 2.0", "apache license 2.0", "apache",
-    "mit", "mit license",
-    "bsd-3-clause", "bsd-3", "bsd 3-clause", "bsd",
-    "bsl-1.0", "boost software license",
-    "lgpl-2.1", "lgpl 2.1", "lgplv2.1"   # only LGPL 2.1 allowed
-}
-
-INCOMPATIBLE_LICENSES = {
-    "gpl", "gpl-2", "gpl-3", "gplv2", "gplv3", "gnu general public license",
-    "agpl", "agpl-3", "affero gpl",
-    "lgpl", "lgpl-3", "lgplv3",   # anything except LGPL 2.1
-    "non-commercial", "non commercial", "commercial", "proprietary",
-    "creative commons", "cc-by", "cc-by-nc"
-}
-
-
-def normalize_license(name: str) -> str:
-    """
-    Normalize a license string so it can be compared reliably.
-    Handles: case, hyphens, underscores, punctuation, repeated spaces.
-    """
-    if not name:
-        return "unknown"
-
-    name = name.lower()
-
-    # Replace punctuation with spaces
-    name = re.sub(r"[_\-/,]+", " ", name)
-
-    # Remove parentheses + version qualifiers
-    name = re.sub(r"\(.*?\)", "", name)
-
-    # Remove extra spaces
-    name = " ".join(name.split())
-
-    return name
-
-
-def is_license_compatible(model_license: str, github_license: str) -> bool:
-    """
-    Return True if the model artifact license is compatible with the GitHub repo license.
-
-    Compatibility rules:
-      - Both must be in COMPATIBLE_LICENSES after normalization.
-      - Anything in INCOMPATIBLE_LICENSES → immediately false.
-      - Unknown → false.
-    """
-    model_norm = normalize_license(model_license)
-    repo_norm = normalize_license(github_license)
-
-    # Unknown license → incompatible
-    if model_norm == "unknown":
-        return False
-
-    if repo_norm == "unknown":
-        return False
-
-    # Explicit incompatibility check
-    if model_norm in INCOMPATIBLE_LICENSES or repo_norm in INCOMPATIBLE_LICENSES:
-        return False
-
-    # Both must be compatible
-    if model_norm in COMPATIBLE_LICENSES and repo_norm in COMPATIBLE_LICENSES:
-        return True
-
-    # Otherwise incompatible
-    return False
-
-
-@router.post(
-    "/artifact/model/{artifact_id}/license-check",
-    summary="Assess license compatibility between model artifact and GitHub repo. (BASELINE)",
-)
-async def license_check(
-    artifact_id: ArtifactID,
-    payload: SimpleLicenseCheckRequest,
-):
-    # 1. Check artifact exists
-    artifact = memory.get_artifact(ArtifactType.MODEL, artifact_id)
-    if not artifact:
-        raise HTTPException(404, "Artifact does not exist.")
-
-    # 2. Extract model license
-    model_license = memory.get_model_license(artifact_id)
-    if not model_license:
-        return False  # unknown → incompatible
-
-    # 3. Parse GitHub URL
-    match = re.search(r"github\.com/([^/]+)/([^/]+)", payload.github_url)
-    if not match:
-        raise HTTPException(400, "Malformed GitHub repository URL.")
-    owner, repo = match.groups()
-
-    # 4. Fetch GitHub license
-    try:
-        resp = requests.get(
-            f"https://api.github.com/repos/{owner}/{repo}/license",
-            timeout=10
-        )
-    except Exception:
-        raise HTTPException(502, "External license information could not be retrieved.")
-
-    if resp.status_code == 404:
-        raise HTTPException(404, "GitHub repository not found.")
-
-    data = resp.json()
-    github_license = data.get("license", {}).get("spdx_id")
-
-    # 5. Compute compatibility
-    compatible = is_license_compatible(model_license, github_license)
-
-    return compatible

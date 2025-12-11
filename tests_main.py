@@ -1383,9 +1383,10 @@ class Test_Download_Endpoint:
         assert response.status_code == 400
         assert "invalid" in response.json()["detail"].lower()
 
-    @patch("requests.get")
-    def test_download_endpoint_proxies_successfully(self, mock_requests_get):
-        """Test that download endpoint successfully proxies download from source."""
+    @patch("backend.storage.s3.generate_presigned_download_url")
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_redirects_to_s3_successfully(self, mock_file_exists, mock_presigned_url):
+        """Test that download endpoint redirects to S3 pre-signed URL when file exists in S3."""
         from fastapi.testclient import TestClient
         from unittest.mock import MagicMock
 
@@ -1402,7 +1403,46 @@ class Test_Download_Endpoint:
         )
         memory.save_artifact(artifact, processing_status="completed")
 
-        # Mock the source download response
+        # Mock S3 operations - file exists and pre-signed URL generated
+        mock_file_exists.return_value = True
+        mock_presigned_url.return_value = "https://my-artifacts-bucket-ece461.s3.us-east-2.amazonaws.com/artifacts/dataset/test-dataset-id?signature=xyz"
+
+        client = TestClient(app)
+        response = client.get("/artifacts/dataset/test-dataset-id/download", follow_redirects=False)
+
+        assert response.status_code == 302
+        assert "Location" in response.headers
+        assert "s3" in response.headers["Location"].lower()
+        assert "test-dataset-id" in response.headers["Location"]
+        
+        # Verify S3 functions were called
+        mock_file_exists.assert_called_once_with("dataset", "test-dataset-id")
+        mock_presigned_url.assert_called_once_with("dataset", "test-dataset-id", expiration=900)
+
+    @patch("requests.get")
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_falls_back_to_proxy_when_s3_missing(self, mock_file_exists, mock_requests_get):
+        """Test that download endpoint falls back to proxy when file not in S3."""
+        from fastapi.testclient import TestClient
+        from unittest.mock import MagicMock
+
+        from backend.app import app
+        from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create a completed dataset artifact
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-dataset-id", name="test-dataset", type=ArtifactType.DATASET),
+            data=ArtifactData(url="https://huggingface.co/datasets/test/dataset"),
+        )
+        memory.save_artifact(artifact, processing_status="completed")
+
+        # Mock S3 - file doesn't exist, should fallback to proxy
+        mock_file_exists.return_value = False
+        
+        # Mock the source download response for proxy fallback
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.headers = {"Content-Type": "application/zip", "Content-Length": "1024"}
@@ -1417,18 +1457,16 @@ class Test_Download_Endpoint:
         assert "Content-Disposition" in response.headers
         assert "attachment" in response.headers["Content-Disposition"]
         assert "test-dataset" in response.headers["Content-Disposition"]
-        assert "Accept-Ranges" in response.headers
-        assert response.headers["Accept-Ranges"] == "bytes"
-
-        # Verify requests.get was called
+        
+        # Verify S3 check was attempted
+        mock_file_exists.assert_called_once_with("dataset", "test-dataset-id")
+        # Verify proxy was used
         assert mock_requests_get.called
-        call_args = mock_requests_get.call_args
-        assert call_args[1]["stream"] is True
-        assert call_args[1]["timeout"] == 300
 
     @patch("requests.get")
-    def test_download_endpoint_handles_source_timeout(self, mock_requests_get):
-        """Test that download endpoint returns 504 on source timeout."""
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_handles_source_timeout(self, mock_file_exists, mock_requests_get):
+        """Test that download endpoint returns 504 on source timeout when falling back to proxy."""
         from fastapi.testclient import TestClient
         from requests import Timeout
 
@@ -1444,7 +1482,9 @@ class Test_Download_Endpoint:
         )
         memory.save_artifact(artifact, processing_status="completed")
 
-        # Mock timeout exception
+        # Mock S3 - file doesn't exist, falls back to proxy
+        mock_file_exists.return_value = False
+        # Mock timeout exception in proxy
         mock_requests_get.side_effect = Timeout("Request timed out")
 
         client = TestClient(app)
@@ -1454,10 +1494,12 @@ class Test_Download_Endpoint:
         assert "timeout" in response.json()["detail"].lower()
 
     @patch("requests.get")
-    def test_download_endpoint_handles_source_404(self, mock_requests_get):
-        """Test that download endpoint returns 502 when source file not found."""
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_handles_source_404(self, mock_file_exists, mock_requests_get):
+        """Test that download endpoint returns 502 when source file not found in proxy fallback."""
         from fastapi.testclient import TestClient
         from requests import HTTPError
+        from unittest.mock import MagicMock
 
         from backend.app import app
         from backend.models import Artifact, ArtifactData, ArtifactMetadata, ArtifactType
@@ -1471,6 +1513,8 @@ class Test_Download_Endpoint:
         )
         memory.save_artifact(artifact, processing_status="completed")
 
+        # Mock S3 - file doesn't exist, falls back to proxy
+        mock_file_exists.return_value = False
         # Mock 404 response
         mock_response = MagicMock()
         mock_response.status_code = 404
@@ -1485,8 +1529,9 @@ class Test_Download_Endpoint:
         assert "not found" in response.json()["detail"].lower()
 
     @patch("requests.get")
-    def test_download_endpoint_handles_connection_error(self, mock_requests_get):
-        """Test that download endpoint returns 502 on connection error."""
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_handles_connection_error(self, mock_file_exists, mock_requests_get):
+        """Test that download endpoint returns 502 on connection error in proxy fallback."""
         from fastapi.testclient import TestClient
         from requests import ConnectionError
 
@@ -1502,6 +1547,8 @@ class Test_Download_Endpoint:
         )
         memory.save_artifact(artifact, processing_status="completed")
 
+        # Mock S3 - file doesn't exist, falls back to proxy
+        mock_file_exists.return_value = False
         # Mock connection error
         mock_requests_get.side_effect = ConnectionError("Connection failed")
 
@@ -1511,7 +1558,9 @@ class Test_Download_Endpoint:
         assert response.status_code == 502
         assert "connect" in response.json()["detail"].lower()
 
-    def test_download_endpoint_for_non_model_artifacts(self):
+    @patch("backend.storage.s3.generate_presigned_download_url")
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_for_non_model_artifacts(self, mock_file_exists, mock_presigned_url):
         """Test that download endpoint works for non-model artifacts (no processing check)."""
         from fastapi.testclient import TestClient
 
@@ -1528,20 +1577,17 @@ class Test_Download_Endpoint:
         )
         memory.save_artifact(artifact)
 
-        # Mock the source download response
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.headers = {"Content-Type": "application/zip", "Content-Length": "2048"}
-        mock_response.iter_content.return_value = [b"zip", b"content"]
-        mock_response.raise_for_status.return_value = None
+        # Mock S3 operations - file exists and pre-signed URL generated
+        mock_file_exists.return_value = True
+        mock_presigned_url.return_value = "https://my-artifacts-bucket-ece461.s3.us-east-2.amazonaws.com/artifacts/code/code-id?signature=xyz"
 
-        with patch("requests.get", return_value=mock_response):
-            client = TestClient(app)
-            response = client.get("/artifacts/code/code-id/download")
+        client = TestClient(app)
+        response = client.get("/artifacts/code/code-id/download", follow_redirects=False)
 
-            assert response.status_code == 200
-            assert "Content-Disposition" in response.headers
-            assert "test-code" in response.headers["Content-Disposition"]
+        assert response.status_code == 302
+        assert "Location" in response.headers
+        assert "s3" in response.headers["Location"].lower()
+        assert "code-id" in response.headers["Location"]
 
     def test_download_url_includes_correct_path(self):
         """Test that download_url includes the correct endpoint path."""

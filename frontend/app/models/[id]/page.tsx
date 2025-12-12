@@ -1,13 +1,11 @@
 import { ModelDetailClient } from "./ModelDetailClient"
 
-// Allow dynamic params for this route
-export const dynamicParams = true
+// Disable dynamic params for static export
+export const dynamicParams = false
 
-// For static export builds, generate a placeholder param
-// In development, this route will be fully dynamic
+// Static export: generate placeholder route
+// Actual model data is fetched client-side
 export function generateStaticParams(): Array<{ id: string }> {
-  // Return a placeholder ID so the route structure is generated for static export
-  // The actual model data is fetched client-side, so any ID will work
   return [{ id: "placeholder" }]
 }
 

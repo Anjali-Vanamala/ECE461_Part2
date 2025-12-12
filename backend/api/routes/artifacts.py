@@ -442,13 +442,32 @@ def process_model_artifact_async(
             )
             return  # stops processing here
 
-        # Download and store artifact file in S3
+        # CRITICAL: Mark artifact as completed FIRST (before S3 operations)
+        # This ensures get_artifact() doesn't timeout waiting for S3 uploads
+        memory.save_artifact(
+            artifact,
+            rating=rating,
+            license=license,
+            dataset_name=dataset_name,
+            dataset_url=dataset_url,
+            code_name=code_name,
+            code_url=code_url,
+            processing_status="completed",
+        )
+
+        memory.update_processing_status(artifact_id, "completed")
+
+        if rating:
+            memory.save_model_rating(artifact.metadata.id, rating)
+
+        # NOW: Download and store artifact file in S3 (non-blocking, happens after completion)
+        # This won't block get_artifact() from succeeding
         try:
             # Get source download URL
             source_download_url = _get_source_download_url(artifact)
 
             # Download file to temporary location
-            logger.info(f"Downloading artifact {artifact_id} from {source_download_url}")
+            logger.info(f"Downloading artifact {artifact_id} from {source_download_url} for S3 storage")
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.bin')
             temp_file_path = temp_file.name
             temp_file.close()
@@ -478,7 +497,9 @@ def process_model_artifact_async(
             )
 
             if not upload_success:
-                logger.warning(f"S3 upload failed for artifact {artifact_id}, but continuing with artifact save")
+                logger.warning(f"S3 upload failed for artifact {artifact_id}, but artifact is already marked completed")
+            else:
+                logger.info(f"Successfully uploaded artifact {artifact_id} to S3")
         except ValueError as e:
             # S3 bucket not configured - log warning but continue
             logger.warning(f"S3 not configured: {e}, skipping file storage for {artifact_id}")
@@ -486,25 +507,8 @@ def process_model_artifact_async(
             # boto3 not available - log warning but continue
             logger.warning(f"boto3 not available: {e}, skipping S3 storage for {artifact_id}")
         except Exception as download_error:
-            logger.error(f"File download/upload failed for artifact {artifact_id}: {download_error}")
-            # Continue with artifact save even if download/upload fails (graceful degradation)
-
-        # Normal success path:
-        memory.save_artifact(
-            artifact,
-            rating=rating,
-            license=license,
-            dataset_name=dataset_name,
-            dataset_url=dataset_url,
-            code_name=code_name,
-            code_url=code_url,
-            processing_status="completed",
-        )
-
-        memory.update_processing_status(artifact_id, "completed")
-
-        if rating:
-            memory.save_model_rating(artifact.metadata.id, rating)
+            logger.error(f"File download/upload failed for artifact {artifact_id}: {download_error}, but artifact is already marked completed")
+            # Artifact is already marked completed, so this is non-critical
 
     except Exception as e:
         memory.update_processing_status(artifact_id, "failed")

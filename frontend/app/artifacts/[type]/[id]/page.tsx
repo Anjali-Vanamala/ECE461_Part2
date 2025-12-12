@@ -1,9 +1,7 @@
 import { ArtifactDetailClient } from "./ArtifactDetailClient"
 
-// Allow dynamic params for this route
-export const dynamicParams = true
-
 // For static export builds, generate placeholder params
+// Note: dynamicParams is false by default with output: 'export'
 export function generateStaticParams(): Array<{ type: string; id: string }> {
   return [
     { type: "model", id: "placeholder" },

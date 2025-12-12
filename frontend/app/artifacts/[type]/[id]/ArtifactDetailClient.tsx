@@ -8,39 +8,39 @@ import { ArrowLeft, Download, Share2, Flag, Loader2 } from "lucide-react"
 import { LineageGraph } from "@/components/lineage-graph"
 import { ModelScoreCard } from "@/components/model-score-card"
 import { useEffect, useState } from "react"
-import { fetchModelById, fetchModelRating, API_BASE_URL } from "@/lib/api"
+import { fetchArtifactById, fetchModelRating, API_BASE_URL, type ArtifactType } from "@/lib/api"
 
-export function ModelDetailClient({ id }: { id: string }) {
-  const [model, setModel] = useState<any>(null)
+export function ArtifactDetailClient({ type, id }: { type: ArtifactType; id: string }) {
+  const [artifact, setArtifact] = useState<any>(null)
   const [rating, setRating] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function loadModel() {
-      if (!id) {
+    async function loadArtifact() {
+      if (!id || !type) {
         return
       }
 
       try {
         setLoading(true)
-        const [modelData, ratingData] = await Promise.all([
-          fetchModelById(id),
-          fetchModelRating(id).catch(() => null), // Rating might not exist
+        const [artifactData, ratingData] = await Promise.all([
+          fetchArtifactById(type, id),
+          type === 'model' ? fetchModelRating(id).catch(() => null) : Promise.resolve(null), // Only models have ratings
         ])
-        setModel(modelData)
+        setArtifact(artifactData)
         setRating(ratingData)
         setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load model")
-        console.error("Error loading model:", err)
+        setError(err instanceof Error ? err.message : `Failed to load ${type}`)
+        console.error(`Error loading ${type}:`, err)
       } finally {
         setLoading(false)
       }
     }
 
-    loadModel()
-  }, [id])
+    loadArtifact()
+  }, [id, type])
 
   if (loading) {
     return (
@@ -48,25 +48,25 @@ export function ModelDetailClient({ id }: { id: string }) {
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-muted-foreground">Loading model...</span>
+            <span className="ml-2 text-muted-foreground">Loading {type}...</span>
           </div>
         </div>
       </main>
     )
   }
 
-  if (error || !model) {
+  if (error || !artifact) {
     return (
       <main className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8">
           <Button variant="ghost" asChild className="mb-6 gap-2">
-            <Link href="/">
+            <Link href="/browse">
               <ArrowLeft className="h-4 w-4" />
-              Back to Models
+              Back to Browse
             </Link>
           </Button>
           <Card className="bg-destructive/10 border-destructive/30 backdrop-blur p-6">
-            <p className="text-destructive">Error: {error || "Model not found"}</p>
+            <p className="text-destructive">Error: {error || `${type} not found`}</p>
           </Card>
         </div>
       </main>
@@ -74,15 +74,18 @@ export function ModelDetailClient({ id }: { id: string }) {
   }
 
   // Map backend data to frontend format
-  const modelName = model.metadata?.name || "Unknown Model"
-  const modelUrl = model.data?.url || ""
-  const scores = rating ? {
-    overall: rating.net_score ? rating.net_score * 5 : 0, // net_score is 0-1, convert to 0-5
-    quality: rating.code_quality ? rating.code_quality * 5 : 0, // code_quality is 0-1, convert to 0-5
-    reproducibility: rating.reproducibility ? rating.reproducibility : 0, // reproducibility is 0-1
-    reviewedness: rating.reviewedness ? rating.reviewedness : 0, // reviewedness is 0-1
-    treescore: rating.tree_score ? rating.tree_score * 5 : 0, // tree_score is 0-1, convert to 0-5
-    documentation: rating.dataset_and_code_score ? rating.dataset_and_code_score * 5 : 0, // Use dataset_and_code_score as proxy for documentation, convert to 0-5
+  const artifactName = artifact.metadata?.name || `Unknown ${type}`
+  const artifactUrl = artifact.data?.url || ""
+  const artifactType = artifact.metadata?.type || type
+  
+  // Only calculate scores for models
+  const scores = type === 'model' && rating ? {
+    overall: rating.net_score ? rating.net_score * 5 : 0,
+    quality: rating.code_quality ? rating.code_quality * 5 : 0,
+    reproducibility: rating.reproducibility ? rating.reproducibility : 0,
+    reviewedness: rating.reviewedness ? rating.reviewedness : 0,
+    treescore: rating.tree_score ? rating.tree_score * 5 : 0,
+    documentation: rating.dataset_and_code_score ? rating.dataset_and_code_score * 5 : 0,
   } : {
     overall: 0,
     quality: 0,
@@ -91,26 +94,36 @@ export function ModelDetailClient({ id }: { id: string }) {
     treescore: 0,
     documentation: 0,
   }
+
+  const getSourceName = () => {
+    if (artifactUrl.includes('huggingface.co')) {
+      return 'HuggingFace'
+    } else if (artifactUrl.includes('github.com')) {
+      return 'GitHub'
+    }
+    return 'External'
+  }
+
   return (
     <main className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         {/* Back Button */}
         <Button variant="ghost" asChild className="mb-6 gap-2">
-          <Link href="/">
+          <Link href="/browse">
             <ArrowLeft className="h-4 w-4" />
-            Back to Models
+            Back to Browse
           </Link>
         </Button>
 
         {/* Header Section */}
         <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
           <div className="flex-1">
-            <h1 className="text-4xl font-bold text-foreground">{modelName}</h1>
-            <p className="mt-2 text-muted-foreground">Model ID: {id || "Loading..."}</p>
-            {modelUrl && (
+            <h1 className="text-4xl font-bold text-foreground">{artifactName}</h1>
+            <p className="mt-2 text-muted-foreground">{type.charAt(0).toUpperCase() + type.slice(1)} ID: {id || "Loading..."}</p>
+            {artifactUrl && (
               <p className="mt-1 text-sm text-muted-foreground">
-                <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                  View on HuggingFace
+                <a href={artifactUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  View on {getSourceName()}
                 </a>
               </p>
             )}
@@ -118,7 +131,7 @@ export function ModelDetailClient({ id }: { id: string }) {
 
           <div className="flex flex-col gap-3 md:flex-row">
             <Button size="lg" asChild disabled={!id}>
-              <Link href={id ? `/models/${id}/download` : "#"} className="gap-2">
+              <Link href={id ? `/artifacts/${type}/${id}/download` : "#"} className="gap-2">
                 <Download className="h-4 w-4" />
                 Download
               </Link>
@@ -141,9 +154,9 @@ export function ModelDetailClient({ id }: { id: string }) {
             <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
               <h2 className="text-xl font-semibold text-foreground mb-4">About</h2>
               <p className="text-muted-foreground leading-relaxed">
-                {modelUrl ? (
+                {artifactUrl ? (
                   <>
-                    Model URL: <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{modelUrl}</a>
+                    {type.charAt(0).toUpperCase() + type.slice(1)} URL: <a href={artifactUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{artifactUrl}</a>
                   </>
                 ) : (
                   "No additional information available."
@@ -151,24 +164,26 @@ export function ModelDetailClient({ id }: { id: string }) {
               </p>
             </Card>
 
-            {/* Scores Section */}
-            <div>
-              <h2 className="text-xl font-semibold text-foreground mb-4">Scores & Metrics</h2>
-              <div className="grid gap-4 md:grid-cols-2">
-                <ModelScoreCard label="Overall Rating" value={scores.overall} max={5} />
-                <ModelScoreCard label="Quality" value={scores.quality} max={5} />
-                <ModelScoreCard label="Reproducibility" value={scores.reproducibility} max={1} />
-                <ModelScoreCard label="Code Review" value={scores.reviewedness} max={1} percentage />
-                <ModelScoreCard label="Treescore" value={scores.treescore} max={5} />
-                <ModelScoreCard label="Documentation" value={scores.documentation} max={5} />
+            {/* Scores Section - Only for models */}
+            {type === 'model' && (
+              <div>
+                <h2 className="text-xl font-semibold text-foreground mb-4">Scores & Metrics</h2>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <ModelScoreCard label="Overall Rating" value={scores.overall} max={5} />
+                  <ModelScoreCard label="Quality" value={scores.quality} max={5} />
+                  <ModelScoreCard label="Reproducibility" value={scores.reproducibility} max={1} />
+                  <ModelScoreCard label="Code Review" value={scores.reviewedness} max={1} percentage />
+                  <ModelScoreCard label="Treescore" value={scores.treescore} max={5} />
+                  <ModelScoreCard label="Documentation" value={scores.documentation} max={5} />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Lineage Section */}
-            {model.lineage && (
+            {artifact.lineage && (
               <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
                 <h2 className="text-xl font-semibold text-foreground mb-4">Lineage</h2>
-                <LineageGraph lineage={model.lineage.nodes?.map((n: any) => n.name) || []} />
+                <LineageGraph lineage={artifact.lineage.nodes?.map((n: any) => n.name) || []} />
               </Card>
             )}
           </div>
@@ -176,22 +191,22 @@ export function ModelDetailClient({ id }: { id: string }) {
           {/* Right Column - Sidebar */}
           <div className="space-y-4">
             <Card className="bg-card/40 border-border/50 backdrop-blur p-6">
-              <h3 className="font-semibold text-foreground mb-4">Model Info</h3>
+              <h3 className="font-semibold text-foreground mb-4">{type.charAt(0).toUpperCase() + type.slice(1)} Info</h3>
               <div className="space-y-3 text-sm">
                 <div>
-                  <p className="text-muted-foreground">Model ID</p>
+                  <p className="text-muted-foreground">{type.charAt(0).toUpperCase() + type.slice(1)} ID</p>
                   <p className="font-semibold text-foreground break-all">{id || "Loading..."}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Type</p>
-                  <p className="font-semibold text-foreground">{model.metadata?.type || "N/A"}</p>
+                  <p className="font-semibold text-foreground">{artifactType}</p>
                 </div>
-                {modelUrl && (
+                {artifactUrl && (
                   <div>
                     <p className="text-muted-foreground">Source</p>
                     <p className="font-semibold text-foreground break-all">
-                      <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                        HuggingFace
+                      <a href={artifactUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                        {getSourceName()}
                       </a>
                     </p>
                   </div>
@@ -207,16 +222,20 @@ export function ModelDetailClient({ id }: { id: string }) {
                     View API Docs
                   </a>
                 </Button>
-                {modelUrl && (
+                {artifactUrl && (
                   <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
-                    <a href={modelUrl} target="_blank" rel="noopener noreferrer">
-                      View on HuggingFace
+                    <a href={artifactUrl} target="_blank" rel="noopener noreferrer">
+                      View on {getSourceName()}
                     </a>
                   </Button>
                 )}
-                <Button variant="outline" className="w-full justify-start bg-transparent">
-                  View GitHub
-                </Button>
+                {artifactUrl && artifactUrl.includes('github.com') && (
+                  <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
+                    <a href={artifactUrl} target="_blank" rel="noopener noreferrer">
+                      View GitHub
+                    </a>
+                  </Button>
+                )}
               </div>
             </Card>
           </div>

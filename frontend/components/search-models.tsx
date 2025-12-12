@@ -1,13 +1,24 @@
 "use client"
 
-import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Filter } from "lucide-react"
+import { Search, Grid3x3, List } from "lucide-react"
 
-export function SearchModels() {
-  const [searchQuery, setSearchQuery] = useState("")
+export type ViewMode = "grid" | "list"
 
+interface SearchModelsProps {
+  searchQuery?: string
+  onSearchChange?: (query: string) => void
+  viewMode?: ViewMode
+  onViewModeChange?: (mode: ViewMode) => void
+}
+
+export function SearchModels({ 
+  searchQuery = "", 
+  onSearchChange,
+  viewMode = "grid",
+  onViewModeChange
+}: SearchModelsProps) {
   return (
     <div className="mb-8">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
@@ -19,25 +30,29 @@ export function SearchModels() {
             placeholder="Search models by name, task, or description..."
             className="pl-10"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => onSearchChange?.(e.target.value)}
           />
         </div>
-        <Button variant="outline" className="gap-2 bg-transparent">
-          <Filter className="h-4 w-4" />
-          Filters
-        </Button>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <div className="text-xs text-muted-foreground">Popular tags:</div>
-        {["Vision", "NLP", "Audio", "Fine-tuned", "Production"].map((tag) => (
-          <button
-            key={tag}
-            className="rounded-full bg-secondary/30 px-3 py-1 text-xs text-foreground hover:bg-secondary/50 transition-colors"
+        <div className="flex gap-2">
+          <Button
+            variant={viewMode === "grid" ? "default" : "outline"}
+            size="icon"
+            onClick={() => onViewModeChange?.("grid")}
+            aria-label="Grid view"
+            className="bg-transparent"
           >
-            {tag}
-          </button>
-        ))}
+            <Grid3x3 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === "list" ? "default" : "outline"}
+            size="icon"
+            onClick={() => onViewModeChange?.("list")}
+            aria-label="List view"
+            className="bg-transparent"
+          >
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   )

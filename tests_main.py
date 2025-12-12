@@ -1240,6 +1240,389 @@ class Test_Async_Model_Processing:
 
 
 # =============================================================================
+# Download Endpoint Tests
+# =============================================================================
+
+class Test_Download_Endpoint:
+    """Test suite for artifact download endpoint functionality."""
+
+    def test_download_url_populated_in_post_response(self):
+        """Test that download_url is populated when registering an artifact."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        client = TestClient(app)
+        payload = {"name": "test-model", "url": "https://huggingface.co/test/model"}
+        response = client.post("/artifact/model", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        assert "download_url" in data["data"]
+        assert data["data"]["download_url"] is not None
+        assert "/download" in data["data"]["download_url"]
+        assert data["metadata"]["id"] in data["data"]["download_url"]
+
+    def test_download_url_populated_in_get_response(self):
+        """Test that download_url is populated when retrieving an artifact."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        client = TestClient(app)
+        # Register a dataset (synchronous, returns 201)
+        payload = {"name": "test-dataset", "url": "https://huggingface.co/datasets/test/dataset"}
+        post_response = client.post("/artifact/dataset", json=payload)
+        assert post_response.status_code == 201
+
+        artifact_id = post_response.json()["metadata"]["id"]
+
+        # Get the artifact
+        get_response = client.get(f"/artifacts/dataset/{artifact_id}")
+        assert get_response.status_code == 200
+        data = get_response.json()
+        assert "download_url" in data["data"]
+        assert data["data"]["download_url"] is not None
+        assert "/download" in data["data"]["download_url"]
+
+    def test_download_endpoint_returns_404_for_nonexistent_artifact(self):
+        """Test that download endpoint returns 404 for non-existent artifacts."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        client = TestClient(app)
+        response = client.get("/artifacts/model/nonexistent-id-12345/download")
+
+        assert response.status_code == 404
+        assert "does not exist" in response.json()["detail"]
+
+    def test_download_endpoint_returns_202_when_processing(self):
+        """Test that download endpoint returns 202 when artifact is still processing."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create a model artifact with processing status
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="processing-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="processing")
+
+        client = TestClient(app)
+        response = client.get("/artifacts/model/processing-id/download")
+
+        assert response.status_code == 202
+        assert "processing" in response.json()["detail"].lower()
+
+    def test_download_endpoint_returns_424_when_failed(self):
+        """Test that download endpoint returns 424 when artifact processing failed."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create a model artifact with failed status
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="failed-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="failed")
+
+        client = TestClient(app)
+        response = client.get("/artifacts/model/failed-id/download")
+
+        assert response.status_code == 424
+        assert "failed" in response.json()["detail"].lower()
+
+    def test_download_endpoint_returns_400_for_invalid_artifact_type(self):
+        """Test that download endpoint returns 400 for invalid artifact type."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        client = TestClient(app)
+        response = client.get("/artifacts/invalid-type/test-id/download")
+
+        assert response.status_code == 400
+        assert "invalid" in response.json()["detail"].lower()
+
+    def test_download_endpoint_returns_400_for_invalid_artifact_id(self):
+        """Test that download endpoint returns 400 for invalid artifact ID format."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        client = TestClient(app)
+        # Invalid ID with special characters
+        response = client.get("/artifacts/model/invalid@id#123/download")
+
+        assert response.status_code == 400
+        assert "invalid" in response.json()["detail"].lower()
+
+    @patch("backend.storage.s3.generate_presigned_download_url")
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_redirects_to_s3_successfully(self, mock_file_exists, mock_presigned_url):
+        """Test that download endpoint redirects to S3 pre-signed URL when file exists in S3."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create a completed dataset artifact
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-dataset-id", name="test-dataset", type=ArtifactType.DATASET),
+            data=ArtifactData(url="https://huggingface.co/datasets/test/dataset"),
+        )
+        memory.save_artifact(artifact, processing_status="completed")
+
+        # Mock S3 operations - file exists and pre-signed URL generated
+        mock_file_exists.return_value = True
+        mock_presigned_url.return_value = "https://my-artifacts-bucket-ece461.s3.us-east-2.amazonaws.com/artifacts/dataset/test-dataset-id?signature=xyz"
+
+        client = TestClient(app)
+        response = client.get("/artifacts/dataset/test-dataset-id/download", follow_redirects=False)
+
+        assert response.status_code == 302
+        assert "Location" in response.headers
+        assert "s3" in response.headers["Location"].lower()
+        assert "test-dataset-id" in response.headers["Location"]
+
+        # Verify S3 functions were called
+        mock_file_exists.assert_called_once_with("dataset", "test-dataset-id")
+        mock_presigned_url.assert_called_once_with("dataset", "test-dataset-id", expiration=900)
+
+    @patch("requests.get")
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_falls_back_to_proxy_when_s3_missing(self, mock_file_exists, mock_requests_get):
+        """Test that download endpoint falls back to proxy when file not in S3."""
+        from unittest.mock import MagicMock
+
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create a completed dataset artifact
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-dataset-id", name="test-dataset", type=ArtifactType.DATASET),
+            data=ArtifactData(url="https://huggingface.co/datasets/test/dataset"),
+        )
+        memory.save_artifact(artifact, processing_status="completed")
+
+        # Mock S3 - file doesn't exist, should fallback to proxy
+        mock_file_exists.return_value = False
+
+        # Mock the source download response for proxy fallback
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "application/zip", "Content-Length": "1024"}
+        mock_response.iter_content.return_value = [b"test", b"data"]
+        mock_response.raise_for_status.return_value = None
+        mock_requests_get.return_value = mock_response
+
+        client = TestClient(app)
+        response = client.get("/artifacts/dataset/test-dataset-id/download")
+
+        assert response.status_code == 200
+        assert "Content-Disposition" in response.headers
+        assert "attachment" in response.headers["Content-Disposition"]
+        assert "test-dataset" in response.headers["Content-Disposition"]
+
+        # Verify S3 check was attempted
+        mock_file_exists.assert_called_once_with("dataset", "test-dataset-id")
+        # Verify proxy was used
+        assert mock_requests_get.called
+
+    @patch("requests.get")
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_handles_source_timeout(self, mock_file_exists, mock_requests_get):
+        """Test that download endpoint returns 504 on source timeout when falling back to proxy."""
+        from fastapi.testclient import TestClient
+        from requests import Timeout
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="timeout-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="completed")
+
+        # Mock S3 - file doesn't exist, falls back to proxy
+        mock_file_exists.return_value = False
+        # Mock timeout exception in proxy
+        mock_requests_get.side_effect = Timeout("Request timed out")
+
+        client = TestClient(app)
+        response = client.get("/artifacts/model/timeout-id/download")
+
+        assert response.status_code == 504
+        assert "timeout" in response.json()["detail"].lower()
+
+    @patch("requests.get")
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_handles_source_404(self, mock_file_exists, mock_requests_get):
+        """Test that download endpoint returns 502 when source file not found in proxy fallback."""
+        from unittest.mock import MagicMock
+
+        from fastapi.testclient import TestClient
+        from requests import HTTPError
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="notfound-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="completed")
+
+        # Mock S3 - file doesn't exist, falls back to proxy
+        mock_file_exists.return_value = False
+        # Mock 404 response
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_error = HTTPError("404 Not Found")
+        mock_error.response = mock_response
+        mock_requests_get.side_effect = mock_error
+
+        client = TestClient(app)
+        response = client.get("/artifacts/model/notfound-id/download")
+
+        assert response.status_code == 502
+        assert "not found" in response.json()["detail"].lower()
+
+    @patch("requests.get")
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_handles_connection_error(self, mock_file_exists, mock_requests_get):
+        """Test that download endpoint returns 502 on connection error in proxy fallback."""
+        from fastapi.testclient import TestClient
+        from requests import ConnectionError
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="conn-error-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="completed")
+
+        # Mock S3 - file doesn't exist, falls back to proxy
+        mock_file_exists.return_value = False
+        # Mock connection error
+        mock_requests_get.side_effect = ConnectionError("Connection failed")
+
+        client = TestClient(app)
+        response = client.get("/artifacts/model/conn-error-id/download")
+
+        assert response.status_code == 502
+        assert "connect" in response.json()["detail"].lower()
+
+    @patch("backend.storage.s3.generate_presigned_download_url")
+    @patch("backend.storage.s3.file_exists_in_s3")
+    def test_download_endpoint_for_non_model_artifacts(self, mock_file_exists, mock_presigned_url):
+        """Test that download endpoint works for non-model artifacts (no processing check)."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create a code artifact
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="code-id", name="test-code", type=ArtifactType.CODE),
+            data=ArtifactData(url="https://github.com/test/repo"),
+        )
+        memory.save_artifact(artifact)
+
+        # Mock S3 operations - file exists and pre-signed URL generated
+        mock_file_exists.return_value = True
+        mock_presigned_url.return_value = "https://my-artifacts-bucket-ece461.s3.us-east-2.amazonaws.com/artifacts/code/code-id?signature=xyz"
+
+        client = TestClient(app)
+        response = client.get("/artifacts/code/code-id/download", follow_redirects=False)
+
+        assert response.status_code == 302
+        assert "Location" in response.headers
+        assert "s3" in response.headers["Location"].lower()
+        assert "code-id" in response.headers["Location"]
+
+    def test_download_url_includes_correct_path(self):
+        """Test that download_url includes the correct endpoint path."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        client = TestClient(app)
+        payload = {"name": "test-artifact", "url": "https://huggingface.co/test/model"}
+        response = client.post("/artifact/model", json=payload)
+
+        assert response.status_code == 202
+        data = response.json()
+        download_url = data["data"]["download_url"]
+
+        # Verify the URL structure
+        assert download_url.startswith("http://")
+        assert "/artifacts/model/" in download_url
+        assert data["metadata"]["id"] in download_url
+        assert download_url.endswith("/download")
+
+
+# =============================================================================
 # Health Endpoint Tests
 # =============================================================================
 

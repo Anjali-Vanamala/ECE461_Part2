@@ -8,6 +8,7 @@ temp_log.txt
 .mypy_cache/
 venv
 tmp/
+CLAUDE.md
 
 # Frontend dependencies
 node_modules/

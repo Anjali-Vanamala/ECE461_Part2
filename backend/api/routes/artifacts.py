@@ -16,9 +16,11 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
-                            ArtifactData, ArtifactID, ArtifactMetadata,
-                            ArtifactQuery, ArtifactRegistration, ArtifactType,
-                            ModelRating, SimpleLicenseCheckRequest)
+                            ArtifactData, ArtifactID, ArtifactLineageEdge,
+                            ArtifactLineageGraph, ArtifactLineageNode,
+                            ArtifactMetadata, ArtifactQuery,
+                            ArtifactRegistration, ArtifactType, ModelRating,
+                            SimpleLicenseCheckRequest)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory, s3
 
@@ -410,6 +412,20 @@ def process_model_artifact_async(
     temp_file_path = None
 
     try:
+        # Extract lineage information from HuggingFace
+        from backend.services.lineage_service import extract_lineage_from_url
+        from backend.storage.records import LineageMetadata
+
+        logger.info(f"Extracting lineage for model {artifact_id} from {url}")
+        base_model_name, dataset_names, lineage_metadata = extract_lineage_from_url(url)
+
+        # Create LineageMetadata object
+        lineage = LineageMetadata(
+            base_model_name=base_model_name,
+            dataset_names=dataset_names,
+            config_metadata=lineage_metadata,
+        )
+
         # Compute the artifact (long-running)
         artifact, rating, dataset_name, dataset_url, code_name, code_url, license = compute_model_artifact(
             url,
@@ -453,6 +469,7 @@ def process_model_artifact_async(
             code_name=code_name,
             code_url=code_url,
             processing_status="completed",
+            lineage=lineage,
         )
 
         memory.update_processing_status(artifact_id, "completed")
@@ -1101,3 +1118,153 @@ async def license_check(
     compatible = is_license_compatible(model_license, github_license)
 
     return compatible
+
+
+@router.get(
+    "/artifact/model/{artifact_id}/lineage",
+    response_model=ArtifactLineageGraph,
+    summary="Retrieve the lineage graph for this artifact. (BASELINE)",
+    responses={
+        200: {"description": "Lineage graph extracted from structured metadata"},
+        400: {"description": "The lineage graph cannot be computed because the artifact metadata is missing or malformed"},
+        404: {"description": "Artifact does not exist"},
+    },
+)
+async def get_artifact_lineage(
+    artifact_id: ArtifactID = Path(..., description="Artifact id"),
+) -> ArtifactLineageGraph:
+    """
+    Retrieve lineage graph for a model artifact.
+
+    Extracts dependency relationships from HuggingFace metadata including:
+    - Base models (fine-tuned from)
+    - Training datasets
+    - Related code repositories
+
+    Returns a graph with nodes (artifacts/dependencies) and edges (relationships).
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # 1. Check if model exists
+    artifact = memory.get_artifact(ArtifactType.MODEL, artifact_id)
+    if not artifact:
+        raise HTTPException(
+            status_code=404,
+            detail="Artifact does not exist.",
+        )
+
+    # 2. Get lineage metadata
+    lineage = memory.get_model_lineage(artifact_id)
+
+    # 3. Build lineage graph
+    nodes: List[ArtifactLineageNode] = []
+    edges: List[ArtifactLineageEdge] = []
+
+    # Add the primary artifact as a node
+    primary_metadata = lineage.config_metadata if lineage else {}
+    primary_node = ArtifactLineageNode(
+        artifact_id=artifact_id,
+        name=artifact.metadata.name,
+        source="config_json" if lineage else "registry",
+        metadata=primary_metadata if primary_metadata else None,
+    )
+    nodes.append(primary_node)
+
+    if not lineage:
+        # No lineage data available - return graph with just the primary node
+        logger.info(f"No lineage data found for artifact {artifact_id}")
+        return ArtifactLineageGraph(nodes=nodes, edges=edges)
+
+    # 4. Add base model node and edge (if exists in registry)
+    if lineage.base_model_name:
+        base_model_record = memory.find_model_by_name(lineage.base_model_name)
+
+        if base_model_record:
+            # Base model exists in registry
+            base_model_id = base_model_record.artifact.metadata.id
+            base_model_node = ArtifactLineageNode(
+                artifact_id=base_model_id,
+                name=base_model_record.artifact.metadata.name,
+                source="config_json",
+                metadata={"repository_url": base_model_record.artifact.data.url} if base_model_record.artifact.data.url else None,
+            )
+            nodes.append(base_model_node)
+
+            # Add edge: base_model -> current_model
+            edge = ArtifactLineageEdge(
+                from_node_artifact_id=base_model_id,
+                to_node_artifact_id=artifact_id,
+                relationship="base_model",
+            )
+            edges.append(edge)
+
+            logger.info(f"Found base model {lineage.base_model_name} (ID: {base_model_id}) for artifact {artifact_id}")
+        else:
+            # Base model not in registry - add as external reference
+            # Generate a stable pseudo-ID for external references
+            external_id = f"external-{lineage.base_model_name.replace('/', '-')}"
+            external_node = ArtifactLineageNode(
+                artifact_id=external_id,
+                name=lineage.base_model_name,
+                source="config_json",
+                metadata={"external": "true", "note": "Not in registry"},
+            )
+            nodes.append(external_node)
+
+            edge = ArtifactLineageEdge(
+                from_node_artifact_id=external_id,
+                to_node_artifact_id=artifact_id,
+                relationship="base_model",
+            )
+            edges.append(edge)
+
+            logger.info(f"Base model {lineage.base_model_name} not in registry, added as external reference")
+
+    # 5. Add dataset nodes and edges
+    for dataset_name in lineage.dataset_names:
+        dataset_record = memory.find_dataset_by_name(dataset_name)
+
+        if dataset_record:
+            # Dataset exists in registry
+            dataset_id = dataset_record.artifact.metadata.id
+            dataset_node = ArtifactLineageNode(
+                artifact_id=dataset_id,
+                name=dataset_record.artifact.metadata.name,
+                source="config_json",
+                metadata={"repository_url": dataset_record.artifact.data.url} if dataset_record.artifact.data.url else None,
+            )
+            nodes.append(dataset_node)
+
+            # Add edge: dataset -> current_model
+            edge = ArtifactLineageEdge(
+                from_node_artifact_id=dataset_id,
+                to_node_artifact_id=artifact_id,
+                relationship="training_dataset",
+            )
+            edges.append(edge)
+
+            logger.info(f"Found dataset {dataset_name} (ID: {dataset_id}) for artifact {artifact_id}")
+        else:
+            # Dataset not in registry - add as external reference
+            external_id = f"external-dataset-{dataset_name.replace('/', '-')}"
+            external_node = ArtifactLineageNode(
+                artifact_id=external_id,
+                name=dataset_name,
+                source="config_json",
+                metadata={"external": "true", "note": "Not in registry", "type": "dataset"},
+            )
+            nodes.append(external_node)
+
+            edge = ArtifactLineageEdge(
+                from_node_artifact_id=external_id,
+                to_node_artifact_id=artifact_id,
+                relationship="training_dataset",
+            )
+            edges.append(edge)
+
+            logger.info(f"Dataset {dataset_name} not in registry, added as external reference")
+
+    logger.info(f"Built lineage graph for artifact {artifact_id}: {len(nodes)} nodes, {len(edges)} edges")
+
+    return ArtifactLineageGraph(nodes=nodes, edges=edges)

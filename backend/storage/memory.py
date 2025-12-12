@@ -5,7 +5,8 @@ from typing import Dict, Iterable, List, Optional, cast
 
 from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
                             ArtifactQuery, ArtifactType, ModelRating)
-from backend.storage.records import CodeRecord, DatasetRecord, ModelRecord
+from backend.storage.records import (CodeRecord, DatasetRecord,
+                                     LineageMetadata, ModelRecord)
 
 # ---------------------------------------------------------------------------
 # In-memory stores separated by artifact type
@@ -64,6 +65,22 @@ def _link_dataset_code(model_record: ModelRecord) -> None:
                 break
 
 
+def _link_base_model(model_record: ModelRecord) -> None:
+    """
+    Link base model from lineage metadata by finding matching model in registry.
+    """
+    if not model_record.lineage or not model_record.lineage.base_model_name:
+        return
+
+    base_model_name = _normalized(model_record.lineage.base_model_name)
+    if model_record.lineage.base_model_id is None and base_model_name:
+        for model_id, candidate_record in _MODELS.items():
+            candidate_name = _normalized(candidate_record.artifact.metadata.name)
+            if candidate_name == base_model_name:
+                model_record.lineage.base_model_id = model_id
+                break
+
+
 # ---------------------------------------------------------------------------
 # CRUD helpers
 # ---------------------------------------------------------------------------
@@ -79,6 +96,7 @@ def save_artifact(
     code_name: Optional[str] = None,
     code_url: Optional[str] = None,
     processing_status: Optional[str] = None,
+    lineage: Optional[LineageMetadata] = None,
 ) -> Artifact:
     """Insert or update an artifact entry in the appropriate store."""
     if artifact.metadata.type == ArtifactType.MODEL:
@@ -91,6 +109,7 @@ def save_artifact(
             record.code_name = code_name or record.code_name
             record.code_url = code_url or record.code_url
             record.license = license or record.license
+            record.lineage = lineage or record.lineage
             if processing_status is not None:
                 record.processing_status = processing_status
         else:
@@ -103,9 +122,11 @@ def save_artifact(
                 code_name=code_name,
                 code_url=code_url,
                 processing_status=processing_status or "completed",
+                lineage=lineage,
             )
             _MODELS[artifact.metadata.id] = record
         _link_dataset_code(record)
+        _link_base_model(record)
     elif artifact.metadata.type == ArtifactType.DATASET:
         _DATASETS[artifact.metadata.id] = DatasetRecord(artifact=artifact)
         dataset_name_normalized = _normalized(artifact.metadata.name)
@@ -237,6 +258,23 @@ def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
 def find_code_by_name(name: str) -> Optional[CodeRecord]:
     normalized = _normalized(name)
     for record in _CODES.values():
+        if _normalized(record.artifact.metadata.name) == normalized:
+            return record
+    return None
+
+
+def get_model_lineage(artifact_id: ArtifactID) -> Optional[LineageMetadata]:
+    """Get lineage metadata for a model."""
+    record = _MODELS.get(artifact_id)
+    if not record:
+        return None
+    return record.lineage
+
+
+def find_model_by_name(name: str) -> Optional[ModelRecord]:
+    """Find a model by name (case-insensitive)."""
+    normalized = _normalized(name)
+    for record in _MODELS.values():
         if _normalized(record.artifact.metadata.name) == normalized:
             return record
     return None

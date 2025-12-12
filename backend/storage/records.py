@@ -1,9 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 from backend.models import Artifact, ArtifactID, ModelRating
+
+
+@dataclass
+class LineageMetadata:
+    """Stores lineage information extracted from model metadata."""
+    base_model_name: Optional[str] = None
+    base_model_id: Optional[ArtifactID] = None
+    dataset_names: List[str] = field(default_factory=list)
+    dataset_ids: List[ArtifactID] = field(default_factory=list)
+    config_metadata: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -18,6 +28,7 @@ class ModelRecord:
     rating: Optional[ModelRating] = None
     license: Optional[str] = None
     processing_status: str = "completed"  # "processing", "completed", "failed"
+    lineage: Optional[LineageMetadata] = None
 
 
 @dataclass

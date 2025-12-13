@@ -81,6 +81,24 @@ def _link_base_model(model_record: ModelRecord) -> None:
                 break
 
 
+def _update_child_models(newly_added_model: ModelRecord) -> None:
+    """
+    After adding a new model, check if any existing models reference it as a base model.
+    This handles the case where child models are ingested before their parent models.
+    """
+    newly_added_name = _normalized(newly_added_model.artifact.metadata.name)
+
+    # Check all existing models to see if they reference this new model as a base
+    for model_record in _MODELS.values():
+        if not model_record.lineage or not model_record.lineage.base_model_name:
+            continue
+
+        # If this model was waiting for the newly added model as its base
+        base_model_name = _normalized(model_record.lineage.base_model_name)
+        if base_model_name == newly_added_name and model_record.lineage.base_model_id is None:
+            model_record.lineage.base_model_id = newly_added_model.artifact.metadata.id
+
+
 # ---------------------------------------------------------------------------
 # CRUD helpers
 # ---------------------------------------------------------------------------
@@ -127,6 +145,8 @@ def save_artifact(
             _MODELS[artifact.metadata.id] = record
         _link_dataset_code(record)
         _link_base_model(record)
+        # After adding a new model, check if any EXISTING models reference it as a base model
+        _update_child_models(record)
     elif artifact.metadata.type == ArtifactType.DATASET:
         _DATASETS[artifact.metadata.id] = DatasetRecord(artifact=artifact)
         dataset_name_normalized = _normalized(artifact.metadata.name)

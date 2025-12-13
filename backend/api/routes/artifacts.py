@@ -1178,16 +1178,31 @@ async def get_artifact_lineage(
 
     # 4. Add base model node and edge (if exists in registry)
     if lineage.base_model_name:
-        base_model_record = memory.find_model_by_name(lineage.base_model_name)
+        # First check if we have a cached base_model_id (from linking)
+        base_artifact = None
+        base_model_id = None
 
-        if base_model_record:
+        if lineage.base_model_id:
+            # Use the cached ID from lineage linking
+            base_artifact = memory.get_artifact(ArtifactType.MODEL, lineage.base_model_id)
+            if base_artifact:
+                base_model_id = lineage.base_model_id
+                logger.info(f"Using cached base_model_id {base_model_id} for {lineage.base_model_name}")
+
+        # Fallback: try finding by name if no cached ID
+        if not base_artifact:
+            base_model_record = memory.find_model_by_name(lineage.base_model_name)
+            if base_model_record:
+                base_artifact = base_model_record.artifact
+                base_model_id = base_artifact.metadata.id
+
+        if base_artifact and base_model_id:
             # Base model exists in registry
-            base_model_id = base_model_record.artifact.metadata.id
             base_model_node = ArtifactLineageNode(
                 artifact_id=base_model_id,
-                name=base_model_record.artifact.metadata.name,
+                name=base_artifact.metadata.name,
                 source="config_json",
-                metadata={"repository_url": base_model_record.artifact.data.url} if base_model_record.artifact.data.url else None,
+                metadata={"repository_url": base_artifact.data.url} if base_artifact.data.url else None,
             )
             nodes.append(base_model_node)
 

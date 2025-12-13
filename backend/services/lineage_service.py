@@ -86,22 +86,38 @@ def extract_lineage_from_config(config: Dict) -> Tuple[Optional[str], List[str],
     metadata: Dict[str, str] = {}
 
     # Extract base model (multiple possible keys)
+    # Order matters: more specific keys first
     base_model_keys = [
         'base_model',
         'base_model_name_or_path',
+        'base_model_revision',
         '_name_or_path',
         'model_name_or_path',
+        'pretrained_model_name_or_path',
+        'model_type',  # Sometimes contains parent model name
     ]
 
     for key in base_model_keys:
         if key in config and config[key]:
             value = config[key]
             # Only use if it looks like a model name (not a local path)
-            if isinstance(value, str) and not value.startswith('.') and not value.startswith('/'):
-                base_model_name = value
-                metadata['base_model_source'] = key
-                logger.info(f"Found base model: {base_model_name} (from {key})")
-                break
+            if isinstance(value, str):
+                value_lower = value.lower()
+                # Skip local paths and special keywords
+                is_local_path = (
+                    value.startswith('.') or
+                    value.startswith('/') or
+                    value.startswith('\\') or
+                    ':' in value[:3] or  # Windows paths like C:\
+                    value_lower in ['auto', 'none', 'null', ''] or
+                    value_lower == config.get('model_type', '').lower()  # Avoid circular reference
+                )
+
+                if not is_local_path:
+                    base_model_name = value
+                    metadata['base_model_source'] = key
+                    logger.info(f"Found base model: {base_model_name} (from {key})")
+                    break
 
     # Extract dataset information
     if 'datasets' in config:

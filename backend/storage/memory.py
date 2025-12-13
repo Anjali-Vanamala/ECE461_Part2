@@ -68,15 +68,22 @@ def _link_dataset_code(model_record: ModelRecord) -> None:
 def _link_base_model(model_record: ModelRecord) -> None:
     """
     Link base model from lineage metadata by finding matching model in registry.
+    Handles both full HuggingFace IDs (namespace/model) and short names (model).
     """
     if not model_record.lineage or not model_record.lineage.base_model_name:
         return
 
     base_model_name = _normalized(model_record.lineage.base_model_name)
+    # Extract short name (last part after /) for flexible matching
+    base_model_short = base_model_name.split('/')[-1] if '/' in base_model_name else base_model_name
+
     if model_record.lineage.base_model_id is None and base_model_name:
         for model_id, candidate_record in _MODELS.items():
             candidate_name = _normalized(candidate_record.artifact.metadata.name)
-            if candidate_name == base_model_name:
+            candidate_short = candidate_name.split('/')[-1] if '/' in candidate_name else candidate_name
+
+            # Match on either full name OR short name
+            if candidate_name == base_model_name or candidate_short == base_model_short or candidate_name == base_model_short:
                 model_record.lineage.base_model_id = model_id
                 break
 
@@ -85,8 +92,10 @@ def _update_child_models(newly_added_model: ModelRecord) -> None:
     """
     After adding a new model, check if any existing models reference it as a base model.
     This handles the case where child models are ingested before their parent models.
+    Handles both full HuggingFace IDs (namespace/model) and short names (model).
     """
     newly_added_name = _normalized(newly_added_model.artifact.metadata.name)
+    newly_added_short = newly_added_name.split('/')[-1] if '/' in newly_added_name else newly_added_name
 
     # Check all existing models to see if they reference this new model as a base
     for model_record in _MODELS.values():
@@ -95,7 +104,12 @@ def _update_child_models(newly_added_model: ModelRecord) -> None:
 
         # If this model was waiting for the newly added model as its base
         base_model_name = _normalized(model_record.lineage.base_model_name)
-        if base_model_name == newly_added_name and model_record.lineage.base_model_id is None:
+        base_model_short = base_model_name.split('/')[-1] if '/' in base_model_name else base_model_name
+
+        # Match on either full name OR short name
+        if (newly_added_name == base_model_name or
+            newly_added_short == base_model_short or
+            newly_added_name == base_model_short) and model_record.lineage.base_model_id is None:
             model_record.lineage.base_model_id = newly_added_model.artifact.metadata.id
 
 
@@ -268,9 +282,16 @@ def update_processing_status(artifact_id: ArtifactID, status: str) -> None:
 
 
 def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
+    """Find dataset by name with flexible matching (handles namespace/name format)."""
     normalized = _normalized(name)
+    normalized_short = normalized.split('/')[-1] if '/' in normalized else normalized
+
     for record in _DATASETS.values():
-        if _normalized(record.artifact.metadata.name) == normalized:
+        candidate = _normalized(record.artifact.metadata.name)
+        candidate_short = candidate.split('/')[-1] if '/' in candidate else candidate
+
+        # Match on either full name OR short name
+        if candidate == normalized or candidate_short == normalized_short or candidate == normalized_short:
             return record
     return None
 

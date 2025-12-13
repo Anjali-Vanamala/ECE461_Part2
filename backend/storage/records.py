@@ -16,6 +16,8 @@ class ModelRecord:
     code_name: Optional[str] = None
     code_url: Optional[str] = None
     rating: Optional[ModelRating] = None
+    license: Optional[str] = None
+    processing_status: str = "completed"  # "processing", "completed", "failed"
 
 
 @dataclass

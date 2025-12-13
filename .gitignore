@@ -8,6 +8,11 @@ temp_log.txt
 .mypy_cache/
 venv
 tmp/
+CLAUDE.md
+
+# Frontend dependencies
+node_modules/
+frontend/node_modules/
 
 # package manager lock files (keeping them tracked for team consistency)
 # frontend/package-lock.json

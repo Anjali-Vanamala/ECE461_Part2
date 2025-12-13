@@ -73,10 +73,12 @@ def save_artifact(
     artifact: Artifact,
     *,
     rating: Optional[ModelRating] = None,
+    license: Optional[str] = None,
     dataset_name: Optional[str] = None,
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
     code_url: Optional[str] = None,
+    processing_status: Optional[str] = None,
 ) -> Artifact:
     """Insert or update an artifact entry in the appropriate store."""
     if artifact.metadata.type == ArtifactType.MODEL:
@@ -88,14 +90,19 @@ def save_artifact(
             record.dataset_url = dataset_url or record.dataset_url
             record.code_name = code_name or record.code_name
             record.code_url = code_url or record.code_url
+            record.license = license or record.license
+            if processing_status is not None:
+                record.processing_status = processing_status
         else:
             record = ModelRecord(
                 artifact=artifact,
                 rating=rating,
+                license=license,
                 dataset_name=dataset_name,
                 dataset_url=dataset_url,
                 code_name=code_name,
                 code_url=code_url,
+                processing_status=processing_status or "completed",
             )
             _MODELS[artifact.metadata.id] = record
         _link_dataset_code(record)
@@ -184,6 +191,12 @@ def save_model_rating(artifact_id: ArtifactID, rating: ModelRating) -> None:
         record.rating = rating
 
 
+def save_model_license(artifact_id: ArtifactID, license: str) -> None:
+    if artifact_id in _MODELS:
+        record = _MODELS[artifact_id]
+        record.license = license
+
+
 def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
     record = _MODELS.get(artifact_id)
     if not record:
@@ -201,6 +214,21 @@ def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
     if not record:
         return None
     return record.license
+
+
+def get_processing_status(artifact_id: ArtifactID) -> Optional[str]:
+    """Get the processing status of a model artifact."""
+    record = _MODELS.get(artifact_id)
+    if not record:
+        return None
+    return record.processing_status
+
+
+def update_processing_status(artifact_id: ArtifactID, status: str) -> None:
+    """Update the processing status of a model artifact."""
+    record = _MODELS.get(artifact_id)
+    if record:
+        record.processing_status = status
 
 
 def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:

@@ -1157,9 +1157,12 @@ async def get_artifact_lineage(
     # 2. Get lineage metadata
     lineage = memory.get_model_lineage(artifact_id)
 
-    # 3. Build lineage graph
+    # 3. Build lineage graph with deduplication
     nodes: List[ArtifactLineageNode] = []
     edges: List[ArtifactLineageEdge] = []
+
+    # Track all node IDs to prevent duplicates (both internal and external)
+    seen_node_ids: set = set()
 
     # Add the primary artifact as a node
     primary_metadata = lineage.config_metadata if lineage else {}
@@ -1170,6 +1173,7 @@ async def get_artifact_lineage(
         metadata=primary_metadata if primary_metadata else None,
     )
     nodes.append(primary_node)
+    seen_node_ids.add(artifact_id)
 
     if not lineage:
         # No lineage data available - return graph with just the primary node
@@ -1198,13 +1202,16 @@ async def get_artifact_lineage(
 
         if base_artifact and base_model_id:
             # Base model exists in registry
-            base_model_node = ArtifactLineageNode(
-                artifact_id=base_model_id,
-                name=base_artifact.metadata.name,
-                source="config_json",
-                metadata={"repository_url": base_artifact.data.url} if base_artifact.data.url else None,
-            )
-            nodes.append(base_model_node)
+            # Check for duplicates before adding
+            if base_model_id not in seen_node_ids:
+                base_model_node = ArtifactLineageNode(
+                    artifact_id=base_model_id,
+                    name=base_artifact.metadata.name,
+                    source="config_json",
+                    metadata={"repository_url": base_artifact.data.url} if base_artifact.data.url else None,
+                )
+                nodes.append(base_model_node)
+                seen_node_ids.add(base_model_id)
 
             # Add edge: base_model -> current_model
             edge = ArtifactLineageEdge(
@@ -1219,13 +1226,17 @@ async def get_artifact_lineage(
             # Base model not in registry - add as external reference
             # Generate a stable pseudo-ID for external references
             external_id = f"external-{lineage.base_model_name.replace('/', '-')}"
-            external_node = ArtifactLineageNode(
-                artifact_id=external_id,
-                name=lineage.base_model_name,
-                source="config_json",
-                metadata={"external": "true", "note": "Not in registry"},
-            )
-            nodes.append(external_node)
+
+            # Check for duplicates before adding
+            if external_id not in seen_node_ids:
+                external_node = ArtifactLineageNode(
+                    artifact_id=external_id,
+                    name=lineage.base_model_name,
+                    source="config_json",
+                    metadata={"external": "true", "note": "Not in registry"},
+                )
+                nodes.append(external_node)
+                seen_node_ids.add(external_id)
 
             edge = ArtifactLineageEdge(
                 from_node_artifact_id=external_id,
@@ -1238,18 +1249,15 @@ async def get_artifact_lineage(
 
     # 5. Add dataset nodes and edges
     # First, use cached dataset_ids if available
-    seen_dataset_ids = set()  # Track internal datasets to avoid duplicates
-    seen_dataset_names = set()  # Track dataset names to avoid duplicate external refs
-
     if lineage.dataset_ids:
         # Use cached IDs from linking
         for dataset_id in lineage.dataset_ids:
-            if dataset_id in seen_dataset_ids:
+            if dataset_id in seen_node_ids:
                 continue  # Skip duplicates
 
             dataset_artifact = memory.get_artifact(ArtifactType.DATASET, dataset_id)
             if dataset_artifact:
-                seen_dataset_ids.add(dataset_id)
+                seen_node_ids.add(dataset_id)
                 dataset_node = ArtifactLineageNode(
                     artifact_id=dataset_id,
                     name=dataset_artifact.metadata.name,
@@ -1275,11 +1283,11 @@ async def get_artifact_lineage(
         if dataset_record:
             dataset_id = dataset_record.artifact.metadata.id
 
-            # Skip if already added from cached IDs
-            if dataset_id in seen_dataset_ids:
+            # Skip if already added from cached IDs or by name
+            if dataset_id in seen_node_ids:
                 continue
 
-            seen_dataset_ids.add(dataset_id)
+            seen_node_ids.add(dataset_id)
 
             # Dataset exists in registry
             dataset_node = ArtifactLineageNode(
@@ -1301,14 +1309,14 @@ async def get_artifact_lineage(
             logger.info(f"Found dataset {dataset_name} (ID: {dataset_id}) for artifact {artifact_id}")
         else:
             # Dataset not in registry - add as external reference
-            # Check for duplicates using normalized name
-            normalized_name = dataset_name.strip().lower() if isinstance(dataset_name, str) else ""
-            if normalized_name in seen_dataset_names:
+            external_id = f"external-dataset-{dataset_name.replace('/', '-')}"
+
+            # Check for duplicates using the external ID
+            if external_id in seen_node_ids:
                 continue  # Skip duplicate external dataset
 
-            seen_dataset_names.add(normalized_name)
+            seen_node_ids.add(external_id)
 
-            external_id = f"external-dataset-{dataset_name.replace('/', '-')}"
             external_node = ArtifactLineageNode(
                 artifact_id=external_id,
                 name=dataset_name,

@@ -269,7 +269,7 @@ def _get_download_filename(artifact: Artifact, source_url: str) -> str:
 def calibrate_regex_timeout() -> float:
     """
     Measures how long regex takes in this platform for a safe case.
-    The timeout is set to 2x the baseline to avoid false-positive timeouts.
+    The timeout is set to allow legitimate patterns while blocking catastrophic ones.
     """
     test_pattern = r"a+"
     test2_pattern = r"ece461"
@@ -283,8 +283,9 @@ def calibrate_regex_timeout() -> float:
     regex.search(test2_pattern, test_text)
     baseline2 = time.perf_counter() - start
 
-    # Never allow insanely tiny values
-    return max(0.0001, baseline * 8, baseline2 * 8)
+    # Use a more lenient multiplier to avoid false positives on valid patterns
+    # Minimum 0.01 seconds to handle legitimate complex patterns
+    return max(0.01, baseline * 50, baseline2 * 50)
 
 
 # Compute once at import time

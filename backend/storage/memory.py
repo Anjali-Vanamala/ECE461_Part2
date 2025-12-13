@@ -88,6 +88,32 @@ def _link_base_model(model_record: ModelRecord) -> None:
                 break
 
 
+def _link_datasets(model_record: ModelRecord) -> None:
+    """
+    Link datasets from lineage metadata by finding matching datasets in registry.
+    Handles both full HuggingFace IDs (namespace/dataset) and short names (dataset).
+    """
+    if not model_record.lineage or not model_record.lineage.dataset_names:
+        return
+
+    # Clear existing dataset_ids to rebuild from scratch
+    model_record.lineage.dataset_ids = []
+
+    for dataset_name in model_record.lineage.dataset_names:
+        normalized_name = _normalized(dataset_name)
+        normalized_short = normalized_name.split('/')[-1] if '/' in normalized_name else normalized_name
+
+        # Search for matching dataset in registry
+        for dataset_id, dataset_record in _DATASETS.items():
+            candidate_name = _normalized(dataset_record.artifact.metadata.name)
+            candidate_short = candidate_name.split('/')[-1] if '/' in candidate_name else candidate_name
+
+            # Match on either full name OR short name
+            if candidate_name == normalized_name or candidate_short == normalized_short or candidate_name == normalized_short:
+                model_record.lineage.dataset_ids.append(dataset_id)
+                break
+
+
 def _update_child_models(newly_added_model: ModelRecord) -> None:
     """
     After adding a new model, check if any existing models reference it as a base model.
@@ -159,15 +185,33 @@ def save_artifact(
             _MODELS[artifact.metadata.id] = record
         _link_dataset_code(record)
         _link_base_model(record)
+        _link_datasets(record)
         # After adding a new model, check if any EXISTING models reference it as a base model
         _update_child_models(record)
     elif artifact.metadata.type == ArtifactType.DATASET:
         _DATASETS[artifact.metadata.id] = DatasetRecord(artifact=artifact)
         dataset_name_normalized = _normalized(artifact.metadata.name)
+        dataset_name_short = dataset_name_normalized.split('/')[-1] if '/' in dataset_name_normalized else dataset_name_normalized
+
+        # Update old-style dataset linking for backward compatibility
         for model_record in _MODELS.values():
             if model_record.dataset_id is None and _normalized(model_record.dataset_name) == dataset_name_normalized:
                 model_record.dataset_id = artifact.metadata.id
                 model_record.dataset_url = artifact.data.url
+
+            # Also update lineage.dataset_ids for any models waiting for this dataset
+            if model_record.lineage and model_record.lineage.dataset_names:
+                for idx, dataset_name in enumerate(model_record.lineage.dataset_names):
+                    normalized = _normalized(dataset_name)
+                    normalized_short = normalized.split('/')[-1] if '/' in normalized else normalized
+
+                    # Check if this dataset matches and hasn't been linked yet
+                    if (dataset_name_normalized == normalized or
+                        dataset_name_short == normalized_short or
+                        dataset_name_normalized == normalized_short):
+                        # Only add if not already in dataset_ids
+                        if artifact.metadata.id not in model_record.lineage.dataset_ids:
+                            model_record.lineage.dataset_ids.append(artifact.metadata.id)
     elif artifact.metadata.type == ArtifactType.CODE:
         _CODES[artifact.metadata.id] = CodeRecord(artifact=artifact)
         code_name_normalized = _normalized(artifact.metadata.name)

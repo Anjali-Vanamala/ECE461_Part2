@@ -1244,12 +1244,9 @@ async def get_artifact_lineage(
             # Skip if already processed
             if child_id in seen_node_ids:
                 # Still need to add edge if not already present
-                edge_exists = any(
-                    e.from_node_artifact_id == model_id and
-                    e.to_node_artifact_id == child_id and
-                    e.relationship == "base_model"
-                    for e in edges
-                )
+                def matches_edge(e):
+                    return (e.from_node_artifact_id == model_id and e.to_node_artifact_id == child_id and e.relationship == "base_model")
+                edge_exists = any(matches_edge(e) for e in edges)
                 if not edge_exists:
                     edge = ArtifactLineageEdge(
                         from_node_artifact_id=model_id,

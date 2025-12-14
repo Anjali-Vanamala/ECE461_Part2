@@ -5,15 +5,15 @@ import re
 from typing import Any, Optional, Tuple
 from urllib.parse import urlparse
 
+import logger
 import requests as rq
 from huggingface_hub import HfApi, hf_hub_url
+from metric_concurrent import main as run_metrics
+from metrics.size import calculate_size_score
 
-import logger
 from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
                             ArtifactType, ModelRating, SizeScore)
 from backend.storage import memory
-from metric_concurrent import main as run_metrics
-from metrics.size import calculate_size_score
 
 # -----------------------------
 # GitHub Auth
@@ -382,7 +382,6 @@ def compute_model_artifact(
 
     # Extract dataset and code names from the model card
     dataset_name_hint = _extract_dataset_name(model_info, readme_text)
-    base_model_hint = _extract_base_model(model_info, readme_text)
     code_repo_hint = _extract_code_repo(model_info, readme_text)
     code_name_hint = _derive_name_from_url(code_repo_hint).lower() if code_repo_hint else None
     logger.info(f"code_repo_hint = {code_repo_hint}")

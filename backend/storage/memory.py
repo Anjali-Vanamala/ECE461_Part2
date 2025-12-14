@@ -80,6 +80,8 @@ def _link_base_model(model_record: ModelRecord) -> None:
         return
 
     base_model_name = _normalized(base_model_name)
+    if not base_model_name:
+        return
     # Extract short name (last part after /) for flexible matching
     base_model_short = base_model_name.split('/')[-1] if '/' in base_model_name else base_model_name
 
@@ -89,6 +91,8 @@ def _link_base_model(model_record: ModelRecord) -> None:
 
     for model_id, candidate_record in _MODELS.items():
         candidate_name = _normalized(candidate_record.artifact.metadata.name)
+        if not candidate_name:
+            continue
         candidate_short = candidate_name.split('/')[-1] if '/' in candidate_name else candidate_name
 
         # Match on either full name OR short name
@@ -112,11 +116,15 @@ def _link_datasets(model_record: ModelRecord) -> None:
 
     for dataset_name in model_record.lineage.dataset_names:
         normalized_name = _normalized(dataset_name)
+        if not normalized_name:
+            continue
         normalized_short = normalized_name.split('/')[-1] if '/' in normalized_name else normalized_name
 
         # Search for matching dataset in registry
         for dataset_id, dataset_record in _DATASETS.items():
             candidate_name = _normalized(dataset_record.artifact.metadata.name)
+            if not candidate_name:
+                continue
             candidate_short = candidate_name.split('/')[-1] if '/' in candidate_name else candidate_name
 
             # Match on either full name OR short name
@@ -132,6 +140,8 @@ def _update_child_models(newly_added_model: ModelRecord) -> None:
     Handles both full HuggingFace IDs (namespace/model) and short names (model).
     """
     newly_added_name = _normalized(newly_added_model.artifact.metadata.name)
+    if not newly_added_name:
+        return
     newly_added_short = newly_added_name.split('/')[-1] if '/' in newly_added_name else newly_added_name
 
     # Check all existing models to see if they reference this new model as a base
@@ -141,19 +151,21 @@ def _update_child_models(newly_added_model: ModelRecord) -> None:
             base_model_name = model_record.lineage.base_model_name
         elif model_record.base_model_name:
             base_model_name = model_record.base_model_name
-            
+
         if not base_model_name:
             continue
 
         # If this model was waiting for the newly added model as its base
-        base_model_name = _normalized(base_model_name)
-        base_model_short = base_model_name.split('/')[-1] if '/' in base_model_name else base_model_name
+        normalized_base_name = _normalized(base_model_name)
+        if not normalized_base_name:
+            continue
+        base_model_short = normalized_base_name.split('/')[-1] if '/' in normalized_base_name else normalized_base_name
 
         # Match on either full name OR short name
-        if (newly_added_name == base_model_name or
-            newly_added_short == base_model_short or
-            newly_added_name == base_model_short):
-            
+        name_matches = newly_added_name == normalized_base_name or newly_added_name == base_model_short
+        short_matches = newly_added_short == base_model_short
+        if name_matches or short_matches:
+
             # Check if already linked
             if (model_record.lineage and model_record.lineage.base_model_id is None) or model_record.base_model_id is None:
                 if model_record.lineage:
@@ -219,6 +231,8 @@ def save_artifact(
     elif artifact.metadata.type == ArtifactType.DATASET:
         _DATASETS[artifact.metadata.id] = DatasetRecord(artifact=artifact)
         dataset_name_normalized = _normalized(artifact.metadata.name)
+        if not dataset_name_normalized:
+            return artifact
         dataset_name_short = dataset_name_normalized.split('/')[-1] if '/' in dataset_name_normalized else dataset_name_normalized
 
         # Update old-style dataset linking for backward compatibility
@@ -231,12 +245,14 @@ def save_artifact(
             if model_record.lineage and model_record.lineage.dataset_names:
                 for idx, dataset_name in enumerate(model_record.lineage.dataset_names):
                     normalized = _normalized(dataset_name)
+                    if not normalized:
+                        continue
                     normalized_short = normalized.split('/')[-1] if '/' in normalized else normalized
 
                     # Check if this dataset matches and hasn't been linked yet
-                    if (dataset_name_normalized == normalized or
-                        dataset_name_short == normalized_short or
-                        dataset_name_normalized == normalized_short):
+                    full_name_match = dataset_name_normalized == normalized or dataset_name_normalized == normalized_short
+                    short_name_match = dataset_name_short == normalized_short
+                    if full_name_match or short_name_match:
                         # Only add if not already in dataset_ids
                         if artifact.metadata.id not in model_record.lineage.dataset_ids:
                             model_record.lineage.dataset_ids.append(artifact.metadata.id)
@@ -374,10 +390,14 @@ def update_processing_status(artifact_id: ArtifactID, status: str) -> None:
 def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
     """Find dataset by name with flexible matching (handles namespace/name format)."""
     normalized = _normalized(name)
+    if not normalized:
+        return None
     normalized_short = normalized.split('/')[-1] if '/' in normalized else normalized
 
     for record in _DATASETS.values():
         candidate = _normalized(record.artifact.metadata.name)
+        if not candidate:
+            continue
         candidate_short = candidate.split('/')[-1] if '/' in candidate else candidate
 
         # Match on either full name OR short name
@@ -408,10 +428,14 @@ def find_model_by_name(name: str) -> Optional[ModelRecord]:
     Handles both full HuggingFace IDs (namespace/model) and short names (model).
     """
     normalized = _normalized(name)
+    if not normalized:
+        return None
     normalized_short = normalized.split('/')[-1] if '/' in normalized else normalized
 
     for record in _MODELS.values():
         candidate = _normalized(record.artifact.metadata.name)
+        if not candidate:
+            continue
         candidate_short = candidate.split('/')[-1] if '/' in candidate else candidate
 
         # Match on either full name OR short name

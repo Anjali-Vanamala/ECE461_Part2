@@ -104,14 +104,11 @@ def extract_lineage_from_config(config: Dict) -> Tuple[Optional[str], List[str],
             if isinstance(value, str):
                 value_lower = value.lower()
                 # Skip local paths and special keywords
-                is_local_path = (
-                    value.startswith('.') or
-                    value.startswith('/') or
-                    value.startswith('\\') or
-                    ':' in value[:3] or  # Windows paths like C:\
-                    value_lower in ['auto', 'none', 'null', ''] or
-                    value_lower == config.get('model_type', '').lower()  # Avoid circular reference
-                )
+                starts_with_path = value.startswith('.') or value.startswith('/') or value.startswith('\\')
+                is_windows_path = ':' in value[:3]
+                is_special_keyword = value_lower in ['auto', 'none', 'null', '']
+                matches_model_type = value_lower == config.get('model_type', '').lower()
+                is_local_path = starts_with_path or is_windows_path or is_special_keyword or matches_model_type
 
                 if not is_local_path:
                     base_model_name = value

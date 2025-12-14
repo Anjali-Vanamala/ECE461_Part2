@@ -14,7 +14,7 @@ name: CD - Deploy FastAPI to Lambda
 
 on:
   push:
-    branches: [ '101-switchable-deployment-performance-track-requirement' ]
+    branches: [ 'main' ]
   workflow_dispatch:
     inputs:
       reason:

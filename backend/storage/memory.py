@@ -78,6 +78,7 @@ def save_artifact(
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
     code_url: Optional[str] = None,
+    readme: Optional[str] = None,
     processing_status: Optional[str] = None,
 ) -> Artifact:
     """Insert or update an artifact entry in the appropriate store."""
@@ -91,6 +92,7 @@ def save_artifact(
             record.code_name = code_name or record.code_name
             record.code_url = code_url or record.code_url
             record.license = license or record.license
+            record.readme = readme or record.readme
             if processing_status is not None:
                 record.processing_status = processing_status
         else:
@@ -102,6 +104,7 @@ def save_artifact(
                 dataset_url=dataset_url,
                 code_name=code_name,
                 code_url=code_url,
+                readme=readme,
                 processing_status=processing_status or "completed",
             )
             _MODELS[artifact.metadata.id] = record
@@ -197,6 +200,12 @@ def save_model_license(artifact_id: ArtifactID, license: str) -> None:
         record.license = license
 
 
+def save_model_readme(artifact_id: ArtifactID, readme: str) -> None:
+    if readme in _MODELS:
+        record = _MODELS[artifact_id]
+        record.readme = readme
+
+
 def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
     record = _MODELS.get(artifact_id)
     if not record:
@@ -209,6 +218,13 @@ def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
     if not record:
         return None
     return record.license
+
+
+def get_model_readme(artifact_id: ArtifactID) -> Optional[str]:
+    record = _MODELS.get(artifact_id)
+    if not record:
+        return None
+    return record.readme
 
 
 def get_processing_status(artifact_id: ArtifactID) -> Optional[str]:

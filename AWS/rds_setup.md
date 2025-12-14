@@ -9,6 +9,40 @@
 
 ---
 
+## Quick Reference - Current RDS Info
+
+**Instance Details:**
+- **Instance ID**: `ece461-postgres`
+- **Endpoint**: `ece461-postgres.cnee4ueesi3l.us-east-2.rds.amazonaws.com`
+- **Port**: `5432`
+- **Database**: `artifacts_db`
+- **Username**: `postgres`
+- **Engine**: PostgreSQL 15.15
+- **Instance Class**: `db.t3.micro`
+- **Region**: `us-east-2`
+- **Status**: `available` (as of last check)
+
+**Security Group:**
+- **Name**: `ece461-rds-sg`
+- **ID**: `sg-08d87976fec1b8ed3`
+
+**Quick Commands:**
+```bash
+# Get endpoint
+aws rds describe-db-instances --db-instance-identifier ece461-postgres --region us-east-2 --query 'DBInstances[0].Endpoint.Address' --output text
+
+# Check status
+aws rds describe-db-instances --db-instance-identifier ece461-postgres --region us-east-2 --query 'DBInstances[0].DBInstanceStatus' --output text
+
+# Check if publicly accessible
+aws rds describe-db-instances --db-instance-identifier ece461-postgres --region us-east-2 --query 'DBInstances[0].PubliclyAccessible' --output text
+
+# View security group rules
+aws ec2 describe-security-groups --group-ids sg-08d87976fec1b8ed3 --region us-east-2 --query 'SecurityGroups[0].IpPermissions' --output table
+```
+
+---
+
 ## Current Progress & Status
 
 ### ✅ Completed Steps

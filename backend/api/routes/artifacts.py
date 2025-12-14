@@ -1175,13 +1175,8 @@ async def get_artifact_lineage(
     nodes.append(primary_node)
     seen_node_ids.add(artifact_id)
 
-    if not lineage:
-        # No lineage data available - return graph with just the primary node
-        logger.info(f"No lineage data found for artifact {artifact_id}")
-        return ArtifactLineageGraph(nodes=nodes, edges=edges)
-
     # 4. Add base model node and edge (if exists in registry)
-    if lineage.base_model_name:
+    if lineage and lineage.base_model_name:
         # First check if we have a cached base_model_id (from linking)
         base_artifact = None
         base_model_id = None
@@ -1256,7 +1251,7 @@ async def get_artifact_lineage(
     seen_dataset_names = set()
 
     # First, use cached dataset_ids if available
-    if lineage.dataset_ids:
+    if lineage and lineage.dataset_ids:
         # Use cached IDs from linking
         for dataset_id in lineage.dataset_ids:
             if dataset_id in seen_node_ids:
@@ -1287,7 +1282,8 @@ async def get_artifact_lineage(
                 logger.info(f"Using cached dataset_id {dataset_id} for lineage")
 
     # Fallback: search by name for any datasets not yet linked
-    for dataset_name in lineage.dataset_names:
+    dataset_names_to_process = lineage.dataset_names if lineage else []
+    for dataset_name in dataset_names_to_process:
         # Skip if we already processed this dataset name (via dataset_ids)
         if _normalize_name(dataset_name) in seen_dataset_names:
             continue

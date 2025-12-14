@@ -1,3 +1,19 @@
+"""
+Artifact management API for the Model Registry.
+
+Provides endpoints to:
+- Register, update, delete, and retrieve artifacts (models, datasets, code).
+- Query artifacts via metadata or regex search.
+- Download artifacts with S3 support and proxy fallback.
+- Compute and retrieve model ratings, costs, licenses, and lineage.
+
+Includes internal helpers for:
+- URL extraction and normalization (HuggingFace, GitHub).
+- Safe regex searches.
+- Background artifact processing and S3 uploads.
+- License normalization and compatibility checks.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -28,6 +44,8 @@ router = APIRouter(tags=["artifacts"])
 
 
 def _derive_name(url: str) -> str:
+    """
+    Derive a name for the artifact from its URL."""
     stripped = url.strip().rstrip("/")
     if not stripped:
         return "artifact"
@@ -287,6 +305,8 @@ def calibrate_regex_timeout(test_text) -> float:
 
 
 def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | None:
+    """
+    Safely perform regex search with timeout to avoid catastrophic backtracking."""
     try:
         return bool(regex.search(pattern, text, timeout=timeout))
     except TimeoutError:
@@ -295,6 +315,7 @@ def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | N
 
 @router.post("/artifact/byRegEx", response_model=List[ArtifactMetadata])
 async def regex_artifact_search(payload: dict = Body(...)):
+    """Search artifacts by regex on name and README."""
     if not payload or "regex" not in payload:
         raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
@@ -352,6 +373,7 @@ async def query_artifacts_endpoint(
     response: Response,
     offset: int = Query(0, ge=0, description="Pagination offset for the results"),
 ) -> List[ArtifactMetadata]:
+    """Query artifacts based on metadata."""
     if not queries:
         raise HTTPException(status_code=400, detail="At least one artifact query is required")
 
@@ -369,6 +391,7 @@ async def query_artifacts_endpoint(
 
 @router.delete("/reset", summary="Reset the registry. (BASELINE)")
 async def reset_registry() -> dict[str, str]:
+    """Reset the entire artifact registry (for testing purposes)."""
     memory.reset()
     return {"status": "reset"}
 
@@ -389,6 +412,7 @@ def validate_model_rating(rating: ModelRating) -> bool:
     """
 
     def check(obj):
+        """Recursively check all numeric fields in the rating object."""
         for attr, value in obj.__dict__.items():
             if isinstance(value, (int, float)):
                 if value < 0.5:
@@ -413,6 +437,8 @@ def process_model_artifact_async(
     artifact_id: str,
     name: str,
 ) -> None:
+    """
+    Background task to process a model artifact:"""
     import logging
     logger = logging.getLogger(__name__)
     temp_file_path = None
@@ -560,6 +586,7 @@ async def register_artifact(
     response: Response,
     artifact_type: ArtifactType = Path(..., description="Type of artifact being ingested."),
 ) -> Artifact:
+    """ Register a new artifact in the registry. """
     if memory.artifact_exists(artifact_type, payload.url):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Artifact exists already")
 
@@ -732,13 +759,13 @@ def _proxy_download_fallback(
         )
 
     # Fetch from source with streaming
-    DOWNLOAD_TIMEOUT = 300  # 5 minutes
+    download_timeout = 300  # 5 minutes
 
     try:
         source_response = requests.get(
             source_download_url,
             stream=True,
-            timeout=DOWNLOAD_TIMEOUT,
+            timeout=download_timeout,
             allow_redirects=True
         )
         source_response.raise_for_status()
@@ -809,6 +836,8 @@ async def get_artifact(
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
 ):
+    """
+    Retrieve an artifact by type and ID."""
     # 400 — invalid or missing type
     try:
         artifact_type_enum = ArtifactType(artifact_type)
@@ -896,6 +925,7 @@ async def update_artifact(
     artifact_type: ArtifactType = Path(..., description="Type of artifact to update"),
     artifact_id: ArtifactID = Path(..., description="artifact id"),
 ) -> Artifact:
+    """ Update an existing artifact in the registry. """
     if payload.metadata.id != artifact_id or payload.metadata.type != artifact_type:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -934,6 +964,7 @@ async def delete_artifact(
     artifact_type: ArtifactType = Path(..., description="Artifact type"),
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
 ) -> dict[str, ArtifactID]:
+    """ Delete an artifact from the registry. """
     success = memory.delete_artifact(artifact_type, artifact_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
@@ -948,6 +979,7 @@ async def delete_artifact(
 async def get_model_rating(
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
 ) -> ModelRating:
+    """ Retrieve the rating for a model artifact. """
     # Wait for processing to complete if still processing
     import time
     max_wait = 120  # 2 minutes max wait
@@ -990,6 +1022,7 @@ async def get_artifact_cost(
     artifact_type: ArtifactType = Path(..., description="Artifact type"),
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
 ) -> ArtifactCost:
+    """ Retrieve the cost for an artifact. """
     artifact = memory.get_artifact(artifact_type, artifact_id)
     if not artifact:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
@@ -1091,6 +1124,7 @@ async def license_check(
     artifact_id: ArtifactID,
     payload: SimpleLicenseCheckRequest,
 ):
+    """ Check license compatibility between a model artifact and a GitHub repository. """
     # 1. Check artifact exists
     artifact = memory.get_artifact(ArtifactType.MODEL, artifact_id)
     if not artifact:

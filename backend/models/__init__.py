@@ -1,3 +1,9 @@
+"""
+Centralized model definitions for artifacts and health components.
+
+This module exports all Pydantic models and types used across the
+backend for artifact management and system health tracking.
+"""
 from .artifact import (Artifact, ArtifactAuditEntry, ArtifactCost,
                        ArtifactCostEntry, ArtifactData, ArtifactID,
                        ArtifactLineageEdge, ArtifactLineageGraph,

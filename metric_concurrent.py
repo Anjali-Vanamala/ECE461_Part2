@@ -1,3 +1,15 @@
+"""
+Concurrent evaluation of ML model metrics.
+
+This module computes various metrics for a machine learning model,
+its associated code, and dataset in parallel using threads. Metrics
+include data quality, code quality, license, performance claims,
+bus factor, ramp-up time, reproducibility, and more.
+
+The main function returns a list of computed scores and prints
+a detailed evaluation using `print_model_evaluation`.
+"""
+
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Any, Dict
@@ -28,6 +40,36 @@ def main(
     dataset_name: str | None = None,
     code_name: str | None = None
 ) -> list[float]:
+    """
+    Compute multiple model evaluation metrics concurrently.
+
+    Parameters
+    ----------
+    model_info : Any
+        Metadata dictionary about the model (from API or other sources).
+    model_readme : Any
+        Model README text content.
+    raw_model_url : str
+        URL of the model repository.
+    code_info : Any
+        Metadata dictionary about the code repository.
+    code_readme : Any
+        README content for the code repository.
+    raw_dataset_url : str
+        URL of the dataset repository.
+    dataset_name : str, optional
+        Hint for dataset name to use in metric calculations.
+    code_name : str, optional
+        Hint for code repository name to use in metric calculations.
+
+    Returns
+    -------
+    list[float]
+        Ordered list of metric scores:
+        [net_size_score, license_score, ramp_score, bus_score, dc_score,
+         data_quality_score, code_quality_score, perf_score, repro_score,
+         review_score, tree_score]
+    """
     start = time.time()
     logger.info("Begin processing metrics.")
     if dataset_name:

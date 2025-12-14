@@ -1,3 +1,10 @@
+"""
+Dataclasses for in-memory artifact records.
+
+Defines record types for models, datasets, and code artifacts,
+including lineage information for models. Used by in-memory
+storage and artifact linking workflows.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -18,6 +25,7 @@ class LineageMetadata:
 
 @dataclass
 class ModelRecord:
+    """In-memory record for a model artifact."""
     artifact: Artifact
     dataset_id: Optional[ArtifactID] = None
     dataset_name: Optional[str] = None
@@ -36,9 +44,11 @@ class ModelRecord:
 
 @dataclass
 class DatasetRecord:
+    """In-memory record for a dataset artifact."""
     artifact: Artifact
 
 
 @dataclass
 class CodeRecord:
+    """In-memory record for a code artifact."""
     artifact: Artifact

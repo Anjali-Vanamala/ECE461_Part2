@@ -1,3 +1,13 @@
+"""
+In-memory artifact storage module.
+
+Provides CRUD operations and query utilities for artifacts
+(models, datasets, code) using in-memory dictionaries.
+Handles artifact linking, lineage resolution, and metadata management.
+
+This module is intended for testing, development, or ephemeral storage
+where persistence is not required.
+"""
 from __future__ import annotations
 
 import uuid
@@ -28,14 +38,17 @@ _TYPE_TO_STORE = {
 # ---------------------------------------------------------------------------
 
 def generate_artifact_id() -> ArtifactID:
+    """Generate a new unique artifact ID."""
     return str(uuid.uuid4())
 
 
 def _get_store(artifact_type: ArtifactType):
+    """Get the in-memory store dictionary for the given artifact type."""
     return _TYPE_TO_STORE[artifact_type]
 
 
 def _find_by_url(artifact_type: ArtifactType, url: str) -> Optional[ArtifactID]:
+    """Find an artifact ID by its URL in the specified artifact type store."""
     store = _get_store(artifact_type)
     for artifact_id, record in store.items():
         if record.artifact.data.url == url:
@@ -44,10 +57,13 @@ def _find_by_url(artifact_type: ArtifactType, url: str) -> Optional[ArtifactID]:
 
 
 def _normalized(name: Optional[str]) -> Optional[str]:
+    """Return normalized (lowercase, stripped) version of name, or None if name is None."""
     return name.strip().lower() if isinstance(name, str) else None
 
 
 def _link_dataset_code(model_record: ModelRecord) -> None:
+    """
+    Link dataset and code artifacts by name if IDs are missing."""
     dataset_name = _normalized(model_record.dataset_name)
     if model_record.dataset_id is None and dataset_name:
         for dataset_id, dataset_record in _DATASETS.items():
@@ -269,6 +285,7 @@ def save_artifact(
 
 
 def get_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> Optional[Artifact]:
+    """Retrieve an artifact by type and ID."""
     record = _get_store(artifact_type).get(artifact_id)
     if not record:
         return None
@@ -276,6 +293,7 @@ def get_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> Option
 
 
 def delete_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> bool:
+    """Delete an artifact by type and ID. Returns True if deleted, False if not found."""
     store = _get_store(artifact_type)
     if artifact_id not in store:
         return False
@@ -296,10 +314,12 @@ def delete_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> boo
 
 
 def list_metadata(artifact_type: ArtifactType) -> List[ArtifactMetadata]:
+    """List metadata for all artifacts of the given type."""
     return [record.artifact.metadata for record in _get_store(artifact_type).values()]
 
 
 def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
+    """Query artifacts based on a list of ArtifactQuery objects."""
     results: Dict[str, ArtifactMetadata] = {}
     for query in queries:
         types = query.types or list(_TYPE_TO_STORE.keys())
@@ -315,6 +335,7 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
 
 
 def reset() -> None:
+    """Clear all in-memory stores."""
     for store in _TYPE_TO_STORE.values():
         store = cast(dict[ArtifactID, object], store)
         store.clear()
@@ -325,28 +346,33 @@ def reset() -> None:
 # ---------------------------------------------------------------------------
 
 def artifact_exists(artifact_type: ArtifactType, url: str) -> bool:
+    """Check if an artifact with the given URL exists in the specified type store."""
     return _find_by_url(artifact_type, url) is not None
 
 
 def save_model_rating(artifact_id: ArtifactID, rating: ModelRating) -> None:
+    """Save or update the rating for a model artifact."""
     if artifact_id in _MODELS:
         record = _MODELS[artifact_id]
         record.rating = rating
 
 
 def save_model_license(artifact_id: ArtifactID, license: str) -> None:
+    """Save or update the license for a model artifact."""
     if artifact_id in _MODELS:
         record = _MODELS[artifact_id]
         record.license = license
 
 
 def save_model_readme(artifact_id: ArtifactID, readme: str) -> None:
+    """Save or update the README for a model artifact."""
     if artifact_id in _MODELS:
         record = _MODELS[artifact_id]
         record.readme = readme
 
 
 def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
+    """Get the rating for a model artifact."""
     record = _MODELS.get(artifact_id)
     if not record:
         return None
@@ -354,6 +380,7 @@ def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
 
 
 def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
+    """Get the license for a model artifact."""
     record = _MODELS.get(artifact_id)
     if not record:
         return None
@@ -366,6 +393,7 @@ def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
 
 
 def get_model_readme(artifact_id: ArtifactID) -> Optional[str]:
+    """Get the README for a model artifact."""
     record = _MODELS.get(artifact_id)
     if not record:
         return None
@@ -407,6 +435,7 @@ def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
 
 
 def find_code_by_name(name: str) -> Optional[CodeRecord]:
+    """Find code repository by name (case-insensitive)."""
     normalized = _normalized(name)
     for record in _CODES.values():
         if _normalized(record.artifact.metadata.name) == normalized:

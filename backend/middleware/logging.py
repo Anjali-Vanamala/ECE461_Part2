@@ -14,15 +14,15 @@ from typing import MutableMapping, Optional, cast
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 try:
-    import boto3  # type: ignore
+    _BOTO3 = __import__("boto3")  # module-level "constant" now UPPER_CASE
 except Exception:
-    boto3 = None  # type: ignore
+    _BOTO3 = None  # type: ignore[assignment]
 
 from backend.services.metrics_tracker import record_request
 
 LOG_LEVEL: int = 1  # 0 = silent, 1 = info, 2 = debug
 CLOUDWATCH_NAMESPACE = "ECE461/API"
-CLOUDWATCH_AVAILABLE = boto3 is not None
+CLOUDWATCH_AVAILABLE = _BOTO3 is not None
 
 logger = logging.getLogger("backend.middleware.logging")
 
@@ -31,16 +31,18 @@ class LoggingMiddleware:
     """Simple request/response logger for ASGI apps."""
 
     def __init__(self, app: ASGIApp) -> None:
+        """Initialize the logging middleware."""
         self.app = app
         self.cloudwatch = None
-        if CLOUDWATCH_AVAILABLE and boto3 is not None:
+        if CLOUDWATCH_AVAILABLE and _BOTO3 is not None:
             try:
-                self.cloudwatch = boto3.client("cloudwatch")
+                self.cloudwatch = _BOTO3.client("cloudwatch")
             except Exception:
                 logger.debug("CloudWatch client initialization failed", exc_info=True)
                 self.cloudwatch = None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """ASGI entry point for the middleware."""
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
@@ -69,6 +71,7 @@ class LoggingMiddleware:
         body_store: list[bytes] = []
 
         async def receive_wrapper():
+            """Wrap the receive callable to capture the request body."""
             message = await receive()
 
             if message.get("type") == "http.request":
@@ -87,6 +90,7 @@ class LoggingMiddleware:
             return message
 
         async def send_wrapper(message: MutableMapping[str, object]) -> None:
+            """Wrap the send callable to capture the response status."""
             if message.get("type") == "http.response.start":
                 status_holder["status"] = cast(Optional[int], message.get("status"))
             await send(message)
@@ -135,6 +139,7 @@ class LoggingMiddleware:
             raise
 
     def _log_success(self, method: str, path: str, status: int, duration: float, client: str | None = None) -> None:
+        """Log a successful request."""
         duration_ms = duration * 1000
         if LOG_LEVEL >= 1:
             logger.info(f"Request: {method} {path} | Status: {status} | Duration: {duration_ms:.2f} ms")
@@ -150,6 +155,7 @@ class LoggingMiddleware:
             logger.debug(json.dumps(debug_payload))
 
     def _log_error(self, method: str, path: str, exc: Exception, client: str | None = None) -> None:
+        """Log a request that resulted in an error."""
         if LOG_LEVEL >= 1:
             logger.info(f"Error: {method} {path} -> {exc}")
         if LOG_LEVEL >= 2:
@@ -163,6 +169,7 @@ class LoggingMiddleware:
             logger.debug(json.dumps(debug_payload))
 
     def _send_metrics(self, method: str, path: str, status: int, *, success: bool) -> None:
+        """Send metrics to CloudWatch if available."""
         if not self.cloudwatch:
             return
         try:
@@ -186,4 +193,5 @@ class LoggingMiddleware:
 
 
 def setup_logging(app: ASGIApp) -> ASGIApp:
+    """Wrap the ASGI app with logging middleware."""
     return LoggingMiddleware(app)

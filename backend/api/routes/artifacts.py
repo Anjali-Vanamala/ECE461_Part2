@@ -321,7 +321,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
             name = record.artifact.metadata.name
 
             if record.artifact.metadata.type == ArtifactType.MODEL:
-                readme = memory.get_model_readme()
+                readme = memory.get_model_readme(record.artifact.metadata.id)
             else:
                 readme = "temp"
             if readme is not None and len(readme) > 10:

@@ -301,7 +301,7 @@ def calibrate_regex_timeout(test_text) -> float:
     baseline2 = time.perf_counter() - start
 
     # Never allow insanely tiny values
-    return max(0.01, baseline * 20, baseline2 * 20)
+    return max(0.01, baseline * 2, baseline2 * 2)
 
 
 def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | None:

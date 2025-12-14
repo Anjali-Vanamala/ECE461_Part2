@@ -321,15 +321,15 @@ async def regex_artifact_search(payload: dict = Body(...)):
             name = record.artifact.metadata.name
 
             if record.artifact.metadata.type == ArtifactType.MODEL:
-                readme = record.readme
+                readme = memory.get_model_readme()
             else:
                 readme = "temp"
             if readme is not None and len(readme) > 10:
                 timeout = calibrate_regex_timeout(readme)
+                test_readme = safe_regex_search(regex_str, readme, timeout)
             else:
                 timeout = timeout_1
             test = safe_regex_search(regex_str, name, timeout)
-            test_readme = safe_regex_search(regex_str, readme, timeout)
             if test is None and test_readme is None:
                 raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
             if test or test_readme:

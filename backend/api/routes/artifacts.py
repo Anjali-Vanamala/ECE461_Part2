@@ -9,6 +9,7 @@ from typing import List
 from urllib.parse import urlparse
 
 import regex
+import httpx
 import requests
 from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
                      Query, Request, Response, status)
@@ -407,7 +408,7 @@ def validate_net_score(rating: ModelRating) -> bool:
     return getattr(rating, "net_score", 0.0) >= 0.5
 
 
-def process_model_artifact_async(
+async def process_model_artifact_async(
     url: str,
     artifact_id: str,
     name: str,
@@ -480,20 +481,16 @@ def process_model_artifact_async(
             temp_file_path = temp_file.name
             temp_file.close()
 
-            # Download with streaming to handle large files
-            download_response = requests.get(
-                source_download_url,
-                stream=True,
-                timeout=600,  # 10 minutes for large files
-                allow_redirects=True
-            )
-            download_response.raise_for_status()
+            # Download with streaming to handle large files (async)
+            async with httpx.AsyncClient(timeout=600.0, follow_redirects=True) as client:
+                async with client.stream('GET', source_download_url) as download_response:
+                    download_response.raise_for_status()
 
-            # Write to temp file in chunks
-            with open(temp_file_path, 'wb') as f:
-                for chunk in download_response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
+                    # Write to temp file in chunks
+                    with open(temp_file_path, 'wb') as f:
+                        async for chunk in download_response.aiter_bytes(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
 
             logger.info(f"Downloaded artifact {artifact_id} to temp file, size: {os.path.getsize(temp_file_path)} bytes")
 
@@ -658,12 +655,16 @@ async def download_artifact(
                 detail="Artifact processing failed.",
             )
 
-    # 3. Generate pre-signed S3 URL
-    # OPTIMIZATION: Skip file existence check to reduce latency
-    # The pre-signed URL generation is fast (~10-20ms) compared to HEAD request check (~50-100ms)
-    # If file doesn't exist, S3 will return 404 when accessed, which is acceptable
+    # 3. Check if file exists in S3
     try:
-        # Generate pre-signed URL directly (no existence check - saves ~50-100ms per request)
+        file_exists = s3.file_exists_in_s3(artifact_type.value, artifact_id)
+        
+        if not file_exists:
+            # File not in S3 - fallback to proxy download
+            logger.info(f"File not found in S3 for artifact {artifact_id}, falling back to proxy download")
+            return await _proxy_download_fallback(artifact, artifact_type)
+        
+        # File exists - generate pre-signed S3 URL
         presigned_url = s3.generate_presigned_download_url(
             artifact_type.value,
             artifact_id,
@@ -673,7 +674,7 @@ async def download_artifact(
         if not presigned_url:
             # Failed to generate URL - fallback to proxy
             logger.warning(f"Failed to generate pre-signed URL for artifact {artifact_id}, falling back to proxy")
-            return _proxy_download_fallback(artifact, artifact_type)
+            return await _proxy_download_fallback(artifact, artifact_type)
 
         # Redirect to pre-signed S3 URL
         return RedirectResponse(url=presigned_url, status_code=status.HTTP_302_FOUND)
@@ -681,18 +682,18 @@ async def download_artifact(
     except ValueError:
         # S3 bucket not configured - fallback to proxy
         logger.warning(f"S3 bucket not configured, falling back to proxy download for artifact {artifact_id}")
-        return _proxy_download_fallback(artifact, artifact_type)
+        return await _proxy_download_fallback(artifact, artifact_type)
     except RuntimeError:
         # boto3 not available - fallback to proxy
         logger.warning(f"boto3 not available, falling back to proxy download for artifact {artifact_id}")
-        return _proxy_download_fallback(artifact, artifact_type)
+        return await _proxy_download_fallback(artifact, artifact_type)
     except Exception as e:
         # Other S3 error - fallback to proxy
         logger.error(f"S3 error for artifact {artifact_id}: {e}, falling back to proxy download")
-        return _proxy_download_fallback(artifact, artifact_type)
+        return await _proxy_download_fallback(artifact, artifact_type)
 
 
-def _proxy_download_fallback(
+async def _proxy_download_fallback(
     artifact: Artifact,
     artifact_type: ArtifactType,
 ) -> StreamingResponse:
@@ -709,63 +710,95 @@ def _proxy_download_fallback(
             detail="Failed to determine source download URL.",
         )
 
-    # Fetch from source with streaming
-    DOWNLOAD_TIMEOUT = 300  # 5 minutes
-
-    try:
-        source_response = requests.get(
-            source_download_url,
-            stream=True,
-            timeout=DOWNLOAD_TIMEOUT,
-            allow_redirects=True
-        )
-        source_response.raise_for_status()
-    except requests.Timeout:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Download timeout from source.",
-        )
-    except requests.ConnectionError:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Cannot connect to source server.",
-        )
-    except requests.HTTPError as e:
-        if e.response and e.response.status_code == 404:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Source file not found.",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Source download failed.",
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Source download error.",
-        )
-
-    # Determine content type and filename
-    content_type = source_response.headers.get('Content-Type', 'application/octet-stream')
+    # Fetch from source with streaming (async)
+    DOWNLOAD_TIMEOUT = 300.0  # 5 minutes
     filename = _get_download_filename(artifact, source_download_url)
+    content_type = 'application/octet-stream'  # Default
+
+    async def stream_response():
+        """Async generator to stream the response"""
+        try:
+            async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
+                async with client.stream('GET', source_download_url) as source_response:
+                    # Check status code before streaming
+                    if source_response.status_code == 404:
+                        # Return empty stream - error will be handled by status check
+                        return
+                    
+                    source_response.raise_for_status()
+                    
+                    # Stream chunks to client
+                    async for chunk in source_response.aiter_bytes(chunk_size=8192):
+                        if chunk:
+                            yield chunk
+        except httpx.TimeoutException:
+            # Can't raise HTTPException in generator, but we can stop streaming
+            return
+        except httpx.ConnectError:
+            return
+        except httpx.HTTPStatusError:
+            return
+        except Exception:
+            return
+
+    # Validate the request BEFORE creating StreamingResponse
+    # This allows us to raise HTTPException before streaming starts
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            # Make a quick HEAD request to validate and get headers
+            try:
+                head_response = await client.head(source_download_url)
+                if head_response.status_code == 200:
+                    content_type = head_response.headers.get('Content-Type', content_type)
+                elif head_response.status_code == 404:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Source file not found.",
+                    )
+            except httpx.TimeoutException:
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail="Download timeout from source.",
+                )
+            except httpx.ConnectError:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Cannot connect to source server.",
+                )
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Source file not found.",
+                    )
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Source download failed.",
+                )
+            except HTTPException:
+                # Re-raise HTTPExceptions
+                raise
+            except Exception:
+                # For other errors, try to proceed with streaming
+                # (some servers don't support HEAD)
+                pass
+    except HTTPException:
+        # Re-raise HTTPExceptions from validation
+        raise
+    except Exception:
+        # If validation fails but it's not an HTTPException, continue
+        # (some servers don't support HEAD requests)
+        pass
 
     # Build headers
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',
+        "Accept-Ranges": "bytes",
     }
 
-    # Include Content-Length if available
-    content_length = source_response.headers.get("Content-Length")
-    if content_length:
-        headers["Content-Length"] = content_length
-
-    # Include Accept-Ranges for better client support
-    headers["Accept-Ranges"] = "bytes"
-
-    # Stream response to client
+    # Return streaming response with async generator
     return StreamingResponse(
-        source_response.iter_content(chunk_size=8192),  # 8KB chunks
+        stream_response(),
         media_type=content_type,
         headers=headers
     )

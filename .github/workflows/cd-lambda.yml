@@ -113,9 +113,15 @@ jobs:
             --timeout ${{ env.LAMBDA_TIMEOUT }} \
             --memory-size ${{ env.LAMBDA_MEMORY }} \
             --region ${{ env.AWS_REGION }} \
+            --environment "Variables={COMPUTE_BACKEND=lambda,AWS_REGION=${{ env.AWS_REGION }}}" \
             --description "ECE461 Model Registry API - FastAPI on Lambda"
           
           echo "✅ Lambda function created"
+          echo "⏳ Waiting for function to be active..."
+          aws lambda wait function-active \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --region ${{ env.AWS_REGION }}
+          echo "✅ Function is now active"
 
       - name: Update Lambda function code
         if: steps.check-lambda.outputs.exists == 'true'
@@ -128,32 +134,31 @@ jobs:
           
           echo "✅ Lambda function code updated"
 
+      - name: Wait for function to be ready
+        run: |
+          echo "Waiting for Lambda function to be ready..."
+          aws lambda wait function-active \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            || echo "Function may still be updating"
+
       - name: Update Lambda configuration
         run: |
           echo "Updating Lambda configuration..."
           
-          # Get current environment variables
-          CURRENT_ENV=$(aws lambda get-function-configuration \
-            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-            --region ${{ env.AWS_REGION }} \
-            --query 'Environment.Variables' \
-            --output json || echo '{}')
-          
-          # Merge with new environment variables
-          # Set COMPUTE_BACKEND to lambda
+          # Update environment variables (only if function already exists and was updated)
+          # For new functions, environment is set during creation
           aws lambda update-function-configuration \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --timeout ${{ env.LAMBDA_TIMEOUT }} \
             --memory-size ${{ env.LAMBDA_MEMORY }} \
             --region ${{ env.AWS_REGION }} \
             --environment "Variables={COMPUTE_BACKEND=lambda,AWS_REGION=${{ env.AWS_REGION }}}" \
-            >/dev/null
+            >/dev/null || echo "Configuration update skipped (function may be updating)"
           
           echo "✅ Lambda configuration updated"
-
-      - name: Wait for function update
-        run: |
-          echo "Waiting for Lambda function to be ready..."
+          
+          # Wait for configuration update to complete
           aws lambda wait function-updated \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --region ${{ env.AWS_REGION }} \

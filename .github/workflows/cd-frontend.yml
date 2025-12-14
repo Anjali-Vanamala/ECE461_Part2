@@ -1,13 +1,14 @@
-name: CD - Deploy Frontend to S3
+name: CD - Deploy Frontend to AWS Amplify
 
-# MVP Requirements:
-# - Automated deployment to AWS S3 upon merge to main
-# - Frontend accessible via S3 static website hosting
+# Requirements:
+# - Automated deployment to AWS Amplify upon merge to main
+# - Frontend accessible via Amplify hosting
 # 
 # Prerequisites (manual setup required):
-# - S3 bucket: ece461-frontend in us-east-2
-# - S3 bucket configured for static website hosting
-# - GitHub OIDC role with S3 permissions (reused from backend + S3 access)
+# - AWS Amplify app connected to this GitHub repository
+# - GitHub OIDC role with Amplify permissions (amplify:StartJob, amplify:GetApp, amplify:GetBranch)
+# - GitHub secret: AWS_IAM_ROLE_ARN (reused from backend)
+# - GitHub secret: AMPLIFY_APP_ID (optional - will auto-detect if not provided)
 
 on:
   push:
@@ -25,8 +26,7 @@ permissions:
 
 env:
   AWS_REGION: us-east-2
-  S3_BUCKET: ece461-frontend
-  BUILD_DIR: frontend/out  # Next.js static export outputs to 'out' directory
+  AMPLIFY_BRANCH: main
 
 jobs:
   build-deploy:
@@ -40,41 +40,98 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build frontend
+      - name: Build and validate frontend
         run: |
           cd frontend
-          # If package.json exists, build. Otherwise, just prepare static files
-          if [ -f package.json ]; then
-            npm ci
-            npm run build
-          else
-            # For simple HTML, create dist directory with files
-            mkdir -p dist
-            cp *.html dist/ 2>/dev/null || true
-            cp *.css dist/ 2>/dev/null || true
-            cp *.js dist/ 2>/dev/null || true
-            [ -d assets ] && cp -r assets dist/ || true
-            # Create index.html from main.html if needed
-            if [ -f main.html ] && [ ! -f dist/index.html ]; then
-              cp main.html dist/index.html
-            fi
-          fi
+          npm ci
+          npm run build
+          # Run linting if available
+          npm run lint || echo "Linting step skipped or failed (non-blocking)"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
-          role-session-name: gha-frontend-deploy
+          role-session-name: gha-amplify-deploy
 
-      - name: Deploy to S3
+      - name: Get Amplify App ID
+        id: get-amplify-app
         run: |
-          aws s3 sync ${{ env.BUILD_DIR }} s3://${{ env.S3_BUCKET }} \
+          # Try to use provided App ID, otherwise auto-detect from repository
+          if [ -n "${{ secrets.AMPLIFY_APP_ID }}" ]; then
+            echo "APP_ID=${{ secrets.AMPLIFY_APP_ID }}" >> $GITHUB_OUTPUT
+            echo "Using provided Amplify App ID"
+          else
+            # Auto-detect Amplify app by repository name/URL
+            REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+            APP_ID=$(aws amplify list-apps \
+              --region ${{ env.AWS_REGION }} \
+              --query "apps[?repository=='https://github.com/${{ github.repository }}'].appId" \
+              --output text | head -n1)
+            
+            if [ -z "$APP_ID" ] || [ "$APP_ID" == "None" ]; then
+              # Try alternative detection by app name
+              APP_ID=$(aws amplify list-apps \
+                --region ${{ env.AWS_REGION }} \
+                --query "apps[?name=='$REPO_NAME' || name=='ece461-frontend'].appId" \
+                --output text | head -n1)
+            fi
+            
+            if [ -z "$APP_ID" ] || [ "$APP_ID" == "None" ]; then
+              echo "❌ Could not find Amplify App ID"
+              echo "Please set AMPLIFY_APP_ID secret or ensure Amplify app is connected to this repository"
+              exit 1
+            fi
+            
+            echo "APP_ID=$APP_ID" >> $GITHUB_OUTPUT
+            echo "Auto-detected Amplify App ID: $APP_ID"
+          fi
+
+      - name: Trigger Amplify deployment
+        run: |
+          APP_ID="${{ steps.get-amplify-app.outputs.APP_ID }}"
+          BRANCH="${{ env.AMPLIFY_BRANCH }}"
+          
+          echo "Triggering Amplify deployment for app: $APP_ID, branch: $BRANCH"
+          
+          # Start a new build job
+          JOB_ID=$(aws amplify start-job \
+            --app-id "$APP_ID" \
+            --branch-name "$BRANCH" \
+            --job-type RELEASE \
             --region ${{ env.AWS_REGION }} \
-            --delete
+            --query 'jobSummary.jobId' \
+            --output text)
+          
+          if [ -z "$JOB_ID" ] || [ "$JOB_ID" == "None" ]; then
+            echo "❌ Failed to start Amplify deployment job"
+            exit 1
+          fi
+          
+          echo "✅ Amplify deployment job started: $JOB_ID"
+          echo "JOB_ID=$JOB_ID" >> $GITHUB_ENV
+          
+          # Wait a moment and check job status
+          sleep 5
+          JOB_STATUS=$(aws amplify get-job \
+            --app-id "$APP_ID" \
+            --branch-name "$BRANCH" \
+            --job-id "$JOB_ID" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'job.summary.status' \
+            --output text)
+          
+          echo "Deployment job status: $JOB_STATUS"
+          echo "Monitor deployment in AWS Amplify Console: https://console.aws.amazon.com/amplify/home?region=${{ env.AWS_REGION }}#/$APP_ID"
 
       - name: Output deployment info
         run: |
-          echo "✅ Frontend Deployment Complete"
-          echo "Bucket: ${{ env.S3_BUCKET }}"
+          APP_ID="${{ steps.get-amplify-app.outputs.APP_ID }}"
+          echo "✅ Frontend Deployment Triggered"
+          echo "Amplify App ID: $APP_ID"
+          echo "Branch: ${{ env.AMPLIFY_BRANCH }}"
           echo "Region: ${{ env.AWS_REGION }}"
+          echo "Job ID: ${{ env.JOB_ID }}"
+          echo ""
+          echo "View deployment status: https://console.aws.amazon.com/amplify/home?region=${{ env.AWS_REGION }}#/$APP_ID"

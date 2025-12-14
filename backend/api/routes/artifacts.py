@@ -319,7 +319,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
     for store in memory._TYPE_TO_STORE.values():
         for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name
-
+            test_readme = None
             if record.artifact.metadata.type == ArtifactType.MODEL:
                 readme = memory.get_model_readme(record.artifact.metadata.id)
             else:

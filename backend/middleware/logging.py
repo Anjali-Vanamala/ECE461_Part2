@@ -18,8 +18,6 @@ try:
 except Exception:
     boto3 = None  # type: ignore
 
-from backend.services.metrics_tracker import record_request
-
 LOG_LEVEL: int = 1  # 0 = silent, 1 = info, 2 = debug
 CLOUDWATCH_NAMESPACE = "ECE461/API"
 CLOUDWATCH_AVAILABLE = boto3 is not None
@@ -49,9 +47,6 @@ class LoggingMiddleware:
         path = scope.get("path", "")
         start = time.perf_counter()
         status_holder: dict[str, Optional[int]] = {"status": None}
-
-        # Extract client IP
-        client_ip = scope.get("client")[0] if scope.get("client") else None
 
         # 🔥 LOG IMMEDIATELY WHEN REQUEST ARRIVES
         logger.info(f"[ARRIVED] {method} {path}")

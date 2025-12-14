@@ -2237,3 +2237,94 @@ class TestLineage:
         parent_node_ids = {n["artifact_id"] for n in data_parent["nodes"]}
         child_node_ids = {n["artifact_id"] for n in data_child["nodes"]}
         assert parent_node_ids == child_node_ids == {"grandparent-id", "parent-id", "child-id"}
+
+
+class TestLambdaEnvironment:
+    """Tests for Lambda-specific functionality and environment detection."""
+
+    def test_is_lambda_environment_with_compute_backend(self):
+        """Test is_lambda_environment() returns True when COMPUTE_BACKEND=lambda."""
+        from unittest.mock import patch
+        from backend.lambda_utils import is_lambda_environment
+
+        with patch.dict("os.environ", {"COMPUTE_BACKEND": "lambda"}, clear=False):
+            assert is_lambda_environment() is True
+
+    def test_is_lambda_environment_with_aws_lambda_function_name(self):
+        """Test is_lambda_environment() returns True when AWS_LAMBDA_FUNCTION_NAME is set."""
+        from unittest.mock import patch
+        from backend.lambda_utils import is_lambda_environment
+
+        with patch.dict("os.environ", {"AWS_LAMBDA_FUNCTION_NAME": "test-function"}, clear=False):
+            assert is_lambda_environment() is True
+
+    def test_is_lambda_environment_returns_false_when_not_lambda(self):
+        """Test is_lambda_environment() returns False when not in Lambda environment."""
+        from unittest.mock import patch
+        from backend.lambda_utils import is_lambda_environment
+
+        with patch.dict("os.environ", {}, clear=False):
+            # Remove Lambda indicators if they exist
+            import os
+            os.environ.pop("COMPUTE_BACKEND", None)
+            os.environ.pop("AWS_LAMBDA_FUNCTION_NAME", None)
+            assert is_lambda_environment() is False
+
+        with patch.dict("os.environ", {"COMPUTE_BACKEND": "ecs"}, clear=False):
+            assert is_lambda_environment() is False
+
+
+class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
+    """Tests for Lambda-specific artifact processing behavior."""
+
+    async def test_artifact_registration_works_in_lambda(self):
+        """Test that artifact registration works correctly in Lambda environment."""
+        from unittest.mock import patch, MagicMock
+        from backend.app import app
+        from backend.storage import memory
+        from fastapi.testclient import TestClient
+
+        with patch.dict("os.environ", {"COMPUTE_BACKEND": "lambda"}, clear=False), \
+             patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
+            mock_compute.return_value = MagicMock()
+
+            client = TestClient(app)
+            memory.clear_all()
+
+            response = client.post(
+                "/artifacts/model",
+                json={"url": "https://huggingface.co/gpt2", "name": "test-model"}
+            )
+
+            # Models return 202 (ACCEPTED) for async processing
+            assert response.status_code == 202
+            memory.clear_all()
+
+    async def test_artifact_registration_works_in_ecs(self):
+        """Test that artifact registration works correctly in ECS environment."""
+        from unittest.mock import patch, MagicMock
+        from backend.app import app
+        from backend.storage import memory
+        from fastapi.testclient import TestClient
+        import os
+
+        # Clear Lambda flag
+        original = os.environ.pop("COMPUTE_BACKEND", None)
+        try:
+            with patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
+                mock_compute.return_value = MagicMock()
+
+                client = TestClient(app)
+                memory.clear_all()
+
+                response = client.post(
+                    "/artifacts/model",
+                    json={"url": "https://huggingface.co/gpt2", "name": "test-model"}
+                )
+
+                # Models return 202 (ACCEPTED) for async processing
+                assert response.status_code == 202
+                memory.clear_all()
+        finally:
+            if original:
+                os.environ["COMPUTE_BACKEND"] = original

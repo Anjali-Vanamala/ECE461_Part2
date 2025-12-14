@@ -1,4 +1,6 @@
 import os
+
+import pytest
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -56,9 +58,8 @@ def check_headings_present(driver):
     """Ensure at least one heading exists unless page is a 404."""
     main_text = driver.find_element(By.TAG_NAME, "main").text.lower() if driver.find_elements(By.TAG_NAME, "main") else ""
     if "404" in main_text or "not found" in main_text:
-        return  # skip check for 404 pages
+        pytest.skip("Page is a 404, skipping heading check")  # skip instead of asserting
     headings = driver.find_elements(By.XPATH, "//h1 | //h2 | //h3")
-    # Only assert if page is not a 404
     assert headings, "No headings found on the page"
 
 

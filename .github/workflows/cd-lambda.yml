@@ -113,7 +113,7 @@ jobs:
             --timeout ${{ env.LAMBDA_TIMEOUT }} \
             --memory-size ${{ env.LAMBDA_MEMORY }} \
             --region ${{ env.AWS_REGION }} \
-            --environment "Variables={COMPUTE_BACKEND=lambda,AWS_REGION=${{ env.AWS_REGION }}}" \
+            --environment "Variables={COMPUTE_BACKEND=lambda,LOG_FILE=/tmp/error_logs.log,LOG_LEVEL=1}" \
             --description "ECE461 Model Registry API - FastAPI on Lambda"
           
           echo "✅ Lambda function created"
@@ -153,7 +153,7 @@ jobs:
             --timeout ${{ env.LAMBDA_TIMEOUT }} \
             --memory-size ${{ env.LAMBDA_MEMORY }} \
             --region ${{ env.AWS_REGION }} \
-            --environment "Variables={COMPUTE_BACKEND=lambda,AWS_REGION=${{ env.AWS_REGION }}}" \
+            --environment "Variables={COMPUTE_BACKEND=lambda,LOG_FILE=/tmp/error_logs.log,LOG_LEVEL=1}" \
             >/dev/null || echo "Configuration update skipped (function may be updating)"
           
           echo "✅ Lambda configuration updated"

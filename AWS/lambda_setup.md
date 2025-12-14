@@ -8,6 +8,76 @@
 
 ---
 
+## Quick Reference - Important URLs & Info
+
+### API Gateway URL
+```bash
+# Get your API Gateway URL
+API_ID=$(aws apigatewayv2 get-apis \
+  --region us-east-2 \
+  --query "Items[?Name=='ece461-backend-api'].ApiId" \
+  --output text)
+
+API_URL="https://${API_ID}.execute-api.us-east-2.amazonaws.com"
+echo "API URL: $API_URL"
+```
+
+**Current API URL:** `https://6d924g49aa.execute-api.us-east-2.amazonaws.com`
+
+### Test Endpoints
+```bash
+# Health check
+curl "https://6d924g49aa.execute-api.us-east-2.amazonaws.com/health"
+
+# Root endpoint
+curl "https://6d924g49aa.execute-api.us-east-2.amazonaws.com/"
+
+# List models
+curl "https://6d924g49aa.execute-api.us-east-2.amazonaws.com/artifacts/model"
+```
+
+### Lambda Function Info
+- **Function Name:** `ece461-backend-lambda`
+- **Handler:** `backend.lambda_handler.handler`
+- **Runtime:** `python3.11`
+- **Timeout:** 900 seconds (15 minutes)
+- **Memory:** 1024 MB
+- **Region:** `us-east-2`
+
+**View in Console:** https://console.aws.amazon.com/lambda/home?region=us-east-2#/functions/ece461-backend-lambda
+
+### Environment Variables
+```bash
+# Current environment variables
+aws lambda get-function-configuration \
+  --function-name ece461-backend-lambda \
+  --region us-east-2 \
+  --query 'Environment.Variables' \
+  --output json
+```
+
+**Required Variables:**
+- `COMPUTE_BACKEND=lambda` (set automatically)
+- `LOG_FILE=/tmp/error_logs.log` (for logger.py)
+- `LOG_LEVEL=1` (0=silent, 1=info, 2=debug)
+
+**Optional Variables:**
+- `STORAGE_BACKEND=dynamodb` or `rds_postgres` (default: in-memory)
+- `USE_DYNAMODB=1` (legacy, use STORAGE_BACKEND instead)
+
+### View Logs
+```bash
+# Tail logs in real-time
+aws logs tail /aws/lambda/ece461-backend-lambda --follow --region us-east-2
+
+# Get recent logs
+aws logs tail /aws/lambda/ece461-backend-lambda --since 10m --region us-east-2
+```
+
+**View in Console:** https://console.aws.amazon.com/cloudwatch/home?region=us-east-2#logsV2:log-groups/log-group/%2Faws%2Flambda%2Fece461-backend-lambda
+
+---
+
 ## Step 1: Create IAM Role for Lambda
 
 Create a trust policy file (no editor needed):

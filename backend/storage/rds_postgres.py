@@ -93,7 +93,7 @@ def _get_database_url() -> str:
         raise ValueError("RDS_ENDPOINT environment variable is required")
     if not RDS_PASSWORD:
         raise ValueError("RDS_PASSWORD environment variable is required")
-    
+
     # URL encode username and password to handle special characters
     encoded_username = quote_plus(RDS_USERNAME)
     encoded_password = quote_plus(RDS_PASSWORD)

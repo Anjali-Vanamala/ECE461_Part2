@@ -8,8 +8,8 @@ import time
 from typing import List
 from urllib.parse import urlparse
 
-import regex
 import httpx
+import regex
 import requests
 from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
                      Query, Request, Response, status)
@@ -658,12 +658,12 @@ async def download_artifact(
     # 3. Check if file exists in S3
     try:
         file_exists = s3.file_exists_in_s3(artifact_type.value, artifact_id)
-        
+
         if not file_exists:
             # File not in S3 - fallback to proxy download
             logger.info(f"File not found in S3 for artifact {artifact_id}, falling back to proxy download")
             return await _proxy_download_fallback(artifact, artifact_type)
-        
+
         # File exists - generate pre-signed S3 URL
         presigned_url = s3.generate_presigned_download_url(
             artifact_type.value,
@@ -724,9 +724,9 @@ async def _proxy_download_fallback(
                     if source_response.status_code == 404:
                         # Return empty stream - error will be handled by status check
                         return
-                    
+
                     source_response.raise_for_status()
-                    
+
                     # Stream chunks to client
                     async for chunk in source_response.aiter_bytes(chunk_size=8192):
                         if chunk:

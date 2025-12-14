@@ -1450,26 +1450,26 @@ class Test_Download_Endpoint:
         mock_head_response = MagicMock()
         mock_head_response.status_code = 200
         mock_head_response.headers = {"Content-Type": "application/zip"}
-        
+
         # Create async iterator for streaming
         async def async_bytes_generator():
             yield b"test"
             yield b"data"
-        
+
         mock_stream_response = MagicMock()
         mock_stream_response.status_code = 200
         mock_stream_response.headers = {"Content-Type": "application/zip", "Content-Length": "1024"}
         mock_stream_response.aiter_bytes = async_bytes_generator
         mock_stream_response.raise_for_status = MagicMock()
-        
+
         mock_stream_context = AsyncMock()
         mock_stream_context.__aenter__ = AsyncMock(return_value=mock_stream_response)
         mock_stream_context.__aexit__ = AsyncMock(return_value=None)
-        
+
         mock_client_instance = AsyncMock()
         mock_client_instance.head = AsyncMock(return_value=mock_head_response)
         mock_client_instance.stream = MagicMock(return_value=mock_stream_context)
-        
+
         mock_httpx_client.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
         mock_httpx_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
@@ -1488,9 +1488,10 @@ class Test_Download_Endpoint:
     @patch("backend.storage.s3.file_exists_in_s3")
     def test_download_endpoint_handles_source_timeout(self, mock_file_exists, mock_httpx_client):
         """Test that download endpoint returns 504 on source timeout when falling back to proxy."""
-        from fastapi.testclient import TestClient
         from unittest.mock import AsyncMock
+
         import httpx
+        from fastapi.testclient import TestClient
 
         from backend.app import app
         from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
@@ -1525,8 +1526,8 @@ class Test_Download_Endpoint:
         """Test that download endpoint returns 502 when source file not found in proxy fallback."""
         from unittest.mock import AsyncMock, MagicMock
 
-        from fastapi.testclient import TestClient
         import httpx
+        from fastapi.testclient import TestClient
 
         from backend.app import app
         from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
@@ -1562,9 +1563,10 @@ class Test_Download_Endpoint:
     @patch("backend.storage.s3.file_exists_in_s3")
     def test_download_endpoint_handles_connection_error(self, mock_file_exists, mock_httpx_client):
         """Test that download endpoint returns 502 on connection error in proxy fallback."""
-        from fastapi.testclient import TestClient
         from unittest.mock import AsyncMock
+
         import httpx
+        from fastapi.testclient import TestClient
 
         from backend.app import app
         from backend.models import (Artifact, ArtifactData, ArtifactMetadata,

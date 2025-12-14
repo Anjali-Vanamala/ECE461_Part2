@@ -12,7 +12,7 @@ name: CD - Deploy Frontend to AWS Amplify
 
 on:
   push:
-    branches: [ '100-frontend-shift-from-s3-to-amplify' ]
+    branches: [ 'main' ]
   workflow_dispatch:
     inputs:
       reason:

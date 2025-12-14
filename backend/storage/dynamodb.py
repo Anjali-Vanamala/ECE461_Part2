@@ -4,7 +4,7 @@ import json
 import os
 import uuid
 from decimal import Decimal
-from typing import Any, Dict, Iterable, List, Optional, cast
+from typing import Any, Dict, Iterable, List, Optional
 
 import boto3
 from botocore.exceptions import ClientError

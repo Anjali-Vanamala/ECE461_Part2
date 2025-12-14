@@ -16,9 +16,11 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
-                            ArtifactData, ArtifactID, ArtifactMetadata,
-                            ArtifactQuery, ArtifactRegistration, ArtifactType,
-                            ModelRating, SimpleLicenseCheckRequest)
+                            ArtifactData, ArtifactID, ArtifactLineageEdge,
+                            ArtifactLineageGraph, ArtifactLineageNode,
+                            ArtifactMetadata, ArtifactQuery,
+                            ArtifactRegistration, ArtifactType, ModelRating,
+                            SimpleLicenseCheckRequest)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory, s3
 
@@ -267,7 +269,7 @@ def _get_download_filename(artifact: Artifact, source_url: str) -> str:
 def calibrate_regex_timeout(test_text) -> float:
     """
     Measures how long regex takes in this platform for a safe case.
-    The timeout is set to allow legitimate patterns while blocking catastrophic ones.
+    The timeout is set to 2x the baseline to avoid false-positive timeouts.
     """
     test_pattern = r"a+"
     test2_pattern = r"ece461"
@@ -280,9 +282,8 @@ def calibrate_regex_timeout(test_text) -> float:
     regex.search(test2_pattern, test_text)
     baseline2 = time.perf_counter() - start
 
-    # Use a more lenient multiplier to avoid false positives on valid patterns
-    # Minimum 0.01 seconds to handle legitimate complex patterns
-    return max(0.01, baseline * 2, baseline2 * 2)
+    # Never allow insanely tiny values
+    return max(0.0001, baseline * 8, baseline2 * 8)
 
 
 def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | None:
@@ -417,6 +418,20 @@ def process_model_artifact_async(
     temp_file_path = None
 
     try:
+        # Extract lineage information from HuggingFace
+        from backend.services.lineage_service import extract_lineage_from_url
+        from backend.storage.records import LineageMetadata
+
+        logger.info(f"Extracting lineage for model {artifact_id} from {url}")
+        base_model_name, dataset_names, lineage_metadata = extract_lineage_from_url(url)
+
+        # Create LineageMetadata object
+        lineage = LineageMetadata(
+            base_model_name=base_model_name,
+            dataset_names=dataset_names,
+            config_metadata=lineage_metadata,
+        )
+
         # Compute the artifact (long-running)
         artifact, rating, dataset_name, dataset_url, code_name, code_url, license, readme = compute_model_artifact(
             url,
@@ -461,6 +476,8 @@ def process_model_artifact_async(
             code_url=code_url,
             readme=readme,
             processing_status="completed",
+            lineage=lineage,
+            base_model_name=base_model_name,
         )
 
         memory.update_processing_status(artifact_id, "completed")
@@ -1109,3 +1126,167 @@ async def license_check(
     compatible = is_license_compatible(model_license, github_license)
 
     return compatible
+
+
+@router.get(
+    "/artifact/model/{artifact_id}/lineage",
+    response_model=ArtifactLineageGraph,
+    summary="Retrieve the lineage graph for this artifact. (BASELINE)",
+    responses={
+        200: {"description": "Lineage graph extracted from structured metadata"},
+        400: {"description": "The lineage graph cannot be computed because the artifact metadata is missing or malformed"},
+        404: {"description": "Artifact does not exist"},
+    },
+)
+async def get_artifact_lineage(
+    artifact_id: ArtifactID = Path(..., description="Artifact id"),
+) -> ArtifactLineageGraph:
+    """
+    Retrieve lineage graph for a model artifact.
+
+    Builds a complete lineage graph including:
+    - The queried model
+    - All ancestor models (base models, recursively)
+    - All descendant models (models that use this as base, recursively)
+
+    Per instructor guidance:
+    - Only MODELS are included (no datasets or code)
+    - Only models uploaded to the registry are eligible
+    - All queries on related models produce the SAME graph
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # 1. Check if model exists
+    artifact = memory.get_artifact(ArtifactType.MODEL, artifact_id)
+    if not artifact:
+        raise HTTPException(
+            status_code=404,
+            detail="Artifact does not exist.",
+        )
+
+    # 2. Build complete lineage graph with bidirectional traversal
+    nodes: List[ArtifactLineageNode] = []
+    edges: List[ArtifactLineageEdge] = []
+    seen_node_ids: set = set()
+
+    def add_model_node(model_id: str, model_artifact: Artifact, source: str = "config_json") -> None:
+        """Helper to add a model node if not already added."""
+        if model_id in seen_node_ids:
+            return
+        seen_node_ids.add(model_id)
+
+        node = ArtifactLineageNode(
+            artifact_id=model_id,
+            name=model_artifact.metadata.name,
+            source=source,
+            metadata={"repository_url": model_artifact.data.url} if model_artifact.data.url else None,
+        )
+        nodes.append(node)
+
+    def traverse_ancestors(model_id: str) -> None:
+        """Recursively find and add all ancestor models (base models)."""
+        model_record = memory.get_model_record(model_id)
+        if not model_record:
+            return
+
+        # Get base model ID
+        base_model_id = None
+        if model_record.lineage and model_record.lineage.base_model_id:
+            base_model_id = model_record.lineage.base_model_id
+        elif model_record.base_model_id:
+            base_model_id = model_record.base_model_id
+
+        # If no cached ID, try to find by name
+        if not base_model_id:
+            base_model_name = None
+            if model_record.lineage and model_record.lineage.base_model_name:
+                base_model_name = model_record.lineage.base_model_name
+            elif model_record.base_model_name:
+                base_model_name = model_record.base_model_name
+
+            if base_model_name:
+                base_record = memory.find_model_by_name(base_model_name)
+                if base_record:
+                    base_model_id = base_record.artifact.metadata.id
+
+        if not base_model_id:
+            return
+
+        # Get the base model artifact
+        base_artifact = memory.get_artifact(ArtifactType.MODEL, base_model_id)
+        if not base_artifact:
+            return
+
+        # Add base model node
+        add_model_node(base_model_id, base_artifact, "config_json")
+
+        # Add edge: base_model -> child_model
+        edge = ArtifactLineageEdge(
+            from_node_artifact_id=base_model_id,
+            to_node_artifact_id=model_id,
+            relationship="base_model",
+        )
+        edges.append(edge)
+
+        logger.info(f"Added ancestor: {base_artifact.metadata.name} (ID: {base_model_id})")
+
+        # Recursively traverse ancestors of the base model
+        traverse_ancestors(base_model_id)
+
+    def traverse_descendants(model_id: str) -> None:
+        """Recursively find and add all descendant models (children that use this as base)."""
+        child_records = memory.find_child_models(model_id)
+
+        for child_record in child_records:
+            child_id = child_record.artifact.metadata.id
+
+            # Skip if already processed
+            if child_id in seen_node_ids:
+                # Still need to add edge if not already present
+                def matches_edge(e):
+                    return (e.from_node_artifact_id == model_id and e.to_node_artifact_id == child_id and e.relationship == "base_model")
+                edge_exists = any(matches_edge(e) for e in edges)
+                if not edge_exists:
+                    edge = ArtifactLineageEdge(
+                        from_node_artifact_id=model_id,
+                        to_node_artifact_id=child_id,
+                        relationship="base_model",
+                    )
+                    edges.append(edge)
+                continue
+
+            # Add child node
+            add_model_node(child_id, child_record.artifact, "config_json")
+
+            # Add edge: parent -> child
+            edge = ArtifactLineageEdge(
+                from_node_artifact_id=model_id,
+                to_node_artifact_id=child_id,
+                relationship="base_model",
+            )
+            edges.append(edge)
+
+            logger.info(f"Added descendant: {child_record.artifact.metadata.name} (ID: {child_id})")
+
+            # Recursively traverse descendants of this child
+            traverse_descendants(child_id)
+
+    # 3. Start building the graph from the queried artifact
+    add_model_node(artifact_id, artifact, "config_json")
+
+    # 4. Traverse UP to find all ancestors (base models)
+    traverse_ancestors(artifact_id)
+
+    # 5. Traverse DOWN to find all descendants (child models)
+    traverse_descendants(artifact_id)
+
+    # 6. Also traverse descendants of all ancestors (to get siblings and cousins)
+    # This ensures we get the complete graph
+    for node in list(nodes):  # Use list() to avoid modifying during iteration
+        if node.artifact_id != artifact_id:
+            traverse_descendants(node.artifact_id)
+
+    logger.info(f"Built complete lineage graph for artifact {artifact_id}: {len(nodes)} nodes, {len(edges)} edges")
+
+    return ArtifactLineageGraph(nodes=nodes, edges=edges)

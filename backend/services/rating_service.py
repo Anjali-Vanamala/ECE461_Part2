@@ -172,6 +172,27 @@ def _extract_dataset_name(model_info: dict, readme_text: str) -> Optional[str]:
     return None
 
 
+def _extract_base_model(model_info: dict, readme_text: str) -> Optional[str]:
+    """Extract base model from cardData or tags."""
+    # 1. Check cardData
+    card = model_info.get("cardData") or {}
+    base_model = card.get("base_model")
+    if isinstance(base_model, str) and base_model.strip():
+        return base_model.strip()
+    if isinstance(base_model, list) and base_model:
+        # If multiple, take the first one
+        if isinstance(base_model[0], str):
+            return base_model[0].strip()
+
+    # 2. Check tags for "base_model:name"
+    tags = model_info.get("tags", [])
+    for tag in tags:
+        if isinstance(tag, str) and tag.startswith("base_model:"):
+            return tag.split(":", 1)[1].strip()
+
+    return None
+
+
 def _extract_code_repo(model_info: dict, readme_text: str) -> Optional[str]:
     card_data = model_info.get("cardData") or {}
 

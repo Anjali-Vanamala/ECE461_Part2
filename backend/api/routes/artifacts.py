@@ -5,6 +5,7 @@ import os
 import re
 import tempfile
 import time
+import threading
 from typing import List
 from urllib.parse import urlparse
 
@@ -21,6 +22,7 @@ from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ModelRating, SimpleLicenseCheckRequest)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory, s3
+from backend.lambda_utils import is_lambda_environment
 
 router = APIRouter(tags=["artifacts"])
 
@@ -561,12 +563,24 @@ async def register_artifact(
         memory.save_artifact(artifact, processing_status="processing")
 
         # Process in background
-        background_tasks.add_task(
-            process_model_artifact_async,
-            payload.url,
-            artifact_id,
-            name,
-        )
+        # In Lambda, BackgroundTasks don't work well because execution context ends
+        # Use threading for Lambda, BackgroundTasks for ECS
+        if is_lambda_environment():
+            # In Lambda, run in a daemon thread so response can return immediately
+            thread = threading.Thread(
+                target=process_model_artifact_async,
+                args=(payload.url, artifact_id, name),
+                daemon=True
+            )
+            thread.start()
+        else:
+            # In ECS/other environments, use FastAPI BackgroundTasks
+            background_tasks.add_task(
+                process_model_artifact_async,
+                payload.url,
+                artifact_id,
+                name,
+            )
 
         # Return 202 for models (async processing)
         response.status_code = status.HTTP_202_ACCEPTED
@@ -882,12 +896,21 @@ async def update_artifact(
         # Update model asynchronously (same pattern as POST)
         memory.save_artifact(payload, processing_status="processing")
 
-        background_tasks.add_task(
-            process_model_artifact_async,
-            payload.data.url,
-            artifact_id,
-            payload.metadata.name,
-        )
+        # Process in background - use threading for Lambda, BackgroundTasks for ECS
+        if is_lambda_environment():
+            thread = threading.Thread(
+                target=process_model_artifact_async,
+                args=(payload.data.url, artifact_id, payload.metadata.name),
+                daemon=True
+            )
+            thread.start()
+        else:
+            background_tasks.add_task(
+                process_model_artifact_async,
+                payload.data.url,
+                artifact_id,
+                payload.metadata.name,
+            )
 
         response.status_code = status.HTTP_202_ACCEPTED
         return payload

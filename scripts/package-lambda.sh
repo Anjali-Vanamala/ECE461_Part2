@@ -25,6 +25,7 @@ cp -r "$PROJECT_ROOT/metrics_helpers" "$BUILD_DIR/" 2>/dev/null || true
 # Copy root-level Python modules that are imported
 cp "$PROJECT_ROOT/logger.py" "$BUILD_DIR/" 2>/dev/null || true
 cp "$PROJECT_ROOT/metric_concurrent.py" "$BUILD_DIR/" 2>/dev/null || true
+cp "$PROJECT_ROOT/print_metrics.py" "$BUILD_DIR/" 2>/dev/null || true
 
 # Install dependencies
 echo "Installing Python dependencies..."

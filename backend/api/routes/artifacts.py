@@ -16,9 +16,11 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
-                            ArtifactData, ArtifactID, ArtifactMetadata,
-                            ArtifactQuery, ArtifactRegistration, ArtifactType,
-                            ModelRating, SimpleLicenseCheckRequest)
+                            ArtifactData, ArtifactID, ArtifactLineageEdge,
+                            ArtifactLineageGraph, ArtifactLineageNode,
+                            ArtifactMetadata, ArtifactQuery,
+                            ArtifactRegistration, ArtifactType, ModelRating,
+                            SimpleLicenseCheckRequest)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory, s3
 

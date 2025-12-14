@@ -20,7 +20,7 @@ import {
   BarChart3
 } from "lucide-react"
 import { useState, useEffect } from "react"
-import { fetchHealth, fetchHealthComponents } from "@/lib/api"
+import { fetchHealth, fetchHealthComponents, startDownloadBenchmark, getDownloadBenchmarkStatus } from "@/lib/api"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend } from "@/components/ui/chart"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar } from "recharts"
 
@@ -32,6 +32,13 @@ export default function HealthPage() {
   const [windowMinutes, setWindowMinutes] = useState(60)
   const [includeTimeline, setIncludeTimeline] = useState(true)
   const [isDarkMode, setIsDarkMode] = useState(false)
+  
+  // Download benchmark state
+  const [downloadBenchmarkRunning, setDownloadBenchmarkRunning] = useState(false)
+  const [downloadBenchmarkResults, setDownloadBenchmarkResults] = useState<any>(null)
+  const [downloadBenchmarkProgress, setDownloadBenchmarkProgress] = useState<string | null>(null)
+  const [downloadBenchmarkCurrentProgress, setDownloadBenchmarkCurrentProgress] = useState<string | null>(null) // X/100 format
+  const [downloadBenchmarkError, setDownloadBenchmarkError] = useState<string | null>(null)
 
   // Detect dark mode
   useEffect(() => {
@@ -45,6 +52,20 @@ export default function HealthPage() {
       attributeFilter: ['class']
     })
     return () => observer.disconnect()
+  }, [])
+  
+  // Load saved download benchmark results from localStorage
+  useEffect(() => {
+    const savedResults = localStorage.getItem('downloadBenchmarkResults')
+    if (savedResults) {
+      try {
+        const parsed = JSON.parse(savedResults)
+        setDownloadBenchmarkResults(parsed)
+        console.log('Loaded saved download benchmark results from localStorage')
+      } catch (e) {
+        console.error('Failed to parse saved download benchmark results:', e)
+      }
+    }
   }, [])
 
     async function loadHealth() {
@@ -529,6 +550,306 @@ export default function HealthPage() {
             </div>
           </Card>
             ))}
+
+            {/* Download Benchmark Section */}
+            <Card className="mb-6 bg-card/50 border-border/50">
+              <div className="border-b border-border/50 p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <BarChart3 className="h-6 w-6 text-chart-1" />
+                    <div>
+                      <h2 className="text-xl font-semibold text-foreground">Download Performance Benchmark</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Measure throughput, latency, and performance metrics for 100 concurrent downloads
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={async () => {
+                      try {
+                        setDownloadBenchmarkRunning(true)
+                        setDownloadBenchmarkResults(null)
+                        setDownloadBenchmarkError(null)
+                        setDownloadBenchmarkProgress(null)
+                        setDownloadBenchmarkCurrentProgress(null)
+                        
+                        const startResponse = await startDownloadBenchmark()
+                        const jobId = startResponse.job_id
+                        console.log('Download benchmark started with job ID:', jobId)
+                        
+                        // Poll for results every 2 seconds
+                        const pollInterval = setInterval(async () => {
+                          try {
+                            const statusResponse = await getDownloadBenchmarkStatus(jobId)
+                            
+                            if (statusResponse.progress) {
+                              setDownloadBenchmarkProgress(statusResponse.progress)
+                            }
+                            if (statusResponse.current_progress) {
+                              setDownloadBenchmarkCurrentProgress(statusResponse.current_progress)
+                            }
+                            
+                            if (statusResponse.status === 'completed') {
+                              console.log('Download benchmark completed! Results:', statusResponse.results)
+                              clearInterval(pollInterval)
+                              setDownloadBenchmarkResults(statusResponse.results)
+                              setDownloadBenchmarkRunning(false)
+                              setDownloadBenchmarkProgress(null)
+                              setDownloadBenchmarkCurrentProgress(null)
+                              localStorage.setItem('downloadBenchmarkResults', JSON.stringify(statusResponse.results))
+                              localStorage.setItem('downloadBenchmarkCompletedAt', new Date().toISOString())
+                            } else if (statusResponse.status === 'failed') {
+                              console.error('Download benchmark failed:', statusResponse.error)
+                              clearInterval(pollInterval)
+                              setDownloadBenchmarkError(statusResponse.error || 'Download benchmark failed')
+                              setDownloadBenchmarkRunning(false)
+                              setDownloadBenchmarkProgress(null)
+                              setDownloadBenchmarkCurrentProgress(null)
+                            }
+                          } catch (err) {
+                            console.error('Error checking download benchmark status:', err)
+                            clearInterval(pollInterval)
+                            setDownloadBenchmarkError(err instanceof Error ? err.message : "Failed to check benchmark status")
+                            setDownloadBenchmarkRunning(false)
+                          }
+                        }, 2000)
+                        
+                        // Cleanup after 15 minutes (safety timeout)
+                        setTimeout(() => {
+                          clearInterval(pollInterval)
+                          if (downloadBenchmarkRunning) {
+                            setDownloadBenchmarkError("Benchmark timeout - check status manually")
+                            setDownloadBenchmarkRunning(false)
+                          }
+                        }, 900000)
+                      } catch (err) {
+                        setDownloadBenchmarkError(err instanceof Error ? err.message : "Failed to start download benchmark")
+                        console.error("Error starting download benchmark:", err)
+                        setDownloadBenchmarkRunning(false)
+                      }
+                    }}
+                    disabled={downloadBenchmarkRunning}
+                    className="gap-2"
+                  >
+                    {downloadBenchmarkRunning ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Running...
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="h-4 w-4" />
+                        Run Benchmark
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                {downloadBenchmarkRunning && (
+                  <div className="mb-6">
+                    <div className="flex items-center justify-center gap-3 p-6">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <div className="flex flex-col gap-1">
+                        <p className="text-muted-foreground">Executing download benchmark... This may take 3-5 minutes.</p>
+                        {downloadBenchmarkCurrentProgress && (
+                          <p className="text-lg font-semibold text-foreground">
+                            {downloadBenchmarkCurrentProgress} downloads completed
+                          </p>
+                        )}
+                        {downloadBenchmarkProgress && (
+                          <p className="text-xs text-muted-foreground/70 italic">{downloadBenchmarkProgress}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {downloadBenchmarkError && (
+                  <Card className="mb-6 bg-destructive/10 border-destructive/30 backdrop-blur p-6">
+                    <div className="flex gap-3">
+                      <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-foreground mb-1">Benchmark Failed</p>
+                        <p className="text-sm text-muted-foreground">{downloadBenchmarkError}</p>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+                
+                {downloadBenchmarkResults && !downloadBenchmarkRunning && (
+                  <>
+                    {localStorage.getItem('downloadBenchmarkCompletedAt') && (
+                      <p className="text-xs text-muted-foreground/70 mb-4">
+                        Last completed: {new Date(localStorage.getItem('downloadBenchmarkCompletedAt') || '').toLocaleString()}
+                      </p>
+                    )}
+                    
+                    {/* Test Configuration */}
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-foreground mb-4">Test Configuration</h3>
+                      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                        <div className="p-3 rounded-lg bg-muted/30">
+                          <p className="text-xs text-muted-foreground">API Base URL</p>
+                          <p className="text-sm font-mono font-semibold text-foreground break-all">
+                            {downloadBenchmarkResults.test_configuration?.api_base_url || 'N/A'}
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-muted/30">
+                          <p className="text-xs text-muted-foreground">Concurrent Requests</p>
+                          <p className="text-sm font-mono font-semibold text-foreground">
+                            {downloadBenchmarkResults.test_configuration?.concurrent_requests || 'N/A'}
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-muted/30">
+                          <p className="text-xs text-muted-foreground">Test Timestamp</p>
+                          <p className="text-sm font-mono font-semibold text-foreground">
+                            {downloadBenchmarkResults.test_configuration?.test_timestamp 
+                              ? new Date(downloadBenchmarkResults.test_configuration.test_timestamp).toLocaleString()
+                              : 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Black-Box Metrics */}
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-foreground mb-4">Black-Box Metrics (Performance)</h3>
+                      
+                      {/* Throughput */}
+                      <div className="mb-4">
+                        <h4 className="text-xs font-medium text-muted-foreground mb-2">Throughput</h4>
+                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Requests/Second</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.throughput?.requests_per_second?.toFixed(2) || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Throughput (Mbps)</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.throughput?.mbps?.toFixed(2) || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Total Downloaded</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.throughput?.total_downloaded_mb?.toFixed(2) || 'N/A'} MB
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Avg File Size</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.throughput?.average_file_size_kb?.toFixed(2) || 'N/A'} KB
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Latency */}
+                      <div className="mb-4">
+                        <h4 className="text-xs font-medium text-muted-foreground mb-2">Latency (ms)</h4>
+                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Mean</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.latency?.mean_ms?.toFixed(2) || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Median</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.latency?.median_ms?.toFixed(2) || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">P99</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.latency?.p99_ms?.toFixed(2) || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Min</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.latency?.min_ms?.toFixed(2) || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Max</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.latency?.max_ms?.toFixed(2) || 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Request Summary */}
+                      <div>
+                        <h4 className="text-xs font-medium text-muted-foreground mb-2">Request Summary</h4>
+                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Total Requests</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.request_summary?.total_requests || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Successful</p>
+                            <p className="text-lg font-mono font-semibold text-chart-3">
+                              {downloadBenchmarkResults.black_box_metrics?.request_summary?.successful || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Failed</p>
+                            <p className="text-lg font-mono font-semibold text-destructive">
+                              {downloadBenchmarkResults.black_box_metrics?.request_summary?.failed ?? 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Success Rate</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.request_summary?.success_rate?.toFixed(2) || 'N/A'}%
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <p className="text-xs text-muted-foreground">Total Duration</p>
+                            <p className="text-lg font-mono font-semibold text-foreground">
+                              {downloadBenchmarkResults.black_box_metrics?.request_summary?.total_duration_seconds?.toFixed(2) || 'N/A'}s
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* White-Box Metrics */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground mb-4">White-Box Metrics (Explanation)</h3>
+                      <div className="p-4 rounded-lg bg-muted/30">
+                        <p className="text-sm text-muted-foreground mb-3">
+                          {downloadBenchmarkResults.white_box_metrics?.note || 'No white-box metrics available'}
+                        </p>
+                        {downloadBenchmarkResults.white_box_metrics?.error_breakdown && 
+                         Object.keys(downloadBenchmarkResults.white_box_metrics.error_breakdown).length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-muted-foreground mb-2">Error Breakdown</h4>
+                            <div className="space-y-2">
+                              {Object.entries(downloadBenchmarkResults.white_box_metrics.error_breakdown).map(([error, count]: [string, any]) => (
+                                <div key={error} className="flex items-center justify-between p-2 rounded bg-destructive/10">
+                                  <p className="text-xs text-muted-foreground break-all">{error}</p>
+                                  <Badge variant="destructive" className="ml-2">{count}</Badge>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Card>
           </>
         )}
       </div>

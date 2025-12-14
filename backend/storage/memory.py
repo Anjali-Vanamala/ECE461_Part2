@@ -403,9 +403,34 @@ def get_model_lineage(artifact_id: ArtifactID) -> Optional[LineageMetadata]:
 
 
 def find_model_by_name(name: str) -> Optional[ModelRecord]:
-    """Find a model by name (case-insensitive)."""
+    """
+    Find a model by name (case-insensitive).
+    Handles both full HuggingFace IDs (namespace/model) and short names (model).
+    """
     normalized = _normalized(name)
+    normalized_short = normalized.split('/')[-1] if '/' in normalized else normalized
+
     for record in _MODELS.values():
-        if _normalized(record.artifact.metadata.name) == normalized:
+        candidate = _normalized(record.artifact.metadata.name)
+        candidate_short = candidate.split('/')[-1] if '/' in candidate else candidate
+
+        # Match on either full name OR short name
+        if candidate == normalized or candidate_short == normalized_short or candidate == normalized_short:
             return record
     return None
+
+
+def find_child_models(parent_model_id: ArtifactID) -> List[ModelRecord]:
+    """
+    Find all models that use the given model as their base model.
+    Returns list of ModelRecords that have this model as their parent.
+    """
+    children = []
+    for record in _MODELS.values():
+        # Check if this model's base_model_id matches the parent
+        if record.base_model_id == parent_model_id:
+            children.append(record)
+        # Also check lineage.base_model_id
+        elif record.lineage and record.lineage.base_model_id == parent_model_id:
+            children.append(record)
+    return children

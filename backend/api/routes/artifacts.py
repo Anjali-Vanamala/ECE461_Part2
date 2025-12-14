@@ -1144,12 +1144,15 @@ async def get_artifact_lineage(
     """
     Retrieve lineage graph for a model artifact.
 
-    Extracts dependency relationships from HuggingFace metadata including:
-    - Base models (fine-tuned from)
-    - Training datasets
-    - Related code repositories
+    Builds a complete lineage graph including:
+    - The queried model
+    - All ancestor models (base models, recursively)
+    - All descendant models (models that use this as base, recursively)
 
-    Returns a graph with nodes (artifacts/dependencies) and edges (relationships).
+    Per instructor guidance:
+    - Only MODELS are included (no datasets or code)
+    - Only models uploaded to the registry are eligible
+    - All queries on related models produce the SAME graph
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -1162,335 +1165,131 @@ async def get_artifact_lineage(
             detail="Artifact does not exist.",
         )
 
-    # 2. Get lineage metadata and model record
-    lineage = memory.get_model_lineage(artifact_id)
-    model_record = memory.get_model_record(artifact_id)
-
-    # 3. Build lineage graph with deduplication
+    # 2. Build complete lineage graph with bidirectional traversal
     nodes: List[ArtifactLineageNode] = []
     edges: List[ArtifactLineageEdge] = []
-
-    # Track all node IDs to prevent duplicates (both internal and external)
     seen_node_ids: set = set()
 
-    # Add the primary artifact as a node
-    primary_metadata = lineage.config_metadata if lineage else {}
-    primary_node = ArtifactLineageNode(
-        artifact_id=artifact_id,
-        name=artifact.metadata.name,
-        source="config_json" if lineage else "registry",
-        metadata=primary_metadata if primary_metadata else None,
-    )
-    nodes.append(primary_node)
-    seen_node_ids.add(artifact_id)
+    def add_model_node(model_id: str, model_artifact: Artifact, source: str = "config_json") -> None:
+        """Helper to add a model node if not already added."""
+        if model_id in seen_node_ids:
+            return
+        seen_node_ids.add(model_id)
 
-    # 4. Add base model node and edge (if exists in registry)
-    # Check lineage first, then fallback to model_record
-    base_model_name = None
-    if lineage and lineage.base_model_name:
-        base_model_name = lineage.base_model_name
-    elif model_record and model_record.base_model_name:
-        base_model_name = model_record.base_model_name
+        node = ArtifactLineageNode(
+            artifact_id=model_id,
+            name=model_artifact.metadata.name,
+            source=source,
+            metadata={"repository_url": model_artifact.data.url} if model_artifact.data.url else None,
+        )
+        nodes.append(node)
 
-    if base_model_name:
-        # First check if we have a cached base_model_id (from linking)
-        base_artifact = None
+    def traverse_ancestors(model_id: str) -> None:
+        """Recursively find and add all ancestor models (base models)."""
+        model_record = memory.get_model_record(model_id)
+        if not model_record:
+            return
+
+        # Get base model ID
         base_model_id = None
+        if model_record.lineage and model_record.lineage.base_model_id:
+            base_model_id = model_record.lineage.base_model_id
+        elif model_record.base_model_id:
+            base_model_id = model_record.base_model_id
 
-        if lineage and lineage.base_model_id:
-            # Use the cached ID from lineage linking
-            base_artifact = memory.get_artifact(ArtifactType.MODEL, lineage.base_model_id)
-            if base_artifact:
-                base_model_id = lineage.base_model_id
-                logger.info(f"Using cached base_model_id {base_model_id} for {base_model_name}")
-        elif model_record and model_record.base_model_id:
-             # Use the cached ID from model_record linking
-            base_artifact = memory.get_artifact(ArtifactType.MODEL, model_record.base_model_id)
-            if base_artifact:
-                base_model_id = model_record.base_model_id
-                logger.info(f"Using cached base_model_id {base_model_id} for {base_model_name} (from ModelRecord)")
+        # If no cached ID, try to find by name
+        if not base_model_id:
+            base_model_name = None
+            if model_record.lineage and model_record.lineage.base_model_name:
+                base_model_name = model_record.lineage.base_model_name
+            elif model_record.base_model_name:
+                base_model_name = model_record.base_model_name
 
-        # Fallback: try finding by name if no cached ID
+            if base_model_name:
+                base_record = memory.find_model_by_name(base_model_name)
+                if base_record:
+                    base_model_id = base_record.artifact.metadata.id
+
+        if not base_model_id:
+            return
+
+        # Get the base model artifact
+        base_artifact = memory.get_artifact(ArtifactType.MODEL, base_model_id)
         if not base_artifact:
-            base_model_record = memory.find_model_by_name(base_model_name)
-            if base_model_record:
-                base_artifact = base_model_record.artifact
-                base_model_id = base_artifact.metadata.id
+            return
 
-        if base_artifact and base_model_id:
-            # Base model exists in registry
-            # Check for duplicates before adding
-            if base_model_id not in seen_node_ids:
-                base_model_node = ArtifactLineageNode(
-                    artifact_id=base_model_id,
-                    name=base_artifact.metadata.name,
-                    source="config_json" if lineage and lineage.base_model_name else "model_metadata",
-                    metadata={"repository_url": base_artifact.data.url} if base_artifact.data.url else None,
+        # Add base model node
+        add_model_node(base_model_id, base_artifact, "config_json")
+
+        # Add edge: base_model -> child_model
+        edge = ArtifactLineageEdge(
+            from_node_artifact_id=base_model_id,
+            to_node_artifact_id=model_id,
+            relationship="base_model",
+        )
+        edges.append(edge)
+
+        logger.info(f"Added ancestor: {base_artifact.metadata.name} (ID: {base_model_id})")
+
+        # Recursively traverse ancestors of the base model
+        traverse_ancestors(base_model_id)
+
+    def traverse_descendants(model_id: str) -> None:
+        """Recursively find and add all descendant models (children that use this as base)."""
+        child_records = memory.find_child_models(model_id)
+
+        for child_record in child_records:
+            child_id = child_record.artifact.metadata.id
+
+            # Skip if already processed
+            if child_id in seen_node_ids:
+                # Still need to add edge if not already present
+                edge_exists = any(
+                    e.from_node_artifact_id == model_id and
+                    e.to_node_artifact_id == child_id and
+                    e.relationship == "base_model"
+                    for e in edges
                 )
-                nodes.append(base_model_node)
-                seen_node_ids.add(base_model_id)
-
-            # Add edge: base_model -> current_model
-            edge = ArtifactLineageEdge(
-                from_node_artifact_id=base_model_id,
-                to_node_artifact_id=artifact_id,
-                relationship="base_model",
-            )
-            edges.append(edge)
-
-            logger.info(f"Found base model {base_model_name} (ID: {base_model_id}) for artifact {artifact_id}")
-        else:
-            # Base model not in registry - add as external reference
-            # Use consistent external ID generation for HuggingFace compatibility
-            external_id = _generate_external_id("model", base_model_name)
-
-            # Check for duplicates before adding
-            if external_id not in seen_node_ids:
-                external_node = ArtifactLineageNode(
-                    artifact_id=external_id,
-                    name=base_model_name,
-                    source="config_json" if lineage and lineage.base_model_name else "model_metadata",
-                    metadata={"external": "true", "note": "Not in registry"},
-                )
-                nodes.append(external_node)
-                seen_node_ids.add(external_id)
-
-            edge = ArtifactLineageEdge(
-                from_node_artifact_id=external_id,
-                to_node_artifact_id=artifact_id,
-                relationship="base_model",
-            )
-            edges.append(edge)
-
-            logger.info(f"Base model {base_model_name} not in registry, added as external reference")
-
-    # 5. Add dataset nodes and edges
-    # Track which dataset names we've processed to avoid duplicates
-    def _normalize_name(name: str) -> str:
-        """Normalize dataset name for comparison (strip and lowercase)."""
-        return name.strip().lower() if name else ""
-    
-    def _generate_external_id(prefix: str, name: str) -> str:
-        """
-        Generate consistent external ID for HuggingFace artifacts.
-        Ensures same artifact gets same ID across different queries (for "same graph" requirement).
-        Uses HuggingFace naming conventions: lowercase, hyphens for spaces/slashes.
-        """
-        # Normalize to HuggingFace format: lowercase, replace spaces/slashes with hyphens
-        normalized = name.strip().lower().replace(' ', '-').replace('/', '-').replace('_', '-')
-        # Remove any duplicate hyphens
-        while '--' in normalized:
-            normalized = normalized.replace('--', '-')
-        # Remove leading/trailing hyphens
-        normalized = normalized.strip('-')
-        return f"external-{prefix}-{normalized}"
-
-    seen_dataset_names = set()
-
-    # First, use cached dataset_ids if available
-    if lineage and lineage.dataset_ids:
-        # Use cached IDs from linking
-        for dataset_id in lineage.dataset_ids:
-            if dataset_id in seen_node_ids:
-                continue  # Skip duplicates
-
-            dataset_artifact = memory.get_artifact(ArtifactType.DATASET, dataset_id)
-            if dataset_artifact:
-                seen_node_ids.add(dataset_id)
-                # Track the name so we don't process it again in fallback
-                seen_dataset_names.add(_normalize_name(dataset_artifact.metadata.name))
-                
-                dataset_node = ArtifactLineageNode(
-                    artifact_id=dataset_id,
-                    name=dataset_artifact.metadata.name,
-                    source="config_json",
-                    metadata={"repository_url": dataset_artifact.data.url} if dataset_artifact.data.url else None,
-                )
-                nodes.append(dataset_node)
-
-                # Add edge: dataset -> current_model
-                edge = ArtifactLineageEdge(
-                    from_node_artifact_id=dataset_id,
-                    to_node_artifact_id=artifact_id,
-                    relationship="training_dataset",
-                )
-                edges.append(edge)
-
-                logger.info(f"Using cached dataset_id {dataset_id} for lineage")
-
-    # Fallback: search by name for any datasets not yet linked
-    dataset_names_to_process = lineage.dataset_names if lineage else []
-    for dataset_name in dataset_names_to_process:
-        # Skip if we already processed this dataset name (via dataset_ids)
-        if _normalize_name(dataset_name) in seen_dataset_names:
-            continue
-        
-        dataset_record = memory.find_dataset_by_name(dataset_name)
-
-        if dataset_record:
-            dataset_id = dataset_record.artifact.metadata.id
-
-            # Skip if already added from cached IDs or by name
-            if dataset_id in seen_node_ids:
-                seen_dataset_names.add(_normalize_name(dataset_name))
+                if not edge_exists:
+                    edge = ArtifactLineageEdge(
+                        from_node_artifact_id=model_id,
+                        to_node_artifact_id=child_id,
+                        relationship="base_model",
+                    )
+                    edges.append(edge)
                 continue
 
-            seen_node_ids.add(dataset_id)
-            seen_dataset_names.add(_normalize_name(dataset_name))
+            # Add child node
+            add_model_node(child_id, child_record.artifact, "config_json")
 
-            # Dataset exists in registry
-            dataset_node = ArtifactLineageNode(
-                artifact_id=dataset_id,
-                name=dataset_record.artifact.metadata.name,
-                source="config_json",
-                metadata={"repository_url": dataset_record.artifact.data.url} if dataset_record.artifact.data.url else None,
-            )
-            nodes.append(dataset_node)
-
-            # Add edge: dataset -> current_model
+            # Add edge: parent -> child
             edge = ArtifactLineageEdge(
-                from_node_artifact_id=dataset_id,
-                to_node_artifact_id=artifact_id,
-                relationship="training_dataset",
+                from_node_artifact_id=model_id,
+                to_node_artifact_id=child_id,
+                relationship="base_model",
             )
             edges.append(edge)
 
-            logger.info(f"Found dataset {dataset_name} (ID: {dataset_id}) for artifact {artifact_id}")
-        else:
-            # Dataset not in registry - add as external reference
-            # Use consistent external ID generation for HuggingFace compatibility
-            external_id = _generate_external_id("dataset", dataset_name)
+            logger.info(f"Added descendant: {child_record.artifact.metadata.name} (ID: {child_id})")
 
-            # Check for duplicates using the external ID
-            if external_id in seen_node_ids:
-                continue  # Skip duplicate external dataset
+            # Recursively traverse descendants of this child
+            traverse_descendants(child_id)
 
-            seen_node_ids.add(external_id)
-            seen_dataset_names.add(_normalize_name(dataset_name))
+    # 3. Start building the graph from the queried artifact
+    add_model_node(artifact_id, artifact, "config_json")
 
-            external_node = ArtifactLineageNode(
-                artifact_id=external_id,
-                name=dataset_name,
-                source="config_json",
-                metadata={"external": "true", "note": "Not in registry", "type": "dataset"},
-            )
-            nodes.append(external_node)
+    # 4. Traverse UP to find all ancestors (base models)
+    traverse_ancestors(artifact_id)
 
-            edge = ArtifactLineageEdge(
-                from_node_artifact_id=external_id,
-                to_node_artifact_id=artifact_id,
-                relationship="training_dataset",
-            )
-            edges.append(edge)
+    # 5. Traverse DOWN to find all descendants (child models)
+    traverse_descendants(artifact_id)
 
-            logger.info(f"Dataset {dataset_name} not in registry, added as external reference")
+    # 6. Also traverse descendants of all ancestors (to get siblings and cousins)
+    # This ensures we get the complete graph
+    for node in list(nodes):  # Use list() to avoid modifying during iteration
+        if node.artifact_id != artifact_id:
+            traverse_descendants(node.artifact_id)
 
-    # 6. Add old-style relationships (dataset_id, code_id) from ModelRecord
-    # These come from README parsing, not config.json
-    if model_record:
-        # Helper to check if an edge already exists
-        def edge_exists(from_id: str, to_id: str, rel: str) -> bool:
-            return any(
-                e.from_node_artifact_id == from_id
-                and e.to_node_artifact_id == to_id
-                and e.relationship == rel
-                for e in edges
-            )
-
-        # Add old-style dataset relationship (from README)
-        if model_record.dataset_id:
-            dataset_artifact = memory.get_artifact(ArtifactType.DATASET, model_record.dataset_id)
-            if dataset_artifact:
-                # Only add if not already in nodes (avoid duplicates with config.json lineage)
-                if model_record.dataset_id not in seen_node_ids:
-                    dataset_node = ArtifactLineageNode(
-                        artifact_id=model_record.dataset_id,
-                        name=dataset_artifact.metadata.name,
-                        source="model_metadata",
-                        metadata={"repository_url": dataset_artifact.data.url} if dataset_artifact.data.url else None,
-                    )
-                    nodes.append(dataset_node)
-                    seen_node_ids.add(model_record.dataset_id)
-                    logger.info(f"Added old-style dataset relationship: {model_record.dataset_id}")
-
-                # Add edge if it doesn't already exist
-                if not edge_exists(model_record.dataset_id, artifact_id, "training_dataset"):
-                    edge = ArtifactLineageEdge(
-                        from_node_artifact_id=model_record.dataset_id,
-                        to_node_artifact_id=artifact_id,
-                        relationship="training_dataset",
-                    )
-                    edges.append(edge)
-        elif model_record.dataset_name:
-            # External dataset from README
-            # Use consistent external ID generation (same as config.json) for "same graph" requirement
-            external_id = _generate_external_id("dataset", model_record.dataset_name)
-            if external_id not in seen_node_ids:
-                dataset_node = ArtifactLineageNode(
-                    artifact_id=external_id,
-                    name=model_record.dataset_name,
-                    source="model_metadata",
-                    metadata={"external": "true", "note": "From README"},
-                )
-                nodes.append(dataset_node)
-                seen_node_ids.add(external_id)
-                logger.info(f"Added old-style external dataset relationship: {model_record.dataset_name}")
-
-            if not edge_exists(external_id, artifact_id, "training_dataset"):
-                edge = ArtifactLineageEdge(
-                    from_node_artifact_id=external_id,
-                    to_node_artifact_id=artifact_id,
-                    relationship="training_dataset",
-                )
-                edges.append(edge)
-
-        # Add old-style code relationship (from README)
-        if model_record.code_id:
-            code_artifact = memory.get_artifact(ArtifactType.CODE, model_record.code_id)
-            if code_artifact:
-                # Only add if not already in nodes
-                if model_record.code_id not in seen_node_ids:
-                    code_node = ArtifactLineageNode(
-                        artifact_id=model_record.code_id,
-                        name=code_artifact.metadata.name,
-                        source="model_metadata",
-                        metadata={"repository_url": code_artifact.data.url} if code_artifact.data.url else None,
-                    )
-                    nodes.append(code_node)
-                    seen_node_ids.add(model_record.code_id)
-                    logger.info(f"Added old-style code relationship: {model_record.code_id}")
-
-                # Add edge if it doesn't already exist
-                if not edge_exists(model_record.code_id, artifact_id, "implemented_with"):
-                    edge = ArtifactLineageEdge(
-                        from_node_artifact_id=model_record.code_id,
-                        to_node_artifact_id=artifact_id,
-                        relationship="implemented_with",
-                    )
-                    edges.append(edge)
-        elif model_record.code_name:
-             # External code from README
-            # Use consistent external ID generation for HuggingFace compatibility
-            external_id = _generate_external_id("code", model_record.code_name)
-            if external_id not in seen_node_ids:
-                code_node = ArtifactLineageNode(
-                    artifact_id=external_id,
-                    name=model_record.code_name,
-                    source="model_metadata",
-                    metadata={"external": "true", "note": "From README"},
-                )
-                nodes.append(code_node)
-                seen_node_ids.add(external_id)
-                logger.info(f"Added old-style external code relationship: {model_record.code_name}")
-
-            if not edge_exists(external_id, artifact_id, "implemented_with"):
-                edge = ArtifactLineageEdge(
-                    from_node_artifact_id=external_id,
-                    to_node_artifact_id=artifact_id,
-                    relationship="implemented_with",
-                )
-                edges.append(edge)
-
-    logger.info(f"Built lineage graph for artifact {artifact_id}: {len(nodes)} nodes, {len(edges)} edges")
+    logger.info(f"Built complete lineage graph for artifact {artifact_id}: {len(nodes)} nodes, {len(edges)} edges")
 
     return ArtifactLineageGraph(nodes=nodes, edges=edges)

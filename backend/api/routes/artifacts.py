@@ -20,8 +20,8 @@ import asyncio
 import os
 import re
 import tempfile
-import time
 import threading
+import time
 from typing import List
 from urllib.parse import urlparse
 
@@ -32,6 +32,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
 from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
+from backend.lambda_utils import is_lambda_environment
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactLineageEdge,
                             ArtifactLineageGraph, ArtifactLineageNode,
@@ -40,7 +41,6 @@ from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             SimpleLicenseCheckRequest)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory, s3
-from backend.lambda_utils import is_lambda_environment
 
 router = APIRouter(tags=["artifacts"])
 
@@ -345,7 +345,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
             name = record.artifact.metadata.name
             test_readme = None
             if record.artifact.metadata.type == ArtifactType.MODEL:
-                readme = memory.get_model_readme(record.artifact.metadata.id)
+                readme = memory.get_model_readme(record.artifact.metadata.id)  # type: ignore[attr-defined]
             else:
                 readme = "temp"
             if readme is not None and len(readme) > 10:
@@ -1243,7 +1243,7 @@ async def get_artifact_lineage(
 
     def traverse_ancestors(model_id: str) -> None:
         """Recursively find and add all ancestor models (base models)."""
-        model_record = memory.get_model_record(model_id)
+        model_record = memory.get_model_record(model_id)  # type: ignore[attr-defined]
         if not model_record:
             return
 
@@ -1263,7 +1263,7 @@ async def get_artifact_lineage(
                 base_model_name = model_record.base_model_name
 
             if base_model_name:
-                base_record = memory.find_model_by_name(base_model_name)
+                base_record = memory.find_model_by_name(base_model_name)  # type: ignore[attr-defined]
                 if base_record:
                     base_model_id = base_record.artifact.metadata.id
 
@@ -1293,7 +1293,7 @@ async def get_artifact_lineage(
 
     def traverse_descendants(model_id: str) -> None:
         """Recursively find and add all descendant models (children that use this as base)."""
-        child_records = memory.find_child_models(model_id)
+        child_records = memory.find_child_models(model_id)  # type: ignore[attr-defined]
 
         for child_record in child_records:
             child_id = child_record.artifact.metadata.id

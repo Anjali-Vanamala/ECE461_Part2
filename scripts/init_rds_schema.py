@@ -51,8 +51,9 @@ if missing_vars:
 
 # Import after setting up environment
 try:
-    from backend.storage.rds_postgres import _init_database, _get_engine
     from sqlalchemy import inspect
+
+    from backend.storage.rds_postgres import _get_engine, _init_database
 except ImportError as e:
     print(f"❌ Error importing RDS backend: {e}")
     print("Make sure you have installed: pip install sqlalchemy psycopg2-binary")

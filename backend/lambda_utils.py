@@ -16,4 +16,3 @@ def is_lambda_environment() -> bool:
     return os.getenv("COMPUTE_BACKEND") == "lambda" or bool(
         os.getenv("AWS_LAMBDA_FUNCTION_NAME")
     )
-

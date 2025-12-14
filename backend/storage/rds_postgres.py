@@ -9,19 +9,13 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from urllib.parse import quote_plus
 from typing import Dict, Iterable, List, Optional
+from urllib.parse import quote_plus
 
 try:
-    from sqlalchemy import (
-        JSON,
-        String,
-        create_engine,
-        Column,
-        Index,
-    )
+    from sqlalchemy import JSON, Column, Index, String, create_engine
     from sqlalchemy.ext.declarative import declarative_base
-    from sqlalchemy.orm import sessionmaker, Session
+    from sqlalchemy.orm import Session, sessionmaker
     from sqlalchemy.pool import NullPool
     SQLALCHEMY_AVAILABLE = True
 except ImportError:
@@ -30,20 +24,15 @@ except ImportError:
     Session = None
 
 try:
-    import psycopg2
+    import psycopg2  # noqa: F401
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
 
-from backend.models import (
-    Artifact,
-    ArtifactID,
-    ArtifactMetadata,
-    ArtifactQuery,
-    ArtifactType,
-    ModelRating,
-)
-from backend.storage.records import CodeRecord, DatasetRecord, ModelRecord
+from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
+                            ArtifactQuery, ArtifactType, ModelRating)
+from backend.storage.records import (CodeRecord, DatasetRecord, LineageMetadata,
+                                     ModelRecord)
 
 # Database configuration
 RDS_ENDPOINT = os.getenv("RDS_ENDPOINT")
@@ -61,7 +50,7 @@ else:
 
 # Define model only if Base is available
 if Base is not None:
-    class ArtifactModel(Base):
+    class ArtifactModel(Base):  # type: ignore[misc, valid-type]
         """SQLAlchemy model for artifacts table."""
         __tablename__ = "artifacts"
 
@@ -104,11 +93,11 @@ def _get_database_url() -> str:
         raise ValueError("RDS_ENDPOINT environment variable is required")
     if not RDS_PASSWORD:
         raise ValueError("RDS_PASSWORD environment variable is required")
-    
+
     # URL encode username and password to handle special characters
     encoded_username = quote_plus(RDS_USERNAME)
     encoded_password = quote_plus(RDS_PASSWORD)
-    
+
     return f"postgresql://{encoded_username}:{encoded_password}@{RDS_ENDPOINT}:{RDS_PORT}/{RDS_DB_NAME}"
 
 
@@ -142,10 +131,10 @@ def _init_database():
         # Only initialize if RDS is configured
         if not RDS_ENDPOINT or not RDS_PASSWORD:
             return  # Skip initialization if not configured
-        
+
         if Base is None:
             raise RuntimeError("SQLAlchemy Base not initialized - SQLAlchemy may not be installed")
-        
+
         Base.metadata.create_all(bind=_get_engine())
         print(f"[RDS PostgreSQL] Database initialized - Endpoint: {RDS_ENDPOINT}, DB: {RDS_DB_NAME}")
     except Exception as e:
@@ -246,7 +235,10 @@ def save_artifact(
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
     code_url: Optional[str] = None,
+    readme: Optional[str] = None,
     processing_status: Optional[str] = None,
+    lineage: Optional[LineageMetadata] = None,
+    base_model_name: Optional[str] = None,
 ) -> Artifact:
     """Insert or update an artifact entry."""
     session = _get_session()
@@ -288,7 +280,7 @@ def save_artifact(
                     existing.processing_status = processing_status
                 elif not existing.processing_status:
                     existing.processing_status = "completed"
-            
+
             model_obj = existing
         else:
             # Insert new
@@ -318,7 +310,7 @@ def save_artifact(
         # Link dataset/code by name if IDs not set
         if artifact_type == ArtifactType.MODEL and (dataset_name or code_name):
             _link_dataset_code_by_name(session, model_obj, dataset_name, code_name)
-        
+
         session.commit()
         print(f"[RDS PostgreSQL] Saved artifact: {artifact_type.value}:{artifact_id}")
 
@@ -372,7 +364,7 @@ def _update_models_with_dataset(dataset_id: str, dataset_name: str, dataset_url:
     normalized_name = _normalized(dataset_name)
     if not normalized_name:
         return
-    
+
     session = _get_session()
     try:
         models = session.query(ArtifactModel).filter(
@@ -381,7 +373,7 @@ def _update_models_with_dataset(dataset_id: str, dataset_name: str, dataset_url:
         ).filter(
             ArtifactModel.dataset_id.is_(None)
         ).all()
-        
+
         for model in models:
             model.dataset_id = dataset_id
             model.dataset_url = dataset_url
@@ -398,7 +390,7 @@ def _update_models_with_code(code_id: str, code_name: str, code_url: str) -> Non
     normalized_name = _normalized(code_name)
     if not normalized_name:
         return
-    
+
     session = _get_session()
     try:
         models = session.query(ArtifactModel).filter(
@@ -407,7 +399,7 @@ def _update_models_with_code(code_id: str, code_name: str, code_url: str) -> Non
         ).filter(
             ArtifactModel.code_id.is_(None)
         ).all()
-        
+
         for model in models:
             model.code_id = code_id
             model.code_url = code_url

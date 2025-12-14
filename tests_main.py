@@ -2245,6 +2245,7 @@ class TestLambdaEnvironment:
     def test_is_lambda_environment_with_compute_backend(self):
         """Test is_lambda_environment() returns True when COMPUTE_BACKEND=lambda."""
         from unittest.mock import patch
+
         from backend.lambda_utils import is_lambda_environment
 
         with patch.dict("os.environ", {"COMPUTE_BACKEND": "lambda"}, clear=False):
@@ -2253,6 +2254,7 @@ class TestLambdaEnvironment:
     def test_is_lambda_environment_with_aws_lambda_function_name(self):
         """Test is_lambda_environment() returns True when AWS_LAMBDA_FUNCTION_NAME is set."""
         from unittest.mock import patch
+
         from backend.lambda_utils import is_lambda_environment
 
         with patch.dict("os.environ", {"AWS_LAMBDA_FUNCTION_NAME": "test-function"}, clear=False):
@@ -2261,6 +2263,7 @@ class TestLambdaEnvironment:
     def test_is_lambda_environment_returns_false_when_not_lambda(self):
         """Test is_lambda_environment() returns False when not in Lambda environment."""
         from unittest.mock import patch
+
         from backend.lambda_utils import is_lambda_environment
 
         with patch.dict("os.environ", {}, clear=False):
@@ -2279,10 +2282,12 @@ class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
 
     async def test_artifact_registration_works_in_lambda(self):
         """Test that artifact registration works correctly in Lambda environment."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
+        from fastapi.testclient import TestClient
+
         from backend.app import app
         from backend.storage import memory
-        from fastapi.testclient import TestClient
 
         with patch.dict("os.environ", {"COMPUTE_BACKEND": "lambda"}, clear=False), \
              patch("backend.api.routes.artifacts.compute_model_artifact") as mock_compute:
@@ -2302,11 +2307,13 @@ class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
 
     async def test_artifact_registration_works_in_ecs(self):
         """Test that artifact registration works correctly in ECS environment."""
-        from unittest.mock import patch, MagicMock
+        import os
+        from unittest.mock import MagicMock, patch
+
+        from fastapi.testclient import TestClient
+
         from backend.app import app
         from backend.storage import memory
-        from fastapi.testclient import TestClient
-        import os
 
         # Clear Lambda flag
         original = os.environ.pop("COMPUTE_BACKEND", None)

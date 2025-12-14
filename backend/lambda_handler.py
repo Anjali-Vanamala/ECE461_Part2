@@ -7,8 +7,8 @@ using Mangum, enabling it to run on AWS Lambda with API Gateway.
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 
 # Set Lambda environment flag before importing app
 os.environ["COMPUTE_BACKEND"] = "lambda"
@@ -20,7 +20,7 @@ except ImportError:
         "mangum is required for Lambda deployment. Install with: pip install mangum"
     )
 
-from backend.app import app
+from backend.app import app  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,4 +37,3 @@ handler = Mangum(
 )
 
 logger.info("Lambda handler initialized successfully")
-

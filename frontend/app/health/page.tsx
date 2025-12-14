@@ -731,16 +731,16 @@ export default function HealthPage() {
                             <Tooltip key={backendKey}>
                               <TooltipTrigger asChild>
                                 <span>
-                                  <Button
-                                    variant={selectedBackend === backendKey ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => setSelectedBackend(backendKey)}
-                                    disabled={downloadBenchmarkRunning}
-                                    className="gap-2"
-                                  >
-                                    <Server className="h-4 w-4" />
-                                    {backend.name}
-                                  </Button>
+                            <Button
+                              variant={selectedBackend === backendKey ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setSelectedBackend(backendKey)}
+                              disabled={downloadBenchmarkRunning}
+                              className="gap-2"
+                            >
+                              <Server className="h-4 w-4" />
+                              {backend.name}
+                            </Button>
                                 </span>
                               </TooltipTrigger>
                               {downloadBenchmarkRunning && (
@@ -1127,7 +1127,7 @@ export default function HealthPage() {
                                 return (
                                   <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                                     {diff.percentage}% ({diff.faster} faster)
-                                  </span>
+                                </span>
                                 )
                               })()}
                             </td>
@@ -1150,7 +1150,7 @@ export default function HealthPage() {
                                 return (
                                   <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                                     {diff.percentage}% ({diff.faster} faster)
-                                  </span>
+                                </span>
                                 )
                               })()}
                             </td>
@@ -1173,7 +1173,7 @@ export default function HealthPage() {
                                 return (
                                   <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                                     {diff.percentage}% ({diff.faster} faster)
-                                  </span>
+                                </span>
                                 )
                               })()}
                             </td>
@@ -1196,7 +1196,7 @@ export default function HealthPage() {
                                 return (
                                   <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                                     {diff.percentage}% ({diff.faster} faster)
-                                  </span>
+                                </span>
                                 )
                               })()}
                             </td>
@@ -1220,7 +1220,7 @@ export default function HealthPage() {
                                 return (
                                   <span className={isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                                     {diff.toFixed(2)}%
-                                  </span>
+                                </span>
                                 )
                               })()}
                             </td>
@@ -1243,7 +1243,7 @@ export default function HealthPage() {
                                 return (
                                   <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
                                     {diff.percentage}% ({diff.faster} faster)
-                                  </span>
+                                </span>
                                 )
                               })()}
                             </td>

@@ -8,7 +8,7 @@ name: CD - Deploy Frontend to AWS Amplify
 # - AWS Amplify app connected to this GitHub repository
 # - GitHub OIDC role with Amplify permissions (amplify:StartJob, amplify:GetApp, amplify:GetBranch)
 # - GitHub secret: AWS_IAM_ROLE_ARN (reused from backend)
-# - GitHub secret: AMPLIFY_APP_ID (optional - will auto-detect if not provided)
+# - GitHub secret: AMPLIFY_APP_ID (required - your Amplify App ID from AWS Console)
 
 on:
   push:
@@ -58,35 +58,24 @@ jobs:
       - name: Get Amplify App ID
         id: get-amplify-app
         run: |
-          # Try to use provided App ID, otherwise auto-detect from repository
-          if [ -n "${{ secrets.AMPLIFY_APP_ID }}" ]; then
-            echo "APP_ID=${{ secrets.AMPLIFY_APP_ID }}" >> $GITHUB_OUTPUT
-            echo "Using provided Amplify App ID"
-          else
-            # Auto-detect Amplify app by repository name/URL
-            REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
-            APP_ID=$(aws amplify list-apps \
-              --region ${{ env.AWS_REGION }} \
-              --query "apps[?repository=='https://github.com/${{ github.repository }}'].appId" \
-              --output text | head -n1)
-            
-            if [ -z "$APP_ID" ] || [ "$APP_ID" == "None" ]; then
-              # Try alternative detection by app name
-              APP_ID=$(aws amplify list-apps \
-                --region ${{ env.AWS_REGION }} \
-                --query "apps[?name=='$REPO_NAME' || name=='ece461-frontend'].appId" \
-                --output text | head -n1)
-            fi
-            
-            if [ -z "$APP_ID" ] || [ "$APP_ID" == "None" ]; then
-              echo "❌ Could not find Amplify App ID"
-              echo "Please set AMPLIFY_APP_ID secret or ensure Amplify app is connected to this repository"
-              exit 1
-            fi
-            
-            echo "APP_ID=$APP_ID" >> $GITHUB_OUTPUT
-            echo "Auto-detected Amplify App ID: $APP_ID"
+          # Require AMPLIFY_APP_ID secret (auto-detection requires amplify:ListApps permission)
+          if [ -z "${{ secrets.AMPLIFY_APP_ID }}" ]; then
+            echo "❌ AMPLIFY_APP_ID secret is required"
+            echo ""
+            echo "To fix this:"
+            echo "1. Go to your GitHub repository settings > Secrets and variables > Actions"
+            echo "2. Add a new secret named: AMPLIFY_APP_ID"
+            echo "3. Set the value to your Amplify App ID (found in AWS Amplify Console)"
+            echo ""
+            echo "To find your Amplify App ID:"
+            echo "- Go to AWS Amplify Console: https://console.aws.amazon.com/amplify/home?region=${{ env.AWS_REGION }}"
+            echo "- Select your app"
+            echo "- The App ID is shown in the app details or URL"
+            exit 1
           fi
+          
+          echo "APP_ID=${{ secrets.AMPLIFY_APP_ID }}" >> $GITHUB_OUTPUT
+          echo "✅ Using Amplify App ID from secret"
 
       - name: Trigger Amplify deployment
         run: |

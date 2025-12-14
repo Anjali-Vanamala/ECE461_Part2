@@ -1,3 +1,7 @@
+"""
+Pydantic models for representing system and component health,
+including metrics, logs, issues, timelines, and aggregated summaries.
+"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -11,6 +15,7 @@ HealthMetricMap = Dict[str, HealthMetricValue]
 
 
 class HealthStatus(str, Enum):
+    """Enumeration of health status levels."""
     OK = "ok"
     DEGRADED = "degraded"
     CRITICAL = "critical"
@@ -18,12 +23,14 @@ class HealthStatus(str, Enum):
 
 
 class HealthTimelineEntry(BaseModel):
+    """Time-series entry for a health metric."""
     bucket: datetime = Field(..., description="Start timestamp of the sampled bucket (UTC)")
     value: float = Field(..., description="Observed value for the bucket")
     unit: Optional[str] = Field(None, description="Unit associated with the metric value")
 
 
 class HealthIssue(BaseModel):
+    """Representation of a health issue or alert."""
     code: str = Field(..., description="Machine readable issue identifier")
     severity: str = Field(..., description="Issue severity", pattern="^(info|warning|error)$")
     summary: str = Field(..., description="Short description of the issue")
@@ -31,6 +38,7 @@ class HealthIssue(BaseModel):
 
 
 class HealthLogReference(BaseModel):
+    """Reference to a health-related log file or stream."""
     label: str = Field(..., description="Human readable log descriptor")
     url: str = Field(..., description="Direct link to download or tail the referenced log")
     tail_available: Optional[bool] = Field(None, description="Indicates whether streaming tail access is supported")
@@ -38,6 +46,7 @@ class HealthLogReference(BaseModel):
 
 
 class HealthComponentBrief(BaseModel):
+    """Brief summary of a health component's status."""
     id: str = Field(..., description="Stable identifier for the component")
     display_name: Optional[str] = Field(None, description="Human readable component name")
     status: HealthStatus = Field(..., description="Component status")
@@ -46,6 +55,7 @@ class HealthComponentBrief(BaseModel):
 
 
 class HealthComponentDetail(BaseModel):
+    """Detailed information about a health component."""
     id: str = Field(..., description="Stable identifier for the component")
     display_name: Optional[str] = Field(None, description="Human readable component name")
     status: HealthStatus = Field(..., description="Component status")
@@ -67,6 +77,7 @@ class HealthComponentDetail(BaseModel):
 
 
 class HealthRequestSummary(BaseModel):
+    """Summary of API request activity over a time window."""
     window_start: datetime = Field(..., description="Beginning of the aggregation window (UTC)")
     window_end: datetime = Field(..., description="End of the aggregation window (UTC)")
     total_requests: Optional[int] = Field(
@@ -86,12 +97,14 @@ class HealthRequestSummary(BaseModel):
 
 
 class HealthComponentCollection(BaseModel):
+    """Collection of detailed health components."""
     components: List[HealthComponentDetail] = Field(..., description="Detailed diagnostics per component")
     generated_at: datetime = Field(..., description="Timestamp when the report was created (UTC)")
     window_minutes: int = Field(..., ge=5, description="Observation window applied to the component metrics")
 
 
 class HealthSummaryResponse(BaseModel):
+    """Aggregated health summary for the system."""
     status: HealthStatus = Field(..., description="Aggregate health classification")
     checked_at: datetime = Field(..., description="Timestamp when the health snapshot was generated (UTC)")
     window_minutes: int = Field(..., ge=5, description="Size of the trailing observation window in minutes")

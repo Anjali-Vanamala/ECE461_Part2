@@ -13,6 +13,7 @@ from typing import MutableMapping, Optional, cast
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+# pylint: disable=invalid-name
 try:
     import boto3  # type: ignore
 except Exception:
@@ -31,6 +32,7 @@ class LoggingMiddleware:
     """Simple request/response logger for ASGI apps."""
 
     def __init__(self, app: ASGIApp) -> None:
+        """Initialize the logging middleware."""
         self.app = app
         self.cloudwatch = None
         if CLOUDWATCH_AVAILABLE and boto3 is not None:
@@ -41,6 +43,7 @@ class LoggingMiddleware:
                 self.cloudwatch = None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """ASGI entry point for the middleware."""
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
@@ -69,6 +72,7 @@ class LoggingMiddleware:
         body_store: list[bytes] = []
 
         async def receive_wrapper():
+            """Wrap the receive callable to capture the request body."""
             message = await receive()
 
             if message.get("type") == "http.request":
@@ -87,6 +91,7 @@ class LoggingMiddleware:
             return message
 
         async def send_wrapper(message: MutableMapping[str, object]) -> None:
+            """Wrap the send callable to capture the response status."""
             if message.get("type") == "http.response.start":
                 status_holder["status"] = cast(Optional[int], message.get("status"))
             await send(message)
@@ -135,6 +140,7 @@ class LoggingMiddleware:
             raise
 
     def _log_success(self, method: str, path: str, status: int, duration: float, client: str | None = None) -> None:
+        """Log a successful request."""
         duration_ms = duration * 1000
         if LOG_LEVEL >= 1:
             logger.info(f"Request: {method} {path} | Status: {status} | Duration: {duration_ms:.2f} ms")
@@ -150,6 +156,7 @@ class LoggingMiddleware:
             logger.debug(json.dumps(debug_payload))
 
     def _log_error(self, method: str, path: str, exc: Exception, client: str | None = None) -> None:
+        """Log a request that resulted in an error."""
         if LOG_LEVEL >= 1:
             logger.info(f"Error: {method} {path} -> {exc}")
         if LOG_LEVEL >= 2:
@@ -163,6 +170,7 @@ class LoggingMiddleware:
             logger.debug(json.dumps(debug_payload))
 
     def _send_metrics(self, method: str, path: str, status: int, *, success: bool) -> None:
+        """Send metrics to CloudWatch if available."""
         if not self.cloudwatch:
             return
         try:
@@ -186,4 +194,5 @@ class LoggingMiddleware:
 
 
 def setup_logging(app: ASGIApp) -> ASGIApp:
+    """Wrap the ASGI app with logging middleware."""
     return LoggingMiddleware(app)

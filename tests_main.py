@@ -1,4 +1,8 @@
-# import parse_categories
+"""
+Test suite for the entire repository. Most involves unit tests for various
+functions or functionalities. Class labels indicate the function or functionality
+being tested. Runs on PR through GitHub Actions.
+"""
 import json
 from datetime import datetime, timedelta
 from unittest import IsolatedAsyncioTestCase
@@ -22,29 +26,28 @@ from metrics.size import (SIZE_WEIGHTS, calculate_net_size_score,
                           calculate_size_scores, extract_model_id_from_url,
                           get_detailed_size_score, get_model_size_for_scoring)
 
-"""
-Usage Instructions:
 
-Dependencies:
-Install pytest in terminal: pip install pytest
+class TestSizeScore:
+    """
+    Usage Instructions:
 
-Commands:
-Run a certain test (ex: just test_add_1):           pytest test_example.py::Test_Add::test_add_1 -v
-Run a certain class of tests (ex: just Test_Add):   pytest test_example.py::Test_Add -v
-Run all the tests in the file:                      pytest test_example.py -v
+    Dependencies:
+    Install pytest in terminal: pip install pytest
 
-Test Suite for Data Quality and Code Quality Functions
+    Commands:
+    Run a certain test (ex: just test_add_1):           pytest test_example.py::testAdd::test_add_1 -v
+    Run a certain class of tests (ex: just test_Add):   pytest test_example.py::testAdd -v
+    Run all the tests in the file:                      pytest test_example.py -v
 
-Disclaimer:
-Test cases were developed with Claude Sonnet 4 assistance due to the complexity of manually
-constructing realistic test data and calculating accurate scoring thresholds. Since our code
-structure doesn't support passing in real URLs in a test suite, AI assistance was used to:
-    1. Generate realistic API response structures mirroring HF and GitHub data
-    2. Calculate expected scores based on weighted metrics in our quality functions
-"""
+    Test Suite for Data Quality and Code Quality Functions
 
-
-class Test_Size_Score:
+    Disclaimer:
+    Test cases were developed with Claude Sonnet 4 assistance due to the complexity of manually
+    constructing realistic test data and calculating accurate scoring thresholds. Since our code
+    structure doesn't support passing in real URLs in a test suite, AI assistance was used to:
+        1. Generate realistic API response structures mirroring HF and GitHub data
+        2. Calculate expected scores based on weighted metrics in our quality functions
+    """
     def test_gpt2_size_score(self):
         """Test size calculation for GPT-2 model"""
         raw_model_url = "https://huggingface.co/gpt2"
@@ -60,6 +63,7 @@ class Test_Size_Score:
             assert abs(size_scores[device] - expected) < 0.02
 
     def test_ms_large_size_score(self):
+        """Test size calculation for Microsoft DialoGPT-large model"""
         raw_model_url = "https://huggingface.co/microsoft/DialoGPT-large"
         size_scores, net_size_score, size_latency = metrics.size.calculate_size_score(raw_model_url)
         # T5-small should use default 0.5GB
@@ -73,8 +77,12 @@ class Test_Size_Score:
             assert abs(size_scores[device] - expected) < 0.01
 
 
-class Test_Dataset_Quality:  # Model tests
+class TestDatasetQuality:  # Model tests
+    """
+    Test cases for data quality metric.
+    """
     def test_model_good(self):  # Good data quality case
+        """Test case for good data quality scoring."""
         api_info = {
             'cardData': {
                 'license': 'MIT',
@@ -108,6 +116,7 @@ class Test_Dataset_Quality:  # Model tests
         assert score >= 0.9  # Test only the score
 
     def test_dataset_poor(self):  # Poor data quality case
+        """Test case for poor data quality scoring."""
         api_info = {
             'cardData': {},
             'createdAt': (datetime.now() - timedelta(days=800)).isoformat() + 'Z'
@@ -118,6 +127,7 @@ class Test_Dataset_Quality:  # Model tests
         assert score <= 0.3
 
     def test_dataset_good(self):  # Good data quality case
+        """Test case for good data quality scoring."""
         api_info = {
             'cardData': {
                 'license': 'MIT',
@@ -143,6 +153,7 @@ class Test_Dataset_Quality:  # Model tests
         assert score >= 0.8
 
     def test_dataset_bad(self):  # Poor data quality case
+        """Test case for poor data quality scoring."""
         api_info = {
             'cardData': {},
             'createdAt': (datetime.now() - timedelta(days=900)).isoformat() + 'Z'
@@ -153,8 +164,11 @@ class Test_Dataset_Quality:  # Model tests
         assert score <= 0.3
 
 
-class Test_Code_Quality:  # Github repo tests
+class TestCodeQuality:  # Github repo tests
+    """
+    Test cases for code quality metric."""
     def test_code_good(self):  # Good code quality case
+        """Test case for good code quality scoring."""
         model_info = {}  # Empty if no model
         code_info = {'stargazers_count': 50000, 'forks_count': 15000}  # GitHub data
         model_readme = """  # Empty if no model
@@ -169,6 +183,7 @@ class Test_Code_Quality:  # Github repo tests
         assert score >= 0.8
 
     def test_code_bad(self):  # Poor code quality case
+        """Test case for poor code quality scoring."""
         model_info = {}
         code_info = {'stargazers_count': 5, 'forks_count': 1}
         model_readme = ""
@@ -177,28 +192,34 @@ class Test_Code_Quality:  # Github repo tests
         assert score <= 0.3
 
 
-class Test_performanceclaims:
+class Testperformanceclaims:
+    """Test cases for performance claims metric."""
     def test_bert(self):
+        """Test performance claims for BERT model"""
         model_url = "https://huggingface.co/google-bert/bert-base-uncased"
         score, latency = performance_claims(model_url)
         # sample output : 0.92
         assert ((0.92 - .8) <= score <= 1 or score == 0.5)  # really big acceptance bc it's ai and ai sucks
 
     def test_audience(self):
+        """Test performance claims for Audience Classifier model"""
         model_url = "https://huggingface.co/parvk11/audience_classifier_model"
         score, latency = performance_claims(model_url)
         # sample output: 0.15
         assert (0 <= score <= (.6))
 
     def test_whispertiny(self):
+        """Test performance claims for Whisper Tiny model"""
         model_url = "https://huggingface.co/openai/whisper-tiny/tree/main"
         score, latency = performance_claims(model_url)
         # sample output: 0.80
         assert ((0.80 - 0.2) <= score <= (0.80 + 0.2))
 
 
-class Test_datasetandcodescore:
+class Testdatasetandcodescore:
+    """Test cases for dataset and code score metric."""
     def test_bert(self):
+        """Test dataset and code score for BERT model"""
         code_url = "https://github.com/google-research/bert"
         dataset_url = "https://huggingface.co/datasets/bookcorpus/bookcorpus"
         model_readme = """
@@ -212,6 +233,7 @@ class Test_datasetandcodescore:
         assert ((1 - 0.2) <= score <= 1 or score == 0.6)
 
     def test_no_urls(self):
+        """Test dataset and code score with no URLs"""
         code_url = ""
         dataset_url = ""
         model_readme = """
@@ -221,8 +243,10 @@ class Test_datasetandcodescore:
         assert (score == 0)
 
 
-class Test_inputmissingdataset:
+class Testinputmissingdataset:
+    """Test cases for input module's dataset finding functionality."""
     def test_seen(self):
+        """Test finding dataset from seen URLs."""
         # Use bert-base-uncased from sample_input
         # Put the known dataset into seen
         seen_set = {"https://huggingface.co/datasets/bookcorpus/bookcorpus"}
@@ -237,14 +261,17 @@ class Test_inputmissingdataset:
         assert (found == "https://huggingface.co/datasets/bookcorpus/bookcorpus")
 
     def test_notseen(self):
+        """Test not finding dataset from unseen URLs."""
         seen_set = {"https://huggingface.co/datasets/bookcorpus/bookcorpus"}
         readme = "This is a readme. We used dataset image-net.org"
         found = find_dataset(readme, seen_set)
         assert (found == "")
 
 
-class Test_Size:
+class TestSize:
+    """Test cases for size metric."""
     def test_bert_base_uncased(self):
+        """Test size calculation for BERT base uncased model"""
         # Expected NET score (weighted average), not just raspberry_pi score
         # raspberry_pi: 0.2 * 0.15 = 0.03
         # jetson_nano: 0.6 * 0.15 = 0.09
@@ -258,6 +285,7 @@ class Test_Size:
         assert actual_size <= (min(1, expected_size + max_deviation)) and actual_size >= (max(0, expected_size - max_deviation))
 
     def test_audience_classifier_model(self):
+        """Test size calculation for Audience Classifier model"""
         # Expected NET score (weighted average)
         # raspberry_pi: 0.75 * 0.15 = 0.1125
         # jetson_nano: 0.875 * 0.15 = 0.13125
@@ -271,6 +299,7 @@ class Test_Size:
         assert actual_size <= (min(1, expected_size + max_deviation)) and actual_size >= (max(0, expected_size - max_deviation))
 
     def test_whisper_tiny(self):
+        """Test size calculation for Whisper Tiny model"""
         # Expected NET score (weighted average)
         # raspberry_pi: 0.9 * 0.15 = 0.135
         # jetson_nano: 0.95 * 0.15 = 0.1425
@@ -284,6 +313,7 @@ class Test_Size:
         assert actual_size <= (min(1, expected_size + max_deviation)) and actual_size >= (max(0, expected_size - max_deviation))
 
     def test_calculate_size_score_with_dict_input(self):
+        """Test calculate_size_score with dictionary input."""
         model_input = {'model_id': 'google-bert/bert-base-uncased'}
         scores, net_score, latency = calculate_size_score(model_input)
         assert isinstance(scores, dict)
@@ -291,6 +321,7 @@ class Test_Size:
         assert latency >= 0
 
     def test_calculate_size_score_with_empty_dict(self):
+        """Test calculate_size_score with empty dictionary input."""
         model_input = {}
         scores, net_score, latency = calculate_size_score(model_input)
         assert scores == {}
@@ -298,6 +329,7 @@ class Test_Size:
         assert latency == 0
 
     def test_calculate_size_score_with_name_dict(self):
+        """Test calculate_size_score with 'name' key in dictionary input."""
         model_input = {'name': 'google-bert/bert-base-uncased'}
         scores, net_score, latency = calculate_size_score(model_input)
         assert isinstance(scores, dict)
@@ -305,6 +337,7 @@ class Test_Size:
         assert latency >= 0
 
     def test_calculate_size_score_with_url_dict(self):
+        """Test calculate_size_score with 'url' key in dictionary input."""
         model_input = {'url': 'https://huggingface.co/google-bert/bert-base-uncased'}
         scores, net_score, latency = calculate_size_score(model_input)
         assert isinstance(scores, dict)
@@ -312,6 +345,7 @@ class Test_Size:
         assert latency >= 0
 
     def test_size_score_with_none_input(self):
+        """Test calculate_size_score with None input."""
         try:
             scores, net_score, latency = calculate_size_score(None)
             assert scores == {}
@@ -321,6 +355,7 @@ class Test_Size:
             pass
 
     def test_main_function_execution(self):
+        """Test main function execution for size score calculation."""
         model_id = "google-bert/bert-base-uncased"
         scores1, net1, latency1 = calculate_size_score(model_id)
         result = get_detailed_size_score(model_id)
@@ -334,6 +369,7 @@ class Test_Size:
 
     # ---------- Tests for get_detailed_size_score ----------
     def test_get_detailed_size_score(self):
+        """Test get_detailed_size_score function."""
         model_id = "google-bert/bert-base-uncased"
         result = get_detailed_size_score(model_id)
         assert 'size_score' in result
@@ -347,6 +383,7 @@ class Test_Size:
         assert result['size_score_latency'] >= 0
 
     def test_detailed_size_score_with_dict_input(self):
+        """Test get_detailed_size_score with dictionary input."""
         model_input = {'model_id': 'google-bert/bert-base-uncased'}
         result = get_detailed_size_score(model_input)
         assert 'size_score' in result
@@ -355,6 +392,7 @@ class Test_Size:
         assert isinstance(result['size_score_latency'], int)
 
     def test_detailed_size_score_with_empty_dict(self):
+        """Test get_detailed_size_score with empty dictionary input."""
         model_input = {}
         result = get_detailed_size_score(model_input)
         expected_scores = {
@@ -368,6 +406,7 @@ class Test_Size:
 
     # ---------- Tests for calculate_size_score_cached ----------
     def test_calculate_size_score_cached(self):
+        """Test calculate_size_score_cached function."""
         model_id = "google-bert/bert-base-uncased"
         scores1, net1, latency1 = calculate_size_score_cached(model_id)
         scores2, net2, latency2 = calculate_size_score_cached(model_id)
@@ -375,6 +414,7 @@ class Test_Size:
         assert scores1 == scores2
 
     def test_cache_clearing_and_reuse(self):
+        """Test cache clearing and reuse in calculate_size_score_cached."""
         from metrics.size import _size_cache
         _size_cache.clear()
         model_id = "google-bert/bert-base-uncased"
@@ -386,6 +426,7 @@ class Test_Size:
         assert net1 == net2
 
     def test_size_cache_with_different_inputs(self):
+        """Test size cache handling with different input formats."""
         from metrics.size import _size_cache
         _size_cache.clear()
         model_id = "google-bert/bert-base-uncased"
@@ -397,12 +438,14 @@ class Test_Size:
 
     # ---------- Tests for extract_model_id_from_url ----------
     def test_extract_model_id_from_url(self):
+        """Test extract_model_id_from_url function."""
         assert extract_model_id_from_url("https://huggingface.co/google/bert") == "google/bert"
         assert extract_model_id_from_url("https://huggingface.co/google/bert/tree/main") == "google/bert"
         assert extract_model_id_from_url("google/bert") == "google/bert"
         assert extract_model_id_from_url("random text") == "random text"
 
     def test_extract_model_id_with_none_url(self):
+        """Test extract_model_id_from_url with None input."""
         try:
             result = extract_model_id_from_url(None)
             assert result is None
@@ -411,6 +454,7 @@ class Test_Size:
 
     # ---------- Tests for calculate_net_size_score ----------
     def test_calculate_net_size_score(self):
+        """Test calculate_net_size_score function."""
         size_scores = {
             'raspberry_pi': 0.2,
             'jetson_nano': 0.6,
@@ -422,16 +466,19 @@ class Test_Size:
         assert abs(net_score - expected) < 0.01
 
     def test_net_size_score_with_empty_dict(self):
+        """Test calculate_net_size_score with empty dictionary."""
         net_score = calculate_net_size_score({})
         assert net_score == 0.0
 
     def test_net_size_score_with_partial_scores(self):
+        """Test calculate_net_size_score with partial size scores."""
         size_scores = {'raspberry_pi': 0.5, 'jetson_nano': 0.7}
         net_score = calculate_net_size_score(size_scores)
         assert abs(net_score - 0.18) < 0.01
 
     # ---------- Tests for get_model_size_for_scoring ----------
     def test_get_model_size_for_scoring_known_models(self):
+        """Test get_model_size_for_scoring with known model IDs."""
         size = get_model_size_for_scoring("google-bert/bert-base-uncased")
         assert size == 1.6
         size = get_model_size_for_scoring("parvk11/audience_classifier_model")
@@ -440,15 +487,18 @@ class Test_Size:
         assert size == 0.2
 
     def test_get_model_size_for_scoring_unknown_model(self):
+        """Test get_model_size_for_scoring with unknown model ID."""
         size = get_model_size_for_scoring("unknown/model-123")
         assert size >= 0
 
     def test_get_model_size_api_error_handling(self):
+        """Test get_model_size_for_scoring handling of API errors."""
         size = get_model_size_for_scoring("invalid/model/name/with/slashes")
         assert size >= 0
 
     # ---------- Tests for calculate_size_scores ----------
     def test_calculate_size_scores_function(self):
+        """Test calculate_size_scores function."""
         model_id = "google-bert/bert-base-uncased"
         size_scores, net_score, latency = calculate_size_scores(model_id)
         assert isinstance(size_scores, dict)
@@ -464,10 +514,12 @@ class Test_Size:
         assert size_scores['aws_server'] == 1.0
 
     def test_size_calculation_edge_cases(self):
+        """Test calculate_size_scores with edge case model IDs."""
         size = get_model_size_for_scoring("some/unknown-model")
         assert size >= 0
 
     def test_size_threshold_calculations(self):
+        """Test size score thresholds for known models."""
         model_id = "google-bert/bert-base-uncased"
         size_scores, net_score, latency = calculate_size_scores(model_id)
         assert abs(size_scores['raspberry_pi'] - 0.2) < 0.1
@@ -476,6 +528,7 @@ class Test_Size:
         assert size_scores['aws_server'] == 1.0
 
     def test_size_calculation_with_very_small_model(self):
+        """Test calculate_size_scores with a very small model."""
         model_id = "openai/whisper-tiny"
         size_scores, net_score, latency = calculate_size_scores(model_id)
         assert size_scores['raspberry_pi'] > 0.8
@@ -484,6 +537,7 @@ class Test_Size:
         assert size_scores['aws_server'] == 1.0
 
     def test_calculate_size_scores_with_invalid_model(self):
+        """Test calculate_size_scores with an invalid model ID."""
         model_id = "completely/invalid-model-name-12345"
         size_scores, net_score, latency = calculate_size_scores(model_id)
         assert isinstance(size_scores, dict)
@@ -496,6 +550,7 @@ class Test_Size:
 
     # ---------- Tests for SIZE_WEIGHTS ----------
     def test_size_weight_constants(self):
+        """Test SIZE_WEIGHTS constant values."""
         expected_weights = ['raspberry_pi', 'jetson_nano', 'desktop_pc', 'aws_server']
         for weight in expected_weights:
             assert weight in SIZE_WEIGHTS
@@ -504,8 +559,10 @@ class Test_Size:
         assert abs(total_weight - 1.0) < 0.01
 
 
-class Test_Ramp_Up_Time:
+class TestRampUpTime:
+    """Test cases for ramp up time metric."""
     def test_bert_base_uncased(self):
+        """Test ramp up time calculation for BERT base uncased model"""
         max_deviation = 0.15
         expected_ramp_up_time = 0.9
         api_info = {'_id': '621ffdc036468d709f174338', 'id': 'google-bert/bert-base-uncased', 'private': False, 'pipeline_tag': 'fill-mask', 'library_name': 'transformers', 'tags': ['transformers', 'pytorch', 'tf', 'jax', 'rust', 'coreml', 'onnx', 'safetensors', 'bert', 'fill-mask', 'exbert', 'en', 'dataset:bookcorpus', 'dataset:wikipedia', 'arxiv:1810.04805', 'license:apache-2.0', 'autotrain_compatible', 'endpoints_compatible', 'region:us'], 'downloads': 55363806, 'likes': 2417, 'modelId': 'google-bert/bert-base-uncased', 'author': 'google-bert', 'sha': '86b5e0934494bd15c9632b12f734a8a67f723594', 'lastModified': '2024-02-19T11:06:12.000Z', 'gated': False, 'disabled': False, 'mask_token': '[MASK]', 'widgetData': [{'text': 'Paris is the [MASK] of France.'}, {'text': 'The goal of life is [MASK].'}], 'model-index': None, 'config': {'architectures': ['BertForMaskedLM'], 'model_type': 'bert', 'tokenizer_config': {}}, 'cardData': {'language': 'en', 'tags': ['exbert'], 'license': 'apache-2.0', 'datasets': ['bookcorpus', 'wikipedia']}, 'transformersInfo': {'auto_model': 'AutoModelForMaskedLM', 'pipeline_tag': 'fill-mask', 'processor': 'AutoTokenizer'}, 'siblings': [{'rfilename': '.gitattributes'}, {'rfilename': 'LICENSE'}, {'rfilename': 'README.md'}, {'rfilename': 'config.json'}, {'rfilename': 'coreml/fill-mask/float32_model.mlpackage/Data/com.apple.CoreML/model.mlmodel'}, {'rfilename': 'coreml/fill-mask/float32_model.mlpackage/Data/com.apple.CoreML/weights/weight.bin'}, {'rfilename': 'coreml/fill-mask/float32_model.mlpackage/Manifest.json'}, {'rfilename': 'flax_model.msgpack'}, {'rfilename': 'model.onnx'}, {'rfilename': 'model.safetensors'}, {'rfilename': 'pytorch_model.bin'}, {'rfilename': 'rust_model.ot'}, {'rfilename': 'tf_model.h5'}, {'rfilename': 'tokenizer.json'}, {'rfilename': 'tokenizer_config.json'}, {'rfilename': 'vocab.txt'}], 'spaces': ['mteb/leaderboard', 'microsoft/HuggingGPT', 'Vision-CAIR/minigpt4', 'lnyan/stablediffusion-infinity', 'multimodalart/latentdiffusion', 'mrfakename/MeloTTS', 'Salesforce/BLIP', 'shi-labs/Versatile-Diffusion', 'yizhangliu/Grounded-Segment-Anything', 'stepfun-ai/Step1X-Edit', 'H-Liu1997/TANGO', 'xinyu1205/recognize-anything', 'cvlab/zero123-live', 'hilamanor/audioEditing', 'alexnasa/Chain-of-Zoom', 'AIGC-Audio/AudioGPT', 'Audio-AGI/AudioSep', 'm-ric/chunk_visualizer', 'jadechoghari/OpenMusic', 'DAMO-NLP-SG/Video-LLaMA', 'gligen/demo', 'declare-lab/mustango', 'Yiwen-ntu/MeshAnything', 'exbert-project/exbert', 'shgao/EditAnything', 'LiruiZhao/Diffree', 'Vision-CAIR/MiniGPT-v2', 'multimodalart/MoDA-fast-talking-head', 'nikigoli/countgd', 'Yuliang/ECON', 'THUdyh/Oryx', 'IDEA-Research/Grounded-SAM', 'merve/Grounding_DINO_demo', 'OpenSound/CapSpeech-TTS', 'Awiny/Image2Paragraph', 'ShilongLiu/Grounding_DINO_demo', 'yangheng/Super-Resolution-Anime-Diffusion', 'liuyuan-pal/SyncDreamer', 'XiangJinYu/SPO', 'sam-hq-team/sam-hq', 'haotiz/glip-zeroshot-demo', 'Nick088/Audio-SR', 'TencentARC/BrushEdit', 'nateraw/lavila', 'abyildirim/inst-inpaint', 'Yiwen-ntu/MeshAnythingV2', 'Pinwheel/GLIP-BLIP-Object-Detection-VQA', 'Junfeng5/GLEE_demo', 'shi-labs/Matting-Anything', 'fffiloni/Video-Matting-Anything', 'burtenshaw/autotrain-mcp', 'Vision-CAIR/MiniGPT4-video', 'linfanluntan/Grounded-SAM', 'magicr/BuboGPT', 'WensongSong/Insert-Anything', 'nvidia/audio-flamingo-2', 'clip-italian/clip-italian-demo', 'OpenGVLab/InternGPT', 'mteb/leaderboard_legacy', '3DTopia/3DTopia', 'yenniejun/tokenizers-languages', 'mmlab-ntu/relate-anything-model', 'amphion/PicoAudio', 'byeongjun-park/HarmonyView', 'keras-io/bert-semantic-similarity', 'MirageML/sjc', 'fffiloni/vta-ldm', 'NAACL2022/CLIP-Caption-Reward', 'society-ethics/model-card-regulatory-check', 'fffiloni/miniGPT4-Video-Zero', 'AIGC-Audio/AudioLCM', 'Gladiator/Text-Summarizer', 'SVGRender/DiffSketcher', 'ethanchern/Anole', 'zakaria-narjis/photo-enhancer', 'LittleFrog/IntrinsicAnything', 'milyiyo/reimagine-it', 'ysharma/text-to-image-to-video', 'acmc/whatsapp-chats-finetuning-formatter', 'OpenGVLab/VideoChatGPT', 'ZebangCheng/Emotion-LLaMA', 'sonalkum/GAMA', 'topdu/OpenOCR-Demo', 'kaushalya/medclip-roco', 'AIGC-Audio/Make_An_Audio', 'avid-ml/bias-detection', 'RitaParadaRamos/SmallCapDemo', 'llizhx/TinyGPT-V', 'codelion/Grounding_DINO_demo', 'flosstradamus/FluxMusicGUI', 'kevinwang676/E2-F5-TTS', 'bartar/tokenizers', 'Tinkering/Pytorch-day-prez', 'sasha/BiasDetection', 'Pusheen/LoCo', 'Jingkang/EgoGPT-7B', 'flax-community/koclip', 'TencentARC/VLog', 'ynhe/AskAnything', 'Volkopat/SegmentAnythingxGroundingDINO'], 'createdAt': '2022-03-02T23:29:04.000Z', 'safetensors': {'parameters': {'F32': 110106428}, 'total': 110106428}, 'inference': 'warm', 'usedStorage': 13397387509}
@@ -513,6 +570,7 @@ class Test_Ramp_Up_Time:
         assert actual_ramp_up_time <= (min(1, expected_ramp_up_time + max_deviation)) and actual_ramp_up_time >= (max(0, expected_ramp_up_time - max_deviation))
 
     def test_audience_classifier_model(self):
+        """Test ramp up time calculation for Audience Classifier model"""
         max_deviation = 0.15
         expected_ramp_up_time = 0.25
         api_info = {'_id': '680b142fdcaaa11198e4b6fc', 'id': 'parvk11/audience_classifier_model', 'private': False, 'pipeline_tag': 'text-classification', 'library_name': 'transformers', 'tags': ['transformers', 'pytorch', 'distilbert', 'text-classification', 'arxiv:1910.09700', 'autotrain_compatible', 'endpoints_compatible', 'region:us'], 'downloads': 47, 'likes': 0, 'modelId': 'parvk11/audience_classifier_model', 'author': 'parvk11', 'sha': '210023808352e2c7a1ef73025ca6d96b89f20fbe', 'lastModified': '2025-04-25T04:49:24.000Z', 'gated': False, 'disabled': False, 'mask_token': '[MASK]', 'widgetData': [{'text': 'I like you. I love you'}], 'model-index': None, 'config': {'architectures': ['DistilBertForSequenceClassification'], 'model_type': 'distilbert', 'tokenizer_config': {'cls_token': '[CLS]', 'mask_token': '[MASK]', 'pad_token': '[PAD]', 'sep_token': '[SEP]', 'unk_token': '[UNK]'}, 'additional_chat_templates': {}}, 'cardData': {'library_name': 'transformers', 'tags': []}, 'transformersInfo': {'auto_model': 'AutoModelForSequenceClassification', 'pipeline_tag': 'text-classification', 'processor': 'AutoTokenizer'}, 'siblings': [{'rfilename': '.gitattributes'}, {'rfilename': 'README.md'}, {'rfilename': 'config.json'}, {'rfilename': 'pytorch_model.bin'}, {'rfilename': 'special_tokens_map.json'}, {'rfilename': 'tokenizer_config.json'}, {'rfilename': 'vocab.txt'}], 'spaces': [], 'createdAt': '2025-04-25T04:48:47.000Z', 'usedStorage': 535693286}
@@ -520,6 +578,7 @@ class Test_Ramp_Up_Time:
         assert actual_ramp_up_time <= (min(1, expected_ramp_up_time + max_deviation)) and actual_ramp_up_time >= (max(0, expected_ramp_up_time - max_deviation))
 
     def test_whisper_tiny(self):
+        """Test ramp up time calculation for Whisper Tiny model"""
         max_deviation = 0.15
         expected_ramp_up_time = 0.85
         api_info = {'_id': '63314bb6acb6472115aa55a9', 'id': 'openai/whisper-tiny', 'private': False, 'pipeline_tag': 'automatic-speech-recognition', 'library_name': 'transformers', 'tags': ['transformers', 'pytorch', 'tf', 'jax', 'safetensors', 'whisper', 'automatic-speech-recognition', 'audio', 'hf-asr-leaderboard', 'en', 'zh', 'de', 'es', 'ru', 'ko', 'fr', 'ja', 'pt', 'tr', 'pl', 'ca', 'nl', 'ar', 'sv', 'it', 'id', 'hi', 'fi', 'vi', 'he', 'uk', 'el', 'ms', 'cs', 'ro', 'da', 'hu', 'ta', 'no', 'th', 'ur', 'hr', 'bg', 'lt', 'la', 'mi', 'ml', 'cy', 'sk', 'te', 'fa', 'lv', 'bn', 'sr', 'az', 'sl', 'kn', 'et', 'mk', 'br', 'eu', 'is', 'hy', 'ne', 'mn', 'bs', 'kk', 'sq', 'sw', 'gl', 'mr', 'pa', 'si', 'km', 'sn', 'yo', 'so', 'af', 'oc', 'ka', 'be', 'tg', 'sd', 'gu', 'am', 'yi', 'lo', 'uz', 'fo', 'ht', 'ps', 'tk', 'nn', 'mt', 'sa', 'lb', 'my', 'bo', 'tl', 'mg', 'as', 'tt', 'haw', 'ln', 'ha', 'ba', 'jw', 'su', 'arxiv:2212.04356', 'license:apache-2.0', 'model-index', 'endpoints_compatible', 'region:us'], 'downloads': 524202, 'likes': 367, 'modelId': 'openai/whisper-tiny', 'author': 'openai', 'sha': '169d4a4341b33bc18d8881c4b69c2e104e1cc0af', 'lastModified': '2024-02-29T10:57:33.000Z', 'gated': False, 'disabled': False, 'widgetData': [{'example_title': 'Librispeech sample 1', 'src': 'https://cdn-media.huggingface.co/speech_samples/sample1.flac'}, {'example_title': 'Librispeech sample 2', 'src': 'https://cdn-media.huggingface.co/speech_samples/sample2.flac'}], 'model-index': [{'name': 'whisper-tiny', 'results': [{'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'LibriSpeech (clean)', 'type': 'librispeech_asr', 'config': 'clean', 'split': 'test', 'args': {'language': 'en'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 7.54, 'verified': False}]}, {'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'LibriSpeech (other)', 'type': 'librispeech_asr', 'config': 'other', 'split': 'test', 'args': {'language': 'en'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 17.15, 'verified': False}]}, {'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'Common Voice 11.0', 'type': 'mozilla-foundation/common_voice_11_0', 'config': 'hi', 'split': 'test', 'args': {'language': 'hi'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 141, 'verified': False}]}]}], 'config': {'architectures': ['WhisperForConditionalGeneration'], 'model_type': 'whisper', 'tokenizer_config': {'bos_token': '<|endoftext|>', 'eos_token': '<|endoftext|>', 'pad_token': '<|endoftext|>', 'unk_token': '<|endoftext|>'}}, 'cardData': {'language': ['en', 'zh', 'de', 'es', 'ru', 'ko', 'fr', 'ja', 'pt', 'tr', 'pl', 'ca', 'nl', 'ar', 'sv', 'it', 'id', 'hi', 'fi', 'vi', 'he', 'uk', 'el', 'ms', 'cs', 'ro', 'da', 'hu', 'ta', 'no', 'th', 'ur', 'hr', 'bg', 'lt', 'la', 'mi', 'ml', 'cy', 'sk', 'te', 'fa', 'lv', 'bn', 'sr', 'az', 'sl', 'kn', 'et', 'mk', 'br', 'eu', 'is', 'hy', 'ne', 'mn', 'bs', 'kk', 'sq', 'sw', 'gl', 'mr', 'pa', 'si', 'km', 'sn', 'yo', 'so', 'af', 'oc', 'ka', 'be', 'tg', 'sd', 'gu', 'am', 'yi', 'lo', 'uz', 'fo', 'ht', 'ps', 'tk', 'nn', 'mt', 'sa', 'lb', 'my', 'bo', 'tl', 'mg', 'as', 'tt', 'haw', 'ln', 'ha', 'ba', 'jw', 'su'], 'tags': ['audio', 'automatic-speech-recognition', 'hf-asr-leaderboard'], 'widget': [{'example_title': 'Librispeech sample 1', 'src': 'https://cdn-media.huggingface.co/speech_samples/sample1.flac'}, {'example_title': 'Librispeech sample 2', 'src': 'https://cdn-media.huggingface.co/speech_samples/sample2.flac'}], 'model-index': [{'name': 'whisper-tiny', 'results': [{'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'LibriSpeech (clean)', 'type': 'librispeech_asr', 'config': 'clean', 'split': 'test', 'args': {'language': 'en'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 7.54, 'verified': False}]}, {'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'LibriSpeech (other)', 'type': 'librispeech_asr', 'config': 'other', 'split': 'test', 'args': {'language': 'en'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 17.15, 'verified': False}]}, {'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'Common Voice 11.0', 'type': 'mozilla-foundation/common_voice_11_0', 'config': 'hi', 'split': 'test', 'args': {'language': 'hi'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 141, 'verified': False}]}]}], 'pipeline_tag': 'automatic-speech-recognition', 'license': 'apache-2.0'}, 'transformersInfo': {'auto_model': 'AutoModelForSpeechSeq2Seq', 'pipeline_tag': 'automatic-speech-recognition', 'processor': 'AutoProcessor'}, 'siblings': [{'rfilename': '.gitattributes'}, {'rfilename': 'README.md'}, {'rfilename': 'added_tokens.json'}, {'rfilename': 'config.json'}, {'rfilename': 'flax_model.msgpack'}, {'rfilename': 'generation_config.json'}, {'rfilename': 'merges.txt'}, {'rfilename': 'model.safetensors'}, {'rfilename': 'normalizer.json'}, {'rfilename': 'preprocessor_config.json'}, {'rfilename': 'pytorch_model.bin'}, {'rfilename': 'special_tokens_map.json'}, {'rfilename': 'tf_model.h5'}, {'rfilename': 'tokenizer.json'}, {'rfilename': 'tokenizer_config.json'}, {'rfilename': 'vocab.json'}], 'spaces': ['Ailyth/Multi-voice-TTS-GPT-SoVITS', 'sanchit-gandhi/whisper-jax-spaces', 'Matthijs/whisper_word_timestamps', 'OpenSound/CapSpeech-TTS', 'radames/whisper-word-level-trim', 'lmz/candle-whisper', 'VIDraft/Portrait-Animation', 'gobeldan/insanely-fast-whisper-webui', 'devilent2/whisper-v3-zero', 'kadirnar/Whisper_M2M100_BioGpt', 'speechbox/whisper-speaker-diarization', 'nvidia/audio-flamingo-2', 'Splend1dchan/BreezyVoice-Playground', 'souljoy/ChatPDF', 'ardha27/Youtube-AI-Summarizer', 'mozilla-ai/transcribe', 'innev/whisper-Base', 'JacobLinCool/BreezyVoice', 'joaogante/assisted_generation_benchmarks', 'aetheris-ai/aibom-generator', 'eustlb/whisper-vs-distil-whisper-fr', 'RaviNaik/MultiModal-Phi2', 'kevinwang676/GPT-SoVITS-Trilingual', 'TaiYouWeb/whisper-multi-model', 'hchcsuim/Automatic-Speech-Recognition-Speech-to-Text', 'ghostai1/Audio-Translator', 'CeibalUY/transcribir_audio', 'devilent2/whisper-v3-zero-dev', 'ardha27/VideoAnalyzer', 'Anupam007/Automated-Meeting-Minutes', 'Johnyquest7/medical-transcription-notes', 'renatotn7/editarVideoAtravesDeTexto', 'radames/candle-whisper', 'vakodiya/streamlit-gpt2', 'sampsontan/llama3-rag', 'invincible-jha/MentalHealthVocalBiomarkers', 'lele1894/dubbing', 'Ericboi229-gmx-co-uk/insanely-fast-whisper-webui', 'ranialahassn/languagedetectorWhisper', 'Hamam12/Hoama', 'yolloo/VoiceQ', 'renatotn7/EspacoTeste', 'IstvanPeter/openai-whisper-tiny', 'joaogabriellima/openai-whisper-tiny', 'abrar-adnan/speech-analyzer', 'ahmedghani/Inference-Endpoint-Deployment', 'GiorgiSekhniashvili/geo-whisper', 'reach-vb/whisper_word_timestamps', 'jamesyoung999/whisper_word_timestamps', 'OdiaGenAI/Olive_Whisper_ASR', 'Aryan619348/google-calendar-agent', 'seiching/ainotes', 'filben/transcrever_audio_pt', 'Tonic/WhisperFusionTest', 'sdlc/Multi-Voice', 'ricardo-lsantos/openai-whisper-tiny', 'demomodels/lyrics', 'Tohidichi/Semantic-chunker-yt-vid', 'devilent2/whisper-v3-zero-canary', 'MikeTangoEcho/asrnersbx', 'GatinhoEducado/speech-to-speech-translation', 'RenanOF/AudioTexto', 'Anupam251272/Real-Time-Language-Translator-AI', 'garyd1/AI_Mock_Interview', 'Jwrockon/ArtemisAIWhisper', 'ZealAI/Zeal-AI', 'abdullahbilal-y/ML_Playground_Dashboard', 'Anupam007/RealTime-Meeting-Notes', 'chakchakAI/CrossTalk-Translation-AI', 'Mohammed-Islem/Speech-Processing-Lab-Project-App', 'anushka027/Whispr.ai', 'Draxgabe/acuspeak-demo', 'sebibibaba/Transcripteur-Vocal', 'pareek-joshtalksai/test-hindi-2', 'amurienne/sambot', 'dwitee/ai-powered-symptom-triage', 'KNipun/Whisper-AI-Psychiatric', 'notojasv/voice-assistant-demo', 'yoshcn/openai-whisper-tiny', 'natandiasm/openai-whisper-tiny', 'Bertievidgen/openai-whisper-tiny', 'masterkill888/openai-whisper-tiny', 'awacke1/ASR-openai-whisper-tiny', 'beyond/speech2text', 'KaliJerry/openai-whisper-tiny', 'youngseo/whisper', 'Stevross/openai-whisper-tiny', 'ericckfeng/whisper-Base-Clone', 'ysoheil/whisper_word_timestamps', 'Korla/hsb_stt_demo', 'mackaber/whisper-word-level-trim', 'kevinwang676/whisper_word_timestamps_1', 'mg5812/tuning-whisper', 'mg5812/whisper-tuning', 'futranbg/S2T', 'hiwei/asr-hf-api', 'pablocst/asr-hf-api', 'Auxiliarytrinket/my-speech-to-speech-translation', 'Photon08/summarzation_test', 'Indranil08/test'], 'createdAt': '2022-09-26T06:50:30.000Z', 'safetensors': {'parameters': {'F32': 37760640}, 'total': 37760640}, 'usedStorage': 1831289730}
@@ -527,6 +586,7 @@ class Test_Ramp_Up_Time:
         assert actual_ramp_up_time <= (min(1, expected_ramp_up_time + max_deviation)) and actual_ramp_up_time >= (max(0, expected_ramp_up_time - max_deviation))
 
     def test_bert_base_uncased_testing_no_tags(self):
+        """Test ramp up time calculation for BERT base uncased model with no tags"""
         max_deviation = 0.15
         expected_ramp_up_time = 0.9
         api_info = {'_id': '621ffdc036468d709f174338', 'id': 'google-bert/bert-base-uncased', 'private': False, 'pipeline_tag': 'fill-mask', 'library_name': 'transformers', 't-a-g-s': ['transformers', 'pytorch', 'tf', 'jax', 'rust', 'coreml', 'onnx', 'safetensors', 'bert', 'fill-mask', 'exbert', 'en', 'dataset:bookcorpus', 'dataset:wikipedia', 'arxiv:1810.04805', 'license:apache-2.0', 'autotrain_compatible', 'endpoints_compatible', 'region:us'], 'downloads': 55363806, 'likes': 2417, 'modelId': 'google-bert/bert-base-uncased', 'author': 'google-bert', 'sha': '86b5e0934494bd15c9632b12f734a8a67f723594', 'lastModified': '2024-02-19T11:06:12.000Z', 'gated': False, 'disabled': False, 'mask_token': '[MASK]', 'widgetData': [{'text': 'Paris is the [MASK] of France.'}, {'text': 'The goal of life is [MASK].'}], 'model-index': None, 'config': {'architectures': ['BertForMaskedLM'], 'model_type': 'bert', 'tokenizer_config': {}}, 'cardData': {'language': 'en', 'tags': ['exbert'], 'license': 'apache-2.0', 'datasets': ['bookcorpus', 'wikipedia']}, 'transformersInfo': {'auto_model': 'AutoModelForMaskedLM', 'pipeline_tag': 'fill-mask', 'processor': 'AutoTokenizer'}, 'siblings': [{'rfilename': '.gitattributes'}, {'rfilename': 'LICENSE'}, {'rfilename': 'README.md'}, {'rfilename': 'config.json'}, {'rfilename': 'coreml/fill-mask/float32_model.mlpackage/Data/com.apple.CoreML/model.mlmodel'}, {'rfilename': 'coreml/fill-mask/float32_model.mlpackage/Data/com.apple.CoreML/weights/weight.bin'}, {'rfilename': 'coreml/fill-mask/float32_model.mlpackage/Manifest.json'}, {'rfilename': 'flax_model.msgpack'}, {'rfilename': 'model.onnx'}, {'rfilename': 'model.safetensors'}, {'rfilename': 'pytorch_model.bin'}, {'rfilename': 'rust_model.ot'}, {'rfilename': 'tf_model.h5'}, {'rfilename': 'tokenizer.json'}, {'rfilename': 'tokenizer_config.json'}, {'rfilename': 'vocab.txt'}], 'spaces': ['mteb/leaderboard', 'microsoft/HuggingGPT', 'Vision-CAIR/minigpt4', 'lnyan/stablediffusion-infinity', 'multimodalart/latentdiffusion', 'mrfakename/MeloTTS', 'Salesforce/BLIP', 'shi-labs/Versatile-Diffusion', 'yizhangliu/Grounded-Segment-Anything', 'stepfun-ai/Step1X-Edit', 'H-Liu1997/TANGO', 'xinyu1205/recognize-anything', 'cvlab/zero123-live', 'hilamanor/audioEditing', 'alexnasa/Chain-of-Zoom', 'AIGC-Audio/AudioGPT', 'Audio-AGI/AudioSep', 'm-ric/chunk_visualizer', 'jadechoghari/OpenMusic', 'DAMO-NLP-SG/Video-LLaMA', 'gligen/demo', 'declare-lab/mustango', 'Yiwen-ntu/MeshAnything', 'exbert-project/exbert', 'shgao/EditAnything', 'LiruiZhao/Diffree', 'Vision-CAIR/MiniGPT-v2', 'multimodalart/MoDA-fast-talking-head', 'nikigoli/countgd', 'Yuliang/ECON', 'THUdyh/Oryx', 'IDEA-Research/Grounded-SAM', 'merve/Grounding_DINO_demo', 'OpenSound/CapSpeech-TTS', 'Awiny/Image2Paragraph', 'ShilongLiu/Grounding_DINO_demo', 'yangheng/Super-Resolution-Anime-Diffusion', 'liuyuan-pal/SyncDreamer', 'XiangJinYu/SPO', 'sam-hq-team/sam-hq', 'haotiz/glip-zeroshot-demo', 'Nick088/Audio-SR', 'TencentARC/BrushEdit', 'nateraw/lavila', 'abyildirim/inst-inpaint', 'Yiwen-ntu/MeshAnythingV2', 'Pinwheel/GLIP-BLIP-Object-Detection-VQA', 'Junfeng5/GLEE_demo', 'shi-labs/Matting-Anything', 'fffiloni/Video-Matting-Anything', 'burtenshaw/autotrain-mcp', 'Vision-CAIR/MiniGPT4-video', 'linfanluntan/Grounded-SAM', 'magicr/BuboGPT', 'WensongSong/Insert-Anything', 'nvidia/audio-flamingo-2', 'clip-italian/clip-italian-demo', 'OpenGVLab/InternGPT', 'mteb/leaderboard_legacy', '3DTopia/3DTopia', 'yenniejun/tokenizers-languages', 'mmlab-ntu/relate-anything-model', 'amphion/PicoAudio', 'byeongjun-park/HarmonyView', 'keras-io/bert-semantic-similarity', 'MirageML/sjc', 'fffiloni/vta-ldm', 'NAACL2022/CLIP-Caption-Reward', 'society-ethics/model-card-regulatory-check', 'fffiloni/miniGPT4-Video-Zero', 'AIGC-Audio/AudioLCM', 'Gladiator/Text-Summarizer', 'SVGRender/DiffSketcher', 'ethanchern/Anole', 'zakaria-narjis/photo-enhancer', 'LittleFrog/IntrinsicAnything', 'milyiyo/reimagine-it', 'ysharma/text-to-image-to-video', 'acmc/whatsapp-chats-finetuning-formatter', 'OpenGVLab/VideoChatGPT', 'ZebangCheng/Emotion-LLaMA', 'sonalkum/GAMA', 'topdu/OpenOCR-Demo', 'kaushalya/medclip-roco', 'AIGC-Audio/Make_An_Audio', 'avid-ml/bias-detection', 'RitaParadaRamos/SmallCapDemo', 'llizhx/TinyGPT-V', 'codelion/Grounding_DINO_demo', 'flosstradamus/FluxMusicGUI', 'kevinwang676/E2-F5-TTS', 'bartar/tokenizers', 'Tinkering/Pytorch-day-prez', 'sasha/BiasDetection', 'Pusheen/LoCo', 'Jingkang/EgoGPT-7B', 'flax-community/koclip', 'TencentARC/VLog', 'ynhe/AskAnything', 'Volkopat/SegmentAnythingxGroundingDINO'], 'createdAt': '2022-03-02T23:29:04.000Z', 'safetensors': {'parameters': {'F32': 110106428}, 'total': 110106428}, 'inference': 'warm', 'usedStorage': 13397387509}
@@ -534,8 +594,10 @@ class Test_Ramp_Up_Time:
         assert actual_ramp_up_time <= (min(1, expected_ramp_up_time + max_deviation)) and actual_ramp_up_time >= (max(0, expected_ramp_up_time - max_deviation))
 
 
-class Test_License:
+class TestLicense:
+    """Tests for license compatibility scoring"""
     def test_bert_base_uncased(self):
+        """Test license compatibility scoring for BERT base uncased model"""
         max_deviation = 0.15
         expected_license = 1.0  # Apache 2.0 license - compatible
         model_id = "google-bert/bert-base-uncased"
@@ -543,6 +605,7 @@ class Test_License:
         assert actual_license <= (min(1, expected_license + max_deviation)) and actual_license >= (max(0, expected_license - max_deviation))
 
     def test_audience_classifier_model(self):
+        """Test license compatibility scoring for Audience Classifier model"""
         max_deviation = 0.15
         expected_license = 0.0  # No clear license found - incompatible
         model_id = "parvk11/audience_classifier_model"
@@ -550,6 +613,7 @@ class Test_License:
         assert actual_license <= (min(1, expected_license + max_deviation)) and actual_license >= (max(0, expected_license - max_deviation))
 
     def test_whisper_tiny(self):
+        """Test license compatibility scoring for Whisper Tiny model"""
         max_deviation = 0.15
         expected_license = 1.0  # Apache 2.0 license - compatible
         model_id = "openai/whisper-tiny"
@@ -557,12 +621,13 @@ class Test_License:
         assert actual_license <= (min(1, expected_license + max_deviation)) and actual_license >= (max(0, expected_license - max_deviation))
 
     def test_ambiguous_license_with_positive_indicators(self):
-        # Test case to cover lines 101-117: ambiguous license with positive indicators
+        """Test ambiguous license with positive indicators (lines 101-117)"""
         model_id = "microsoft/DialoGPT-small"
         actual_license, actual_latency = get_license_score(model_id)
         assert actual_license >= 0.0 and actual_license <= 1.0
 
     def test_ambiguous_license_no_positive_indicators(self):
+        """Test ambiguous license with no positive indicators (line 117)"""
         # Test case for no positive indicators (line 117)
         # This is hard to test with real models, so we'll test the function directly
         from metrics.license import analyze_license_text
@@ -573,26 +638,26 @@ class Test_License:
         assert score == 0.0  # Should return 0.0 for no clear license
 
     def test_gated_license_detection(self):
-        # Test gated license detection (line 75)
+        """Test gated license detection (line 75)"""
         from metrics.license import analyze_license_text
         license_text = "This is a gated model requiring access request."
         score = analyze_license_text(license_text)
         assert score == 0.0  # Should return 0.0 for gated licenses
 
     def test_empty_license_text(self):
-        # Test empty license text (line 75)
+        """Test empty license text (line 75)"""
         from metrics.license import analyze_license_text
         score = analyze_license_text("")
         assert score == 0.0
 
     def test_none_license_text(self):
-        # Test None license text
+        """Test None license text (line 75)"""
         from metrics.license import analyze_license_text
         score = analyze_license_text(None)
         assert score == 0.0
 
     def test_extract_license_section_edge_cases(self):
-        # Test edge cases for extract_license_section - FIXED
+        """Test edge cases for extract_license_section"""
         # Empty content
         result = extract_license_section("")
         assert result == ""
@@ -604,28 +669,28 @@ class Test_License:
         assert "random text" in result.lower()
 
     def test_get_license_score_with_dict_input(self):
-        # Test with dictionary input containing model_id
+        """Test with dictionary input containing model_id"""
         model_input = {'model_id': 'google-bert/bert-base-uncased'}
         score, latency = get_license_score(model_input)
         assert 0 <= score <= 1
         assert latency >= 0
 
     def test_get_license_score_with_empty_dict(self):
-        # Test with empty dictionary (should return 0.0)
+        """Test with empty dictionary (should return 0.0)"""
         model_input = {}
         score, latency = get_license_score(model_input)
         assert score == 0.0
         assert latency >= 0
 
     def test_get_license_score_with_url_dict(self):
-        # Test with dictionary input containing URL
+        """Test with dictionary input containing URL"""
         model_input = {'url': 'https://huggingface.co/google-bert/bert-base-uncased'}
         score, latency = get_license_score(model_input)
         assert 0 <= score <= 1
         assert latency >= 0
 
     def test_get_detailed_license_score(self):
-        # Test the detailed license score function (covers lines 306-320)
+        """Test the detailed license score function (covers lines 306-320)"""
         model_id = "google-bert/bert-base-uncased"
         result = get_detailed_license_score(model_id)
 
@@ -638,7 +703,7 @@ class Test_License:
         assert result['license_latency'] >= 0
 
     def test_get_license_score_cached(self):
-        # Test the cached version (covers lines 323-342)
+        """Test the cached version (covers lines 323-342)"""
         model_id = "google-bert/bert-base-uncased"
 
         # First call
@@ -653,14 +718,14 @@ class Test_License:
         assert latency2 <= latency1 or abs(latency2 - latency1) < 100  # Allow small variance
 
     def test_license_with_dict_name(self):
-        # Test with dictionary input containing name
+        """Test with dictionary input containing name"""
         model_input = {'name': 'google-bert/bert-base-uncased'}
         score, latency = get_license_score(model_input)
         assert 0 <= score <= 1
         assert latency >= 0
 
     def test_main_block_coverage(self):
-        # Test to cover the main block (lines 339-342)
+        """Test to cover the main block (lines 339-342)"""
         # We can't easily test the main block directly, but we can test the functions it calls
         model_id = "google-bert/bert-base-uncased"
         score, latency = get_license_score_cached(model_id)
@@ -668,7 +733,7 @@ class Test_License:
         assert latency >= 0
 
     def test_compatible_license_detection(self):
-        # Test various compatible licenses
+        """Test various compatible licenses"""
         from metrics.license import analyze_license_text
         compatible_licenses = [
             "Apache 2.0 license",
@@ -682,7 +747,7 @@ class Test_License:
             assert score == 1.0, f"Failed for: {license_text}"
 
     def test_incompatible_license_detection(self):
-        # Test various incompatible licenses
+        """Test various incompatible licenses"""
         from metrics.license import analyze_license_text
         incompatible_licenses = [
             "GPL v3 license",
@@ -696,7 +761,7 @@ class Test_License:
 
     # NEW TESTS TO COVER MISSING LINES
     def test_ambiguous_license_exact_coverage(self):
-        # Direct test to cover lines 101-117 specifically
+        """Direct test to cover lines 101-117 specifically"""
         from metrics.license import analyze_license_text
 
         # Test case that hits the "ambiguous but positive indicators" path (line 112-115)
@@ -711,7 +776,7 @@ class Test_License:
         assert score == 0.0
 
     def test_download_readme_edge_cases(self):
-        # Test edge cases for download_readme_directly to cover lines 139-140, 159-160
+        """Test edge cases for download_readme_directly to cover lines 139-140, 159-160"""
         from metrics.license import download_readme_directly
 
         # Test with a non-existent model to cover error handling
@@ -719,7 +784,7 @@ class Test_License:
         assert result == ""  # Should return empty string for non-existent models
 
     def test_license_pattern_matching(self):
-        # Test to cover lines 215-216, 220-221 (pattern matching edge cases)
+        """Test to cover lines 215-216, 220-221 (pattern matching edge cases)"""
         from metrics.license import extract_license_section
 
         # Test with various license header formats
@@ -739,7 +804,7 @@ More content
         assert "MIT" in result
 
     def test_cache_functionality(self):
-        # Test to cover lines 323-342 (caching functionality)
+        """Test to cover lines 323-342 (caching functionality)"""
         model_id = "google-bert/bert-base-uncased"
 
         # Clear cache first
@@ -757,7 +822,7 @@ More content
         assert score1 == score2
 
     def test_extract_model_id_edge_cases(self):
-        # Test to cover lines 263-265 (extract_model_id edge cases)
+        """Test to cover lines 263-265 (extract_model_id edge cases)"""
         from metrics.license import extract_model_id_from_url
 
         # Test various URL formats
@@ -766,7 +831,7 @@ More content
         assert extract_model_id_from_url("random text") == "random text"
 
     def test_analyze_license_mixed_signals(self):
-        # Test to cover line 307 and other edge cases
+        """Test to cover line 307 and other edge cases"""
         from metrics.license import analyze_license_text
 
         # Test with both compatible and incompatible licenses (should return 0.0)
@@ -775,7 +840,7 @@ More content
         assert score == 0.0  # Incompatible takes precedence
 
     def test_direct_license_analysis_coverage(self):
-        # Direct test to hit the exact missing lines in analyze_license_text
+        """Direct test to hit the exact missing lines in analyze_license_text"""
         from metrics.license import analyze_license_text
 
         # Test case 1: Empty text (line 75)
@@ -797,8 +862,10 @@ More content
         assert analyze_license_text("random text") == 0.0
 
 
-class Test_Bus_Factor:
+class TestBusFactor:
+    """Tests for bus factor scoring"""
     def test_bert_base_uncased(self):
+        """Test bus factor scoring for BERT base uncased model"""
         max_deviation = 0.15
         expected_bus_factor = 0.95
         api_info = {'_id': '621ffdc036468d709f174338', 'id': 'google-bert/bert-base-uncased', 'private': False, 'pipeline_tag': 'fill-mask', 'library_name': 'transformers', 'tags': ['transformers', 'pytorch', 'tf', 'jax', 'rust', 'coreml', 'onnx', 'safetensors', 'bert', 'fill-mask', 'exbert', 'en', 'dataset:bookcorpus', 'dataset:wikipedia', 'arxiv:1810.04805', 'license:apache-2.0', 'autotrain_compatible', 'endpoints_compatible', 'region:us'], 'downloads': 55363806, 'likes': 2417, 'modelId': 'google-bert/bert-base-uncased', 'author': 'google-bert', 'sha': '86b5e0934494bd15c9632b12f734a8a67f723594', 'lastModified': '2024-02-19T11:06:12.000Z', 'gated': False, 'disabled': False, 'mask_token': '[MASK]', 'widgetData': [{'text': 'Paris is the [MASK] of France.'}, {'text': 'The goal of life is [MASK].'}], 'model-index': None, 'config': {'architectures': ['BertForMaskedLM'], 'model_type': 'bert', 'tokenizer_config': {}}, 'cardData': {'language': 'en', 'tags': ['exbert'], 'license': 'apache-2.0', 'datasets': ['bookcorpus', 'wikipedia']}, 'transformersInfo': {'auto_model': 'AutoModelForMaskedLM', 'pipeline_tag': 'fill-mask', 'processor': 'AutoTokenizer'}, 'siblings': [{'rfilename': '.gitattributes'}, {'rfilename': 'LICENSE'}, {'rfilename': 'README.md'}, {'rfilename': 'config.json'}, {'rfilename': 'coreml/fill-mask/float32_model.mlpackage/Data/com.apple.CoreML/model.mlmodel'}, {'rfilename': 'coreml/fill-mask/float32_model.mlpackage/Data/com.apple.CoreML/weights/weight.bin'}, {'rfilename': 'coreml/fill-mask/float32_model.mlpackage/Manifest.json'}, {'rfilename': 'flax_model.msgpack'}, {'rfilename': 'model.onnx'}, {'rfilename': 'model.safetensors'}, {'rfilename': 'pytorch_model.bin'}, {'rfilename': 'rust_model.ot'}, {'rfilename': 'tf_model.h5'}, {'rfilename': 'tokenizer.json'}, {'rfilename': 'tokenizer_config.json'}, {'rfilename': 'vocab.txt'}], 'spaces': ['mteb/leaderboard', 'microsoft/HuggingGPT', 'Vision-CAIR/minigpt4', 'lnyan/stablediffusion-infinity', 'multimodalart/latentdiffusion', 'mrfakename/MeloTTS', 'Salesforce/BLIP', 'shi-labs/Versatile-Diffusion', 'yizhangliu/Grounded-Segment-Anything', 'stepfun-ai/Step1X-Edit', 'H-Liu1997/TANGO', 'xinyu1205/recognize-anything', 'cvlab/zero123-live', 'hilamanor/audioEditing', 'alexnasa/Chain-of-Zoom', 'AIGC-Audio/AudioGPT', 'Audio-AGI/AudioSep', 'm-ric/chunk_visualizer', 'jadechoghari/OpenMusic', 'DAMO-NLP-SG/Video-LLaMA', 'gligen/demo', 'declare-lab/mustango', 'Yiwen-ntu/MeshAnything', 'exbert-project/exbert', 'shgao/EditAnything', 'LiruiZhao/Diffree', 'Vision-CAIR/MiniGPT-v2', 'multimodalart/MoDA-fast-talking-head', 'nikigoli/countgd', 'Yuliang/ECON', 'THUdyh/Oryx', 'IDEA-Research/Grounded-SAM', 'merve/Grounding_DINO_demo', 'OpenSound/CapSpeech-TTS', 'Awiny/Image2Paragraph', 'ShilongLiu/Grounding_DINO_demo', 'yangheng/Super-Resolution-Anime-Diffusion', 'liuyuan-pal/SyncDreamer', 'XiangJinYu/SPO', 'sam-hq-team/sam-hq', 'haotiz/glip-zeroshot-demo', 'Nick088/Audio-SR', 'TencentARC/BrushEdit', 'nateraw/lavila', 'abyildirim/inst-inpaint', 'Yiwen-ntu/MeshAnythingV2', 'Pinwheel/GLIP-BLIP-Object-Detection-VQA', 'Junfeng5/GLEE_demo', 'shi-labs/Matting-Anything', 'fffiloni/Video-Matting-Anything', 'burtenshaw/autotrain-mcp', 'Vision-CAIR/MiniGPT4-video', 'linfanluntan/Grounded-SAM', 'magicr/BuboGPT', 'WensongSong/Insert-Anything', 'nvidia/audio-flamingo-2', 'clip-italian/clip-italian-demo', 'OpenGVLab/InternGPT', 'mteb/leaderboard_legacy', '3DTopia/3DTopia', 'yenniejun/tokenizers-languages', 'mmlab-ntu/relate-anything-model', 'amphion/PicoAudio', 'byeongjun-park/HarmonyView', 'keras-io/bert-semantic-similarity', 'MirageML/sjc', 'fffiloni/vta-ldm', 'NAACL2022/CLIP-Caption-Reward', 'society-ethics/model-card-regulatory-check', 'fffiloni/miniGPT4-Video-Zero', 'AIGC-Audio/AudioLCM', 'Gladiator/Text-Summarizer', 'SVGRender/DiffSketcher', 'ethanchern/Anole', 'zakaria-narjis/photo-enhancer', 'LittleFrog/IntrinsicAnything', 'milyiyo/reimagine-it', 'ysharma/text-to-image-to-video', 'acmc/whatsapp-chats-finetuning-formatter', 'OpenGVLab/VideoChatGPT', 'ZebangCheng/Emotion-LLaMA', 'sonalkum/GAMA', 'topdu/OpenOCR-Demo', 'kaushalya/medclip-roco', 'AIGC-Audio/Make_An_Audio', 'avid-ml/bias-detection', 'RitaParadaRamos/SmallCapDemo', 'llizhx/TinyGPT-V', 'codelion/Grounding_DINO_demo', 'flosstradamus/FluxMusicGUI', 'kevinwang676/E2-F5-TTS', 'bartar/tokenizers', 'Tinkering/Pytorch-day-prez', 'sasha/BiasDetection', 'Pusheen/LoCo', 'Jingkang/EgoGPT-7B', 'flax-community/koclip', 'TencentARC/VLog', 'ynhe/AskAnything', 'Volkopat/SegmentAnythingxGroundingDINO'], 'createdAt': '2022-03-02T23:29:04.000Z', 'safetensors': {'parameters': {'F32': 110106428}, 'total': 110106428}, 'inference': 'warm', 'usedStorage': 13397387509}
@@ -806,6 +873,7 @@ class Test_Bus_Factor:
         assert actual_bus_factor <= (min(1, expected_bus_factor + max_deviation)) and actual_bus_factor >= (max(0, expected_bus_factor - max_deviation))
 
     def test_audience_classifier_model(self):
+        """Test bus factor scoring for Audience Classifier model"""
         max_deviation = 0.15
         expected_bus_factor = 0.33
         api_info = {'_id': '680b142fdcaaa11198e4b6fc', 'id': 'parvk11/audience_classifier_model', 'private': False, 'pipeline_tag': 'text-classification', 'library_name': 'transformers', 'tags': ['transformers', 'pytorch', 'distilbert', 'text-classification', 'arxiv:1910.09700', 'autotrain_compatible', 'endpoints_compatible', 'region:us'], 'downloads': 47, 'likes': 0, 'modelId': 'parvk11/audience_classifier_model', 'author': 'parvk11', 'sha': '210023808352e2c7a1ef73025ca6d96b89f20fbe', 'lastModified': '2025-04-25T04:49:24.000Z', 'gated': False, 'disabled': False, 'mask_token': '[MASK]', 'widgetData': [{'text': 'I like you. I love you'}], 'model-index': None, 'config': {'architectures': ['DistilBertForSequenceClassification'], 'model_type': 'distilbert', 'tokenizer_config': {'cls_token': '[CLS]', 'mask_token': '[MASK]', 'pad_token': '[PAD]', 'sep_token': '[SEP]', 'unk_token': '[UNK]'}, 'additional_chat_templates': {}}, 'cardData': {'library_name': 'transformers', 'tags': []}, 'transformersInfo': {'auto_model': 'AutoModelForSequenceClassification', 'pipeline_tag': 'text-classification', 'processor': 'AutoTokenizer'}, 'siblings': [{'rfilename': '.gitattributes'}, {'rfilename': 'README.md'}, {'rfilename': 'config.json'}, {'rfilename': 'pytorch_model.bin'}, {'rfilename': 'special_tokens_map.json'}, {'rfilename': 'tokenizer_config.json'}, {'rfilename': 'vocab.txt'}], 'spaces': [], 'createdAt': '2025-04-25T04:48:47.000Z', 'usedStorage': 535693286}
@@ -813,6 +881,7 @@ class Test_Bus_Factor:
         assert actual_bus_factor <= (min(1, expected_bus_factor + max_deviation)) and actual_bus_factor >= (max(0, expected_bus_factor - max_deviation))
 
     def test_whisper_tiny(self):
+        """Test bus factor scoring for Whisper Tiny model"""
         max_deviation = 0.15
         expected_bus_factor = 0.9
         api_info = {'_id': '63314bb6acb6472115aa55a9', 'id': 'openai/whisper-tiny', 'private': False, 'pipeline_tag': 'automatic-speech-recognition', 'library_name': 'transformers', 'tags': ['transformers', 'pytorch', 'tf', 'jax', 'safetensors', 'whisper', 'automatic-speech-recognition', 'audio', 'hf-asr-leaderboard', 'en', 'zh', 'de', 'es', 'ru', 'ko', 'fr', 'ja', 'pt', 'tr', 'pl', 'ca', 'nl', 'ar', 'sv', 'it', 'id', 'hi', 'fi', 'vi', 'he', 'uk', 'el', 'ms', 'cs', 'ro', 'da', 'hu', 'ta', 'no', 'th', 'ur', 'hr', 'bg', 'lt', 'la', 'mi', 'ml', 'cy', 'sk', 'te', 'fa', 'lv', 'bn', 'sr', 'az', 'sl', 'kn', 'et', 'mk', 'br', 'eu', 'is', 'hy', 'ne', 'mn', 'bs', 'kk', 'sq', 'sw', 'gl', 'mr', 'pa', 'si', 'km', 'sn', 'yo', 'so', 'af', 'oc', 'ka', 'be', 'tg', 'sd', 'gu', 'am', 'yi', 'lo', 'uz', 'fo', 'ht', 'ps', 'tk', 'nn', 'mt', 'sa', 'lb', 'my', 'bo', 'tl', 'mg', 'as', 'tt', 'haw', 'ln', 'ha', 'ba', 'jw', 'su', 'arxiv:2212.04356', 'license:apache-2.0', 'model-index', 'endpoints_compatible', 'region:us'], 'downloads': 524202, 'likes': 367, 'modelId': 'openai/whisper-tiny', 'author': 'openai', 'sha': '169d4a4341b33bc18d8881c4b69c2e104e1cc0af', 'lastModified': '2024-02-29T10:57:33.000Z', 'gated': False, 'disabled': False, 'widgetData': [{'example_title': 'Librispeech sample 1', 'src': 'https://cdn-media.huggingface.co/speech_samples/sample1.flac'}, {'example_title': 'Librispeech sample 2', 'src': 'https://cdn-media.huggingface.co/speech_samples/sample2.flac'}], 'model-index': [{'name': 'whisper-tiny', 'results': [{'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'LibriSpeech (clean)', 'type': 'librispeech_asr', 'config': 'clean', 'split': 'test', 'args': {'language': 'en'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 7.54, 'verified': False}]}, {'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'LibriSpeech (other)', 'type': 'librispeech_asr', 'config': 'other', 'split': 'test', 'args': {'language': 'en'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 17.15, 'verified': False}]}, {'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'Common Voice 11.0', 'type': 'mozilla-foundation/common_voice_11_0', 'config': 'hi', 'split': 'test', 'args': {'language': 'hi'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 141, 'verified': False}]}]}], 'config': {'architectures': ['WhisperForConditionalGeneration'], 'model_type': 'whisper', 'tokenizer_config': {'bos_token': '<|endoftext|>', 'eos_token': '<|endoftext|>', 'pad_token': '<|endoftext|>', 'unk_token': '<|endoftext|>'}}, 'cardData': {'language': ['en', 'zh', 'de', 'es', 'ru', 'ko', 'fr', 'ja', 'pt', 'tr', 'pl', 'ca', 'nl', 'ar', 'sv', 'it', 'id', 'hi', 'fi', 'vi', 'he', 'uk', 'el', 'ms', 'cs', 'ro', 'da', 'hu', 'ta', 'no', 'th', 'ur', 'hr', 'bg', 'lt', 'la', 'mi', 'ml', 'cy', 'sk', 'te', 'fa', 'lv', 'bn', 'sr', 'az', 'sl', 'kn', 'et', 'mk', 'br', 'eu', 'is', 'hy', 'ne', 'mn', 'bs', 'kk', 'sq', 'sw', 'gl', 'mr', 'pa', 'si', 'km', 'sn', 'yo', 'so', 'af', 'oc', 'ka', 'be', 'tg', 'sd', 'gu', 'am', 'yi', 'lo', 'uz', 'fo', 'ht', 'ps', 'tk', 'nn', 'mt', 'sa', 'lb', 'my', 'bo', 'tl', 'mg', 'as', 'tt', 'haw', 'ln', 'ha', 'ba', 'jw', 'su'], 'tags': ['audio', 'automatic-speech-recognition', 'hf-asr-leaderboard'], 'widget': [{'example_title': 'Librispeech sample 1', 'src': 'https://cdn-media.huggingface.co/speech_samples/sample1.flac'}, {'example_title': 'Librispeech sample 2', 'src': 'https://cdn-media.huggingface.co/speech_samples/sample2.flac'}], 'model-index': [{'name': 'whisper-tiny', 'results': [{'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'LibriSpeech (clean)', 'type': 'librispeech_asr', 'config': 'clean', 'split': 'test', 'args': {'language': 'en'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 7.54, 'verified': False}]}, {'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'LibriSpeech (other)', 'type': 'librispeech_asr', 'config': 'other', 'split': 'test', 'args': {'language': 'en'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 17.15, 'verified': False}]}, {'task': {'name': 'Automatic Speech Recognition', 'type': 'automatic-speech-recognition'}, 'dataset': {'name': 'Common Voice 11.0', 'type': 'mozilla-foundation/common_voice_11_0', 'config': 'hi', 'split': 'test', 'args': {'language': 'hi'}}, 'metrics': [{'name': 'Test WER', 'type': 'wer', 'value': 141, 'verified': False}]}]}], 'pipeline_tag': 'automatic-speech-recognition', 'license': 'apache-2.0'}, 'transformersInfo': {'auto_model': 'AutoModelForSpeechSeq2Seq', 'pipeline_tag': 'automatic-speech-recognition', 'processor': 'AutoProcessor'}, 'siblings': [{'rfilename': '.gitattributes'}, {'rfilename': 'README.md'}, {'rfilename': 'added_tokens.json'}, {'rfilename': 'config.json'}, {'rfilename': 'flax_model.msgpack'}, {'rfilename': 'generation_config.json'}, {'rfilename': 'merges.txt'}, {'rfilename': 'model.safetensors'}, {'rfilename': 'normalizer.json'}, {'rfilename': 'preprocessor_config.json'}, {'rfilename': 'pytorch_model.bin'}, {'rfilename': 'special_tokens_map.json'}, {'rfilename': 'tf_model.h5'}, {'rfilename': 'tokenizer.json'}, {'rfilename': 'tokenizer_config.json'}, {'rfilename': 'vocab.json'}], 'spaces': ['Ailyth/Multi-voice-TTS-GPT-SoVITS', 'sanchit-gandhi/whisper-jax-spaces', 'Matthijs/whisper_word_timestamps', 'OpenSound/CapSpeech-TTS', 'radames/whisper-word-level-trim', 'lmz/candle-whisper', 'VIDraft/Portrait-Animation', 'gobeldan/insanely-fast-whisper-webui', 'devilent2/whisper-v3-zero', 'kadirnar/Whisper_M2M100_BioGpt', 'speechbox/whisper-speaker-diarization', 'nvidia/audio-flamingo-2', 'Splend1dchan/BreezyVoice-Playground', 'souljoy/ChatPDF', 'ardha27/Youtube-AI-Summarizer', 'mozilla-ai/transcribe', 'innev/whisper-Base', 'JacobLinCool/BreezyVoice', 'joaogante/assisted_generation_benchmarks', 'aetheris-ai/aibom-generator', 'eustlb/whisper-vs-distil-whisper-fr', 'RaviNaik/MultiModal-Phi2', 'kevinwang676/GPT-SoVITS-Trilingual', 'TaiYouWeb/whisper-multi-model', 'hchcsuim/Automatic-Speech-Recognition-Speech-to-Text', 'ghostai1/Audio-Translator', 'CeibalUY/transcribir_audio', 'devilent2/whisper-v3-zero-dev', 'ardha27/VideoAnalyzer', 'Anupam007/Automated-Meeting-Minutes', 'Johnyquest7/medical-transcription-notes', 'renatotn7/editarVideoAtravesDeTexto', 'radames/candle-whisper', 'vakodiya/streamlit-gpt2', 'sampsontan/llama3-rag', 'invincible-jha/MentalHealthVocalBiomarkers', 'lele1894/dubbing', 'Ericboi229-gmx-co-uk/insanely-fast-whisper-webui', 'ranialahassn/languagedetectorWhisper', 'Hamam12/Hoama', 'yolloo/VoiceQ', 'renatotn7/EspacoTeste', 'IstvanPeter/openai-whisper-tiny', 'joaogabriellima/openai-whisper-tiny', 'abrar-adnan/speech-analyzer', 'ahmedghani/Inference-Endpoint-Deployment', 'GiorgiSekhniashvili/geo-whisper', 'reach-vb/whisper_word_timestamps', 'jamesyoung999/whisper_word_timestamps', 'OdiaGenAI/Olive_Whisper_ASR', 'Aryan619348/google-calendar-agent', 'seiching/ainotes', 'filben/transcrever_audio_pt', 'Tonic/WhisperFusionTest', 'sdlc/Multi-Voice', 'ricardo-lsantos/openai-whisper-tiny', 'demomodels/lyrics', 'Tohidichi/Semantic-chunker-yt-vid', 'devilent2/whisper-v3-zero-canary', 'MikeTangoEcho/asrnersbx', 'GatinhoEducado/speech-to-speech-translation', 'RenanOF/AudioTexto', 'Anupam251272/Real-Time-Language-Translator-AI', 'garyd1/AI_Mock_Interview', 'Jwrockon/ArtemisAIWhisper', 'ZealAI/Zeal-AI', 'abdullahbilal-y/ML_Playground_Dashboard', 'Anupam007/RealTime-Meeting-Notes', 'chakchakAI/CrossTalk-Translation-AI', 'Mohammed-Islem/Speech-Processing-Lab-Project-App', 'anushka027/Whispr.ai', 'Draxgabe/acuspeak-demo', 'sebibibaba/Transcripteur-Vocal', 'pareek-joshtalksai/test-hindi-2', 'amurienne/sambot', 'dwitee/ai-powered-symptom-triage', 'KNipun/Whisper-AI-Psychiatric', 'notojasv/voice-assistant-demo', 'yoshcn/openai-whisper-tiny', 'natandiasm/openai-whisper-tiny', 'Bertievidgen/openai-whisper-tiny', 'masterkill888/openai-whisper-tiny', 'awacke1/ASR-openai-whisper-tiny', 'beyond/speech2text', 'KaliJerry/openai-whisper-tiny', 'youngseo/whisper', 'Stevross/openai-whisper-tiny', 'ericckfeng/whisper-Base-Clone', 'ysoheil/whisper_word_timestamps', 'Korla/hsb_stt_demo', 'mackaber/whisper-word-level-trim', 'kevinwang676/whisper_word_timestamps_1', 'mg5812/tuning-whisper', 'mg5812/whisper-tuning', 'futranbg/S2T', 'hiwei/asr-hf-api', 'pablocst/asr-hf-api', 'Auxiliarytrinket/my-speech-to-speech-translation', 'Photon08/summarzation_test', 'Indranil08/test'], 'createdAt': '2022-09-26T06:50:30.000Z', 'safetensors': {'parameters': {'F32': 37760640}, 'total': 37760640}, 'usedStorage': 1831289730}
@@ -820,15 +889,17 @@ class Test_Bus_Factor:
         assert actual_bus_factor <= (min(1, expected_bus_factor + max_deviation)) and actual_bus_factor >= (max(0, expected_bus_factor - max_deviation))
 
 
-class Test_Input:
-
+class TestInput:
+    """Tests for input module functions"""
     def test_find_dataset_found(self):
+        """Test find_dataset when dataset is found in README"""
         readme = "this model was trained using dataset1 from huggingface"
         seen = {"https://huggingface.co/datasets/dataset1"}
         result = find_dataset(readme, seen)
         assert result == "https://huggingface.co/datasets/dataset1"
 
     def test_find_dataset_not_found(self):
+        """Test find_dataset when no dataset is found in README"""
         readme = "no known dataset mentioned here"
         seen = {"https://huggingface.co/datasets/dataset2"}
         result = find_dataset(readme, seen)
@@ -838,6 +909,7 @@ class Test_Input:
     @patch("requests.get")
     @patch("input.metric_concurrent.main")
     def test_main_runs_successfully(self, mock_metric_main, mock_requests_get, mock_file):
+        """Test main function runs successfully with mocked inputs and requests"""
         # Fake API responses
         model_api_response = MagicMock()
         model_api_response.status_code = 200
@@ -876,7 +948,8 @@ class Test_Input:
 
 # ===== NEW METRIC TESTS =====
 
-class Test_Reproducibility:
+class TestReproducibility:
+    """Tests for reproducibility scoring"""
     def test_reproducibility_with_examples(self):
         """Test reproducibility finds examples"""
         model_info = {'siblings': [{'rfilename': 'example.py'}]}
@@ -919,7 +992,8 @@ class Test_Reproducibility:
         assert latency >= 0
 
 
-class Test_Reviewedness:
+class TestReviewedness:
+    """Tests for reviewedness scoring"""
     @patch('requests.get')
     def test_reviewedness_low_rate(self, mock_get):
         """Test reviewedness with high review rate"""
@@ -952,7 +1026,8 @@ class Test_Reviewedness:
         assert latency >= 0
 
 
-class Test_Treescore:
+class TestTreescore:
+    """Tests for treescore scoring"""
     @patch('metrics.treescore.model_info')
     def test_treescore_with_parents(self, mock_model_info):
         """Test treescore with parent models"""
@@ -980,7 +1055,7 @@ class Test_Treescore:
         assert latency >= 0
 
 
-class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
+class TestLoggingMiddleware(IsolatedAsyncioTestCase):
     """Tests for backend.middleware.logging.LoggingMiddleware"""
 
     async def test_successful_request_logging(self):
@@ -1183,7 +1258,7 @@ class Test_LoggingMiddleware(IsolatedAsyncioTestCase):
             assert mock_logger.info.called
 
 
-class Test_Async_Model_Processing:
+class TestAsyncModelProcessing:
     """Tests for async model artifact processing functionality."""
 
     def test_register_model_returns_202(self):
@@ -1243,7 +1318,7 @@ class Test_Async_Model_Processing:
 # Download Endpoint Tests
 # =============================================================================
 
-class Test_Download_Endpoint:
+class TestDownloadEndpoint:
     """Test suite for artifact download endpoint functionality."""
 
     def test_download_url_populated_in_post_response(self):
@@ -1626,7 +1701,7 @@ class Test_Download_Endpoint:
 # Health Endpoint Tests
 # =============================================================================
 
-class Test_Health_Endpoints:
+class TestHealthEndpoints:
     """Test suite for health check endpoints using FastAPI TestClient."""
 
     def test_health_endpoint_returns_ok(self):
@@ -1732,7 +1807,7 @@ class Test_Health_Endpoints:
 # Metrics Tracker Tests
 # =============================================================================
 
-class Test_Metrics_Tracker:
+class TestMetricsTracker:
     """Test suite for the metrics tracker service."""
 
     def test_get_uptime_seconds(self):
@@ -1811,36 +1886,30 @@ class Test_Metrics_Tracker:
         assert isinstance(summary["per_route"], dict)
 
 
-class Test_Update_Endpoint:
-    """Test suite for artifact update endpoint functionality."""
+# =============================================================================
+# Lineage Endpoint Tests
+# =============================================================================
 
-    def test_update_model_artifact_async(self):
-        """Test that updating a model artifact triggers async processing."""
+class TestLineage:
+    """Test suite for artifact lineage endpoint functionality."""
+
+    def test_lineage_returns_404_for_nonexistent_artifact(self):
+        """Test that lineage endpoint returns 404 for non-existent artifacts."""
         from fastapi.testclient import TestClient
 
         from backend.app import app
-        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
-                                    ArtifactType)
         from backend.storage import memory
 
         memory.reset()
 
-        artifact = Artifact(
-            metadata=ArtifactMetadata(id="model-id", name="test-model", type=ArtifactType.MODEL),
-            data=ArtifactData(url="https://huggingface.co/test/model"),
-        )
         client = TestClient(app)
-        response = client.put("/artifacts/model/model-id", json=artifact.dict())
+        response = client.get("/artifact/model/nonexistent-id-12345/lineage")
 
-        assert response.status_code == 202
-        data = response.json()
-        assert data["metadata"]["id"] == "model-id"
-        # Check that artifact is saved in memory with "processing" status
-        stored = memory.get_artifact(ArtifactType.MODEL, "model-id")
-        assert stored is not None
+        assert response.status_code == 404
+        assert "does not exist" in response.json()["detail"]
 
-    def test_update_non_model_artifact_immediate(self):
-        """Test that non-model artifacts are updated immediately."""
+    def test_lineage_with_no_lineage_data(self):
+        """Test lineage for artifact with no lineage metadata."""
         from fastapi.testclient import TestClient
 
         from backend.app import app
@@ -1850,97 +1919,321 @@ class Test_Update_Endpoint:
 
         memory.reset()
 
-        # Save an initial artifact
+        # Create a model artifact without lineage
         artifact = Artifact(
-            metadata=ArtifactMetadata(id="dataset-id", name="test-dataset", type=ArtifactType.DATASET),
-            data=ArtifactData(url="https://huggingface.co/datasets/test/dataset"),
+            metadata=ArtifactMetadata(id="no-lineage-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
         )
         memory.save_artifact(artifact)
 
         client = TestClient(app)
-        artifact.data.url = "https://huggingface.co/datasets/test/dataset-v2"
-        response = client.put("/artifacts/dataset/dataset-id", json=artifact.dict())
+        response = client.get("/artifact/model/no-lineage-id/lineage")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["data"]["url"] == "https://huggingface.co/datasets/test/dataset-v2"
+        assert "nodes" in data
+        assert "edges" in data
+        assert len(data["nodes"]) == 1  # Just the primary node
+        assert len(data["edges"]) == 0
+        assert data["nodes"][0]["artifact_id"] == "no-lineage-id"
+        assert data["nodes"][0]["name"] == "test-model"
+        assert data["nodes"][0]["source"] == "config_json"
 
-    def test_update_artifact_id_mismatch(self):
-        """Test that mismatched artifact ID in payload returns 400."""
-        from fastapi.testclient import TestClient
-
-        from backend.app import app
-        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
-                                    ArtifactType)
-
-        artifact = Artifact(
-            metadata=ArtifactMetadata(id="wrong-id", name="test-model", type=ArtifactType.MODEL),
-            data=ArtifactData(url="https://huggingface.co/test/model"),
-        )
-        client = TestClient(app)
-        response = client.put("/artifacts/model/model-id", json=artifact.dict())
-
-        assert response.status_code == 400
-        assert "metadata" in response.json()["detail"].lower()
-
-    def test_update_nonexistent_artifact_returns_404(self):
-        """Updating a non-existent non-model artifact returns 404."""
-        from fastapi.testclient import TestClient
-
-        from backend.app import app
-        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
-                                    ArtifactType)
-
-        artifact = Artifact(
-            metadata=ArtifactMetadata(id="nonexistent-id", name="test-dataset", type=ArtifactType.DATASET),
-            data=ArtifactData(url="https://huggingface.co/datasets/test/dataset"),
-        )
-        client = TestClient(app)
-        response = client.put("/artifacts/dataset/nonexistent-id", json=artifact.dict())
-
-        assert response.status_code == 404
-        assert "does not exist" in response.json()["detail"].lower()
-
-
-class Test_Delete_Endpoint:
-    """Test suite for artifact delete endpoint functionality."""
-
-    def test_delete_existing_artifact(self):
-        """Test successful deletion of an artifact."""
+    def test_lineage_with_base_model_in_registry(self):
+        """Test lineage with base model that exists in registry."""
         from fastapi.testclient import TestClient
 
         from backend.app import app
         from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
                                     ArtifactType)
         from backend.storage import memory
+        from backend.storage.records import LineageMetadata
 
         memory.reset()
 
-        artifact = Artifact(
-            metadata=ArtifactMetadata(id="delete-id", name="test-artifact", type=ArtifactType.DATASET),
-            data=ArtifactData(url="https://huggingface.co/test/artifact"),
+        # Create base model
+        base_artifact = Artifact(
+            metadata=ArtifactMetadata(id="base-model-id", name="bert-base-uncased", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/bert-base-uncased"),
         )
-        memory.save_artifact(artifact)
+        memory.save_artifact(base_artifact)
+
+        # Create child model with lineage pointing to base model
+        child_artifact = Artifact(
+            metadata=ArtifactMetadata(id="child-model-id", name="fine-tuned-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/fine-tuned-model"),
+        )
+        lineage = LineageMetadata(
+            base_model_name="bert-base-uncased",
+            config_metadata={"model_type": "bert"}
+        )
+        memory.save_artifact(child_artifact, lineage=lineage)
 
         client = TestClient(app)
-        response = client.delete("/artifacts/dataset/delete-id")
+        response = client.get("/artifact/model/child-model-id/lineage")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["deleted"] == "delete-id"
-        # Artifact should no longer exist
-        assert memory.get_artifact(ArtifactType.DATASET, "delete-id") is None
+        assert len(data["nodes"]) == 2  # Child + base model
+        assert len(data["edges"]) == 1
+        assert data["edges"][0]["relationship"] == "base_model"
+        assert data["edges"][0]["from_node_artifact_id"] == "base-model-id"
+        assert data["edges"][0]["to_node_artifact_id"] == "child-model-id"
 
-    def test_delete_nonexistent_artifact_returns_404(self):
-        """Deleting a non-existent artifact returns 404."""
+        # Check base model node
+        base_node = next(n for n in data["nodes"] if n["artifact_id"] == "base-model-id")
+        assert base_node["name"] == "bert-base-uncased"
+        assert base_node["source"] == "config_json"
+
+    def test_lineage_with_base_model_not_in_registry(self):
+        """Test lineage with base model that doesn't exist in registry (external models are excluded)."""
         from fastapi.testclient import TestClient
 
         from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
         from backend.storage import memory
+        from backend.storage.records import LineageMetadata
 
         memory.reset()
-        client = TestClient(app)
-        response = client.delete("/artifacts/dataset/nonexistent-id")
 
-        assert response.status_code == 404
-        assert "does not exist" in response.json()["detail"].lower()
+        # Create child model with lineage pointing to external base model
+        child_artifact = Artifact(
+            metadata=ArtifactMetadata(id="child-model-id", name="fine-tuned-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/fine-tuned-model"),
+        )
+        lineage = LineageMetadata(
+            base_model_name="external-base-model",
+            config_metadata={}
+        )
+        memory.save_artifact(child_artifact, lineage=lineage)
+
+        client = TestClient(app)
+        response = client.get("/artifact/model/child-model-id/lineage")
+
+        assert response.status_code == 200
+        data = response.json()
+        # External models are not included - only models in registry
+        assert len(data["nodes"]) == 1  # Just the child model
+        assert len(data["edges"]) == 0  # No edges since base model is external
+        assert data["nodes"][0]["artifact_id"] == "child-model-id"
+        assert data["nodes"][0]["name"] == "fine-tuned-model"
+
+    def test_lineage_with_descendant_models(self):
+        """Test lineage with descendant models (children that use this as base)."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+        from backend.storage.records import LineageMetadata
+
+        memory.reset()
+
+        # Create parent model
+        parent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="parent-model-id", name="bert-base", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/bert-base"),
+        )
+        memory.save_artifact(parent_artifact)
+
+        # Create child model with lineage pointing to parent
+        child_artifact = Artifact(
+            metadata=ArtifactMetadata(id="child-model-id", name="fine-tuned-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/fine-tuned-model"),
+        )
+        lineage = LineageMetadata(
+            base_model_name="bert-base",
+            config_metadata={}
+        )
+        memory.save_artifact(child_artifact, lineage=lineage)
+
+        # Query lineage from parent - should include child
+        client = TestClient(app)
+        response = client.get("/artifact/model/parent-model-id/lineage")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["nodes"]) == 2  # Parent + child
+        assert len(data["edges"]) == 1
+        assert data["edges"][0]["relationship"] == "base_model"
+        assert data["edges"][0]["from_node_artifact_id"] == "parent-model-id"
+        assert data["edges"][0]["to_node_artifact_id"] == "child-model-id"
+
+    def test_lineage_with_recursive_ancestors(self):
+        """Test lineage with recursive ancestor traversal (grandparent models)."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+        from backend.storage.records import LineageMetadata
+
+        memory.reset()
+
+        # Create grandparent model
+        grandparent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="grandparent-id", name="base-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/base-model"),
+        )
+        memory.save_artifact(grandparent_artifact)
+
+        # Create parent model with lineage pointing to grandparent
+        parent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="parent-id", name="intermediate-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/intermediate-model"),
+        )
+        parent_lineage = LineageMetadata(
+            base_model_name="base-model",
+            config_metadata={}
+        )
+        memory.save_artifact(parent_artifact, lineage=parent_lineage)
+
+        # Create child model with lineage pointing to parent
+        child_artifact = Artifact(
+            metadata=ArtifactMetadata(id="child-id", name="final-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/final-model"),
+        )
+        child_lineage = LineageMetadata(
+            base_model_name="intermediate-model",
+            config_metadata={}
+        )
+        memory.save_artifact(child_artifact, lineage=child_lineage)
+
+        # Query lineage from child - should include parent and grandparent
+        client = TestClient(app)
+        response = client.get("/artifact/model/child-id/lineage")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["nodes"]) == 3  # Child + parent + grandparent
+        assert len(data["edges"]) == 2  # parent->child, grandparent->parent
+
+        # Verify edges
+        edge_parent_child = next(e for e in data["edges"] if e["to_node_artifact_id"] == "child-id")
+        assert edge_parent_child["from_node_artifact_id"] == "parent-id"
+
+        edge_grandparent_parent = next(e for e in data["edges"] if e["to_node_artifact_id"] == "parent-id")
+        assert edge_grandparent_parent["from_node_artifact_id"] == "grandparent-id"
+
+    def test_lineage_response_structure(self):
+        """Test that lineage response has correct structure."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+        from backend.storage.records import LineageMetadata
+
+        memory.reset()
+
+        # Create base model
+        base_artifact = Artifact(
+            metadata=ArtifactMetadata(id="base-id", name="base-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/base-model"),
+        )
+        memory.save_artifact(base_artifact)
+
+        # Create model with lineage
+        model_artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test-model"),
+        )
+        lineage = LineageMetadata(
+            base_model_name="base-model",
+            config_metadata={"model_type": "bert", "repository_url": "https://huggingface.co/test-model"}
+        )
+        memory.save_artifact(model_artifact, lineage=lineage)
+
+        client = TestClient(app)
+        response = client.get("/artifact/model/test-model-id/lineage")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check top-level structure
+        assert "nodes" in data
+        assert "edges" in data
+        assert isinstance(data["nodes"], list)
+        assert isinstance(data["edges"], list)
+
+        # Check node structure
+        for node in data["nodes"]:
+            assert "artifact_id" in node
+            assert "name" in node
+            assert "source" in node
+            assert "metadata" in node  # Can be None
+
+        # Check edge structure
+        for edge in data["edges"]:
+            assert "from_node_artifact_id" in edge
+            assert "to_node_artifact_id" in edge
+            assert "relationship" in edge
+
+        # Primary node should be present
+        primary_node = next(n for n in data["nodes"] if n["artifact_id"] == "test-model-id")
+        assert primary_node["name"] == "test-model"
+        assert primary_node["source"] == "config_json"
+
+    def test_lineage_same_graph_for_related_models(self):
+        """Test that querying related models produces the same graph."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+        from backend.storage.records import LineageMetadata
+
+        memory.reset()
+
+        # Create grandparent
+        grandparent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="grandparent-id", name="grandparent", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/grandparent"),
+        )
+        memory.save_artifact(grandparent_artifact)
+
+        # Create parent
+        parent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="parent-id", name="parent", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/parent"),
+        )
+        parent_lineage = LineageMetadata(base_model_name="grandparent", config_metadata={})
+        memory.save_artifact(parent_artifact, lineage=parent_lineage)
+
+        # Create child
+        child_artifact = Artifact(
+            metadata=ArtifactMetadata(id="child-id", name="child", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/child"),
+        )
+        child_lineage = LineageMetadata(base_model_name="parent", config_metadata={})
+        memory.save_artifact(child_artifact, lineage=child_lineage)
+
+        client = TestClient(app)
+
+        # Query from parent
+        response_parent = client.get("/artifact/model/parent-id/lineage")
+        assert response_parent.status_code == 200
+        data_parent = response_parent.json()
+
+        # Query from child
+        response_child = client.get("/artifact/model/child-id/lineage")
+        assert response_child.status_code == 200
+        data_child = response_child.json()
+
+        # Both should have the same nodes (all 3 models)
+        assert len(data_parent["nodes"]) == 3
+        assert len(data_child["nodes"]) == 3
+
+        # Both should have the same edges
+        assert len(data_parent["edges"]) == 2
+        assert len(data_child["edges"]) == 2
+
+        # Verify all node IDs are the same
+        parent_node_ids = {n["artifact_id"] for n in data_parent["nodes"]}
+        child_node_ids = {n["artifact_id"] for n in data_child["nodes"]}
+        assert parent_node_ids == child_node_ids == {"grandparent-id", "parent-id", "child-id"}

@@ -30,16 +30,17 @@ if GITHUB_TOKEN:
 # Rate Limiting
 # -----------------------------
 RATE_LIMIT_DELAY = 0.15
-_last_call_time = 0.0
+_LAST_CALL_TIME = 0.0
 
 
 def _rate_limit() -> None:
-    global _last_call_time
+    """Simple rate limiter to avoid exceeding GitHub API limits."""
+    global _LAST_CALL_TIME
     now = time.time()
-    delta = now - _last_call_time
+    delta = now - _LAST_CALL_TIME
     if delta < RATE_LIMIT_DELAY:
         time.sleep(RATE_LIMIT_DELAY - delta)
-    _last_call_time = time.time()
+    _LAST_CALL_TIME = time.time()
 
 
 # -----------------------------
@@ -130,6 +131,8 @@ def _get_pr_details(full_name: str, number: int) -> Tuple[int, bool]:
 # Main computation
 # -----------------------------
 def compute_reviewed_fraction(code_info: Dict[str, Any]) -> float:
+    """
+    Compute the fraction of LOC introduced via reviewed PRs."""
     if not code_info or "full_name" not in code_info:
         return -1.0
 
@@ -165,6 +168,8 @@ def compute_reviewed_fraction(code_info: Dict[str, Any]) -> float:
 
 
 def reviewedness(code_info: Dict[str, Any]) -> Tuple[float, int]:
+    """
+    Calculate reviewedness score based on fraction of LOC from reviewed PRs."""
     start = time.time()
     fraction = compute_reviewed_fraction(code_info)
 

@@ -1,22 +1,22 @@
-'''
-pip install huggingface_hub
-'''
+"""
+Data Quality Metric Calculations
+Calculates data quality based on completeness, correctness,
+coverage, and relevance.
+"""
 from typing import Any, Dict, Tuple
 
 import logger
 
-'''
-Completeness
-comment out once completed after readme info can be verified
-pip3 install datasets
-
-Try #1: Check a list of completeness keywords in the card_data and readme, not an ideal indicator of completeness
-Try #2: Use pandas isnull to check if there's a missing value in the dataset
-'''
-
 
 def complete_checker(api_info: Dict[str, Any], readme: str) -> float:
+    '''
+    Completeness
+    comment out once completed after readme info can be verified
+    pip3 install datasets
 
+    Try #1: Check a list of completeness keywords in the card_data and readme, not an ideal indicator of completeness
+    Try #2: Use pandas isnull to check if there's a missing value in the dataset
+    '''
     logger.debug("Starting completeness check")
 
     card_data = api_info.get('cardData', {})
@@ -60,6 +60,8 @@ def complete_checker(api_info: Dict[str, Any], readme: str) -> float:
 
 
 def correct_checker(readme: str) -> float:
+    """
+    Correctness"""
     import re
 
     logger.debug("Starting correctness check")
@@ -112,15 +114,12 @@ def correct_checker(readme: str) -> float:
     return 0.0
 
 
-'''
-Try #1: treats more data labels = more coverage
-Coverage calculator -> readme content search to analyze coverage
-
-'''
-
-
 def coverage_checker(api_info: Dict[str, Any], readme: str) -> float:
+    '''
+    Try #1: treats more data labels = more coverage
+    Coverage calculator -> readme content search to analyze coverage
 
+    '''
     # Following list of words are used as a filter on the readme file. This lis it curated by
     # Claude Sonnet 4 with the following prompts:
     '''
@@ -157,27 +156,25 @@ def coverage_checker(api_info: Dict[str, Any], readme: str) -> float:
     return 0.3  # No clear coverage description
 
 
-'''
-Relevance calculator
-
-Parameters
-----------
-api_info: str
-    api info in json format, extracted from user input post-parsing
-
-Returns
--------
-relevance_score : int
-    parameter that stores the calculated relevance information
-        0.1 if the model 0-90 days old
-        0.06 if the model 90-180 days old
-        0.03 if the model 180-360 days old
-        0.01 if the model +360 days old
-
-'''
-
-
 def relevance_checker(api_info: Dict[str, Any]) -> float:
+    '''
+    Relevance calculator
+
+    Parameters
+    ----------
+    api_info: str
+        api info in json format, extracted from user input post-parsing
+
+    Returns
+    -------
+    relevance_score : int
+        parameter that stores the calculated relevance information
+            0.1 if the model 0-90 days old
+            0.06 if the model 90-180 days old
+            0.03 if the model 180-360 days old
+            0.01 if the model +360 days old
+
+    '''
     from datetime import date
 
     from dateutil import parser  # type: ignore[import-untyped]
@@ -214,28 +211,26 @@ def relevance_checker(api_info: Dict[str, Any]) -> float:
         return 0.0
 
 
-'''
-Finalizes data_quality calcs
-
-Parameters
-----------
-api_info: str
-    api info in json format, extracted from user input post-parsing, passed in from master_scoring
-readme: str
-    readme passed in from master_scoring
-
-Returns
--------
-data_quality_score : int
-    calculated with the following metrics:
-        - completeness -> checks list of completeness keywords in the card_data and readme, weight: 0.3x
-        - correctness -> extracts the accuracy tag & its value from readmes, weight: 0.2x (since most readmes dont have it)
-        - coverage -> readme filter words count to analyze coverage, weight: 0.2x
-        - relevance -> checks the # of days since the model created, weight: 0.3x
-'''
-
-
 def data_quality(api_info: Dict[str, Any], readme: str) -> Tuple[float, float]:
+    '''
+    Finalizes data_quality calcs
+
+    Parameters
+    ----------
+    api_info: str
+        api info in json format, extracted from user input post-parsing, passed in from master_scoring
+    readme: str
+        readme passed in from master_scoring
+
+    Returns
+    -------
+    data_quality_score : int
+        calculated with the following metrics:
+            - completeness -> checks list of completeness keywords in the card_data and readme, weight: 0.3x
+            - correctness -> extracts the accuracy tag & its value from readmes, weight: 0.2x (since most readmes dont have it)
+            - coverage -> readme filter words count to analyze coverage, weight: 0.2x
+            - relevance -> checks the # of days since the model created, weight: 0.3x
+    '''
     import time
     start: float = time.time()
     logger.info("Calculating data_quality metric")

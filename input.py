@@ -1,3 +1,8 @@
+"""
+Processes model, dataset, and code URLs, fetches metadata and READMEs,
+validates environment variables, and analyzes metrics using `metric_concurrent`.
+"""
+
 import os
 import re
 import sys

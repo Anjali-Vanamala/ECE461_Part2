@@ -1,3 +1,5 @@
+"""
+Helper to extract GitHub repository URLs from HuggingFace model metadata."""
 import re
 from typing import Any, Dict, Optional
 

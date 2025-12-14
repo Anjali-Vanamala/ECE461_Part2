@@ -1,10 +1,8 @@
-# Your software must produce a log file stored in the location named
-# in the environment bariable $LOG_FILE and using the verbosity level
-# indicated in the environment variable $LOG_LEVEL
-# 0 means silent
-# 1 means informational messags
-# 2 means debug messages
-# Default log verbosity is 0
+"""
+Simple logging utility that writes messages to a file specified by the
+environment variable LOG_FILE. Message verbosity is controlled by LOG_LEVEL:
+0 = silent, 1 = info, 2 = debug.
+"""
 import os
 import sys
 
@@ -29,19 +27,31 @@ LOG_FILE_PATH: str = LOG_FILE
 # Start with a blank log file each time
 open(LOG_FILE_PATH, "w").close()
 # Then open file in append mode and write message
-# LOG_LEVEL 1 informational messages
 
 
 def info(msg: str):
+    """
+    Log an informational message if LOG_LEVEL >= 1.
+
+    Parameters
+    ----------
+    msg : str
+        The message to write to the log file.
+    """
     if LOG_LEVEL >= 1:
         with open(LOG_FILE_PATH, "a") as log_file:
             log_file.write("Info:" + msg + "\n")
 
-# LOG_LEVEL 2 debug messages
-# This will include info and debug messages
-
 
 def debug(msg: str):
+    """
+    Log a debug message if LOG_LEVEL == 2.
+
+    Parameters
+    ----------
+    msg : str
+        The debug message to write to the log file.
+    """
     if LOG_LEVEL == 2:
         with open(LOG_FILE_PATH, "a") as log_file:
             log_file.write("Debug:" + msg + "\n")

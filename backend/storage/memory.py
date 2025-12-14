@@ -70,22 +70,33 @@ def _link_base_model(model_record: ModelRecord) -> None:
     Link base model from lineage metadata by finding matching model in registry.
     Handles both full HuggingFace IDs (namespace/model) and short names (model).
     """
-    if not model_record.lineage or not model_record.lineage.base_model_name:
+    base_model_name = None
+    if model_record.lineage and model_record.lineage.base_model_name:
+        base_model_name = model_record.lineage.base_model_name
+    elif model_record.base_model_name:
+        base_model_name = model_record.base_model_name
+
+    if not base_model_name:
         return
 
-    base_model_name = _normalized(model_record.lineage.base_model_name)
+    base_model_name = _normalized(base_model_name)
     # Extract short name (last part after /) for flexible matching
     base_model_short = base_model_name.split('/')[-1] if '/' in base_model_name else base_model_name
 
-    if model_record.lineage.base_model_id is None and base_model_name:
-        for model_id, candidate_record in _MODELS.items():
-            candidate_name = _normalized(candidate_record.artifact.metadata.name)
-            candidate_short = candidate_name.split('/')[-1] if '/' in candidate_name else candidate_name
+    # Check if already linked (in lineage or directly)
+    if (model_record.lineage and model_record.lineage.base_model_id) or model_record.base_model_id:
+        return
 
-            # Match on either full name OR short name
-            if candidate_name == base_model_name or candidate_short == base_model_short or candidate_name == base_model_short:
+    for model_id, candidate_record in _MODELS.items():
+        candidate_name = _normalized(candidate_record.artifact.metadata.name)
+        candidate_short = candidate_name.split('/')[-1] if '/' in candidate_name else candidate_name
+
+        # Match on either full name OR short name
+        if candidate_name == base_model_name or candidate_short == base_model_short or candidate_name == base_model_short:
+            if model_record.lineage:
                 model_record.lineage.base_model_id = model_id
-                break
+            model_record.base_model_id = model_id
+            break
 
 
 def _link_datasets(model_record: ModelRecord) -> None:
@@ -125,18 +136,29 @@ def _update_child_models(newly_added_model: ModelRecord) -> None:
 
     # Check all existing models to see if they reference this new model as a base
     for model_record in _MODELS.values():
-        if not model_record.lineage or not model_record.lineage.base_model_name:
+        base_model_name = None
+        if model_record.lineage and model_record.lineage.base_model_name:
+            base_model_name = model_record.lineage.base_model_name
+        elif model_record.base_model_name:
+            base_model_name = model_record.base_model_name
+            
+        if not base_model_name:
             continue
 
         # If this model was waiting for the newly added model as its base
-        base_model_name = _normalized(model_record.lineage.base_model_name)
+        base_model_name = _normalized(base_model_name)
         base_model_short = base_model_name.split('/')[-1] if '/' in base_model_name else base_model_name
 
         # Match on either full name OR short name
         if (newly_added_name == base_model_name or
             newly_added_short == base_model_short or
-            newly_added_name == base_model_short) and model_record.lineage.base_model_id is None:
-            model_record.lineage.base_model_id = newly_added_model.artifact.metadata.id
+            newly_added_name == base_model_short):
+            
+            # Check if already linked
+            if (model_record.lineage and model_record.lineage.base_model_id is None) or model_record.base_model_id is None:
+                if model_record.lineage:
+                    model_record.lineage.base_model_id = newly_added_model.artifact.metadata.id
+                model_record.base_model_id = newly_added_model.artifact.metadata.id
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +177,7 @@ def save_artifact(
     code_url: Optional[str] = None,
     processing_status: Optional[str] = None,
     lineage: Optional[LineageMetadata] = None,
+    base_model_name: Optional[str] = None,
 ) -> Artifact:
     """Insert or update an artifact entry in the appropriate store."""
     if artifact.metadata.type == ArtifactType.MODEL:
@@ -168,6 +191,7 @@ def save_artifact(
             record.code_url = code_url or record.code_url
             record.license = license or record.license
             record.lineage = lineage or record.lineage
+            record.base_model_name = base_model_name or record.base_model_name
             if processing_status is not None:
                 record.processing_status = processing_status
         else:
@@ -179,6 +203,7 @@ def save_artifact(
                 dataset_url=dataset_url,
                 code_name=code_name,
                 code_url=code_url,
+                base_model_name=base_model_name,
                 processing_status=processing_status or "completed",
                 lineage=lineage,
             )

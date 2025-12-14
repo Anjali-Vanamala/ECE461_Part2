@@ -25,6 +25,8 @@ class ModelRecord:
     code_id: Optional[ArtifactID] = None
     code_name: Optional[str] = None
     code_url: Optional[str] = None
+    base_model_id: Optional[ArtifactID] = None
+    base_model_name: Optional[str] = None
     rating: Optional[ModelRating] = None
     license: Optional[str] = None
     processing_status: str = "completed"  # "processing", "completed", "failed"

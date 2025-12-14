@@ -427,7 +427,7 @@ def process_model_artifact_async(
         )
 
         # Compute the artifact (long-running)
-        artifact, rating, dataset_name, dataset_url, code_name, code_url, license = compute_model_artifact(
+        artifact, rating, dataset_name, dataset_url, code_name, code_url, license, base_model_name = compute_model_artifact(
             url,
             artifact_id=artifact_id,
             name_override=name,
@@ -470,6 +470,7 @@ def process_model_artifact_async(
             code_url=code_url,
             processing_status="completed",
             lineage=lineage,
+            base_model_name=base_model_name,
         )
 
         memory.update_processing_status(artifact_id, "completed")
@@ -1154,8 +1155,9 @@ async def get_artifact_lineage(
             detail="Artifact does not exist.",
         )
 
-    # 2. Get lineage metadata
+    # 2. Get lineage metadata and model record
     lineage = memory.get_model_lineage(artifact_id)
+    model_record = memory.get_model_record(artifact_id)
 
     # 3. Build lineage graph with deduplication
     nodes: List[ArtifactLineageNode] = []
@@ -1176,21 +1178,34 @@ async def get_artifact_lineage(
     seen_node_ids.add(artifact_id)
 
     # 4. Add base model node and edge (if exists in registry)
+    # Check lineage first, then fallback to model_record
+    base_model_name = None
     if lineage and lineage.base_model_name:
+        base_model_name = lineage.base_model_name
+    elif model_record and model_record.base_model_name:
+        base_model_name = model_record.base_model_name
+
+    if base_model_name:
         # First check if we have a cached base_model_id (from linking)
         base_artifact = None
         base_model_id = None
 
-        if lineage.base_model_id:
+        if lineage and lineage.base_model_id:
             # Use the cached ID from lineage linking
             base_artifact = memory.get_artifact(ArtifactType.MODEL, lineage.base_model_id)
             if base_artifact:
                 base_model_id = lineage.base_model_id
-                logger.info(f"Using cached base_model_id {base_model_id} for {lineage.base_model_name}")
+                logger.info(f"Using cached base_model_id {base_model_id} for {base_model_name}")
+        elif model_record and model_record.base_model_id:
+             # Use the cached ID from model_record linking
+            base_artifact = memory.get_artifact(ArtifactType.MODEL, model_record.base_model_id)
+            if base_artifact:
+                base_model_id = model_record.base_model_id
+                logger.info(f"Using cached base_model_id {base_model_id} for {base_model_name} (from ModelRecord)")
 
         # Fallback: try finding by name if no cached ID
         if not base_artifact:
-            base_model_record = memory.find_model_by_name(lineage.base_model_name)
+            base_model_record = memory.find_model_by_name(base_model_name)
             if base_model_record:
                 base_artifact = base_model_record.artifact
                 base_model_id = base_artifact.metadata.id
@@ -1202,7 +1217,7 @@ async def get_artifact_lineage(
                 base_model_node = ArtifactLineageNode(
                     artifact_id=base_model_id,
                     name=base_artifact.metadata.name,
-                    source="config_json",
+                    source="config_json" if lineage and lineage.base_model_name else "model_metadata",
                     metadata={"repository_url": base_artifact.data.url} if base_artifact.data.url else None,
                 )
                 nodes.append(base_model_node)
@@ -1216,18 +1231,18 @@ async def get_artifact_lineage(
             )
             edges.append(edge)
 
-            logger.info(f"Found base model {lineage.base_model_name} (ID: {base_model_id}) for artifact {artifact_id}")
+            logger.info(f"Found base model {base_model_name} (ID: {base_model_id}) for artifact {artifact_id}")
         else:
             # Base model not in registry - add as external reference
             # Use consistent external ID generation for HuggingFace compatibility
-            external_id = _generate_external_id("model", lineage.base_model_name)
+            external_id = _generate_external_id("model", base_model_name)
 
             # Check for duplicates before adding
             if external_id not in seen_node_ids:
                 external_node = ArtifactLineageNode(
                     artifact_id=external_id,
-                    name=lineage.base_model_name,
-                    source="config_json",
+                    name=base_model_name,
+                    source="config_json" if lineage and lineage.base_model_name else "model_metadata",
                     metadata={"external": "true", "note": "Not in registry"},
                 )
                 nodes.append(external_node)
@@ -1240,7 +1255,7 @@ async def get_artifact_lineage(
             )
             edges.append(edge)
 
-            logger.info(f"Base model {lineage.base_model_name} not in registry, added as external reference")
+            logger.info(f"Base model {base_model_name} not in registry, added as external reference")
 
     # 5. Add dataset nodes and edges
     # Track which dataset names we've processed to avoid duplicates
@@ -1365,7 +1380,6 @@ async def get_artifact_lineage(
 
     # 6. Add old-style relationships (dataset_id, code_id) from ModelRecord
     # These come from README parsing, not config.json
-    model_record = memory.get_model_record(artifact_id)
     if model_record:
         # Helper to check if an edge already exists
         def edge_exists(from_id: str, to_id: str, rel: str) -> bool:

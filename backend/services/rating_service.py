@@ -172,6 +172,27 @@ def _extract_dataset_name(model_info: dict, readme_text: str) -> Optional[str]:
     return None
 
 
+def _extract_base_model(model_info: dict, readme_text: str) -> Optional[str]:
+    """Extract base model from cardData or tags."""
+    # 1. Check cardData
+    card = model_info.get("cardData") or {}
+    base_model = card.get("base_model")
+    if isinstance(base_model, str) and base_model.strip():
+        return base_model.strip()
+    if isinstance(base_model, list) and base_model:
+        # If multiple, take the first one
+        if isinstance(base_model[0], str):
+            return base_model[0].strip()
+
+    # 2. Check tags for "base_model:name"
+    tags = model_info.get("tags", [])
+    for tag in tags:
+        if isinstance(tag, str) and tag.startswith("base_model:"):
+            return tag.split(":", 1)[1].strip()
+
+    return None
+
+
 def _extract_code_repo(model_info: dict, readme_text: str) -> Optional[str]:
     card_data = model_info.get("cardData") or {}
 
@@ -351,7 +372,7 @@ def compute_model_artifact(
     *,
     artifact_id: Optional[str] = None,
     name_override: Optional[str] = None,
-) -> tuple[Artifact, ModelRating, Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+) -> tuple[Artifact, ModelRating, Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     name = name_override or _derive_name_from_url(url)
     artifact_id = artifact_id or memory.generate_artifact_id()
 
@@ -361,6 +382,7 @@ def compute_model_artifact(
 
     # Extract dataset and code names from the model card
     dataset_name_hint = _extract_dataset_name(model_info, readme_text)
+    base_model_hint = _extract_base_model(model_info, readme_text)
     code_repo_hint = _extract_code_repo(model_info, readme_text)
     code_name_hint = _derive_name_from_url(code_repo_hint).lower() if code_repo_hint else None
     logger.info(f"code_repo_hint = {code_repo_hint}")
@@ -487,4 +509,4 @@ def compute_model_artifact(
 
     license = _extract_model_license(model_info, readme_text)
 
-    return artifact, rating, dataset_name, dataset_url, code_name, code_url, license
+    return artifact, rating, dataset_name, dataset_url, code_name, code_url, license, base_model_hint

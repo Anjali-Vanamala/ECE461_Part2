@@ -31,8 +31,8 @@ except ImportError:
 
 from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
                             ArtifactQuery, ArtifactType, ModelRating)
-from backend.storage.records import (CodeRecord, DatasetRecord, LineageMetadata,
-                                     ModelRecord)
+from backend.storage.records import (CodeRecord, DatasetRecord,
+                                     LineageMetadata, ModelRecord)
 
 # Database configuration
 RDS_ENDPOINT = os.getenv("RDS_ENDPOINT")

@@ -1,10 +1,16 @@
 import os
 
-# Check if we should use DynamoDB
-# Accept "1", "true", "True", "TRUE" as valid values
+# Check which storage backend to use
+# Priority: STORAGE_BACKEND env var > USE_DYNAMODB (legacy) > default (memory)
+STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "").lower()
+
+# Legacy support: USE_DYNAMODB env var
 USE_DYNAMODB = os.getenv("USE_DYNAMODB", "0").lower() in ("1", "true")
 
-if USE_DYNAMODB:
+if STORAGE_BACKEND == "rds_postgres":
+    from backend.storage import rds_postgres as memory  # type: ignore
+    print("[Storage] Using RDS PostgreSQL backend")
+elif STORAGE_BACKEND == "dynamodb" or USE_DYNAMODB:
     from backend.storage import dynamodb as memory  # type: ignore
     print("[Storage] Using DynamoDB backend")
 else:

@@ -18,6 +18,8 @@ try:
 except Exception:
     boto3 = None  # type: ignore
 
+from backend.services.metrics_tracker import record_request
+
 LOG_LEVEL: int = 1  # 0 = silent, 1 = info, 2 = debug
 CLOUDWATCH_NAMESPACE = "ECE461/API"
 CLOUDWATCH_AVAILABLE = boto3 is not None
@@ -26,7 +28,7 @@ logger = logging.getLogger("backend.middleware.logging")
 
 
 class LoggingMiddleware:
-    """Request/response logger for ASGI apps with response body logging."""
+    """Simple request/response logger for ASGI apps."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -48,30 +50,45 @@ class LoggingMiddleware:
         start = time.perf_counter()
         status_holder: dict[str, Optional[int]] = {"status": None}
 
+        # Extract client IP
+        client_ip = None
+        if "client" in scope and scope["client"]:
+            client_ip = scope["client"][0] if isinstance(scope["client"], tuple) else None
+
+        # Extract artifact type from path if applicable
+        artifact_type = None
+        if "/artifacts/" in path:
+            parts = path.split("/artifacts/")
+            if len(parts) > 1:
+                artifact_type = parts[1].split("/")[0]
+
         # 🔥 LOG IMMEDIATELY WHEN REQUEST ARRIVES
         logger.info(f"[ARRIVED] {method} {path}")
 
-        # Store request body
+        # Collect body as it streams
         body_store: list[bytes] = []
 
         async def receive_wrapper():
             message = await receive()
+
             if message.get("type") == "http.request":
                 chunk = message.get("body", b"")
                 if chunk:
                     body_store.append(chunk)
-            return message
 
-        # Store response body
-        response_body: list[bytes] = []
+                # 🔥 LOG THE BODY AS SOON AS COMPLETE (BEFORE handler runs)
+                if not message.get("more_body", False):
+                    try:
+                        raw_body = b"".join(body_store).decode("utf-8", errors="replace")
+                    except Exception:
+                        raw_body = "<unreadable>"
+                    logger.info(f"[ARRIVED BODY] {raw_body}")
+
+            return message
 
         async def send_wrapper(message: MutableMapping[str, object]) -> None:
             if message.get("type") == "http.response.start":
                 status_holder["status"] = cast(Optional[int], message.get("status"))
-            elif message.get("type") == "http.response.body":
-                chunk = message.get("body", b"")
-                if chunk:
-                    response_body.append(chunk)
             await send(message)
 
         try:
@@ -79,19 +96,16 @@ class LoggingMiddleware:
 
             status = status_holder["status"] or 0
 
-            # Decode and log request body
-            try:
-                raw_request = b"".join(body_store).decode("utf-8", errors="replace")
-            except Exception:
-                raw_request = "<unreadable>"
-            logger.info(f"Request body: {raw_request}")
+            # Record request for metrics (skip health endpoints to avoid recursion)
+            if not path.startswith("/health"):
+                record_request(method, path, status, client_ip, artifact_type)
 
-            # Decode and log response body
+            # Log again after handling (old behavior preserved)
             try:
-                raw_response = b"".join(response_body).decode("utf-8", errors="replace")
+                raw_body = b"".join(body_store).decode("utf-8", errors="replace")
             except Exception:
-                raw_response = "<unreadable>"
-            logger.info(f"Response body: {raw_response}")
+                raw_body = "<unreadable>"
+            logger.info(f"Request body: {raw_body}")
 
             self._log_success(method, path, status, time.perf_counter() - start)
             self._send_metrics(method, path, status, success=True)

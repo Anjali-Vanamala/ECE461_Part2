@@ -1248,6 +1248,13 @@ async def get_artifact_lineage(
             logger.info(f"Base model {lineage.base_model_name} not in registry, added as external reference")
 
     # 5. Add dataset nodes and edges
+    # Track which dataset names we've processed to avoid duplicates
+    def _normalize_name(name: str) -> str:
+        """Normalize dataset name for comparison (strip and lowercase)."""
+        return name.strip().lower() if name else ""
+
+    seen_dataset_names = set()
+
     # First, use cached dataset_ids if available
     if lineage.dataset_ids:
         # Use cached IDs from linking
@@ -1258,6 +1265,9 @@ async def get_artifact_lineage(
             dataset_artifact = memory.get_artifact(ArtifactType.DATASET, dataset_id)
             if dataset_artifact:
                 seen_node_ids.add(dataset_id)
+                # Track the name so we don't process it again in fallback
+                seen_dataset_names.add(_normalize_name(dataset_artifact.metadata.name))
+                
                 dataset_node = ArtifactLineageNode(
                     artifact_id=dataset_id,
                     name=dataset_artifact.metadata.name,
@@ -1278,6 +1288,10 @@ async def get_artifact_lineage(
 
     # Fallback: search by name for any datasets not yet linked
     for dataset_name in lineage.dataset_names:
+        # Skip if we already processed this dataset name (via dataset_ids)
+        if _normalize_name(dataset_name) in seen_dataset_names:
+            continue
+        
         dataset_record = memory.find_dataset_by_name(dataset_name)
 
         if dataset_record:
@@ -1285,9 +1299,11 @@ async def get_artifact_lineage(
 
             # Skip if already added from cached IDs or by name
             if dataset_id in seen_node_ids:
+                seen_dataset_names.add(_normalize_name(dataset_name))
                 continue
 
             seen_node_ids.add(dataset_id)
+            seen_dataset_names.add(_normalize_name(dataset_name))
 
             # Dataset exists in registry
             dataset_node = ArtifactLineageNode(
@@ -1316,6 +1332,7 @@ async def get_artifact_lineage(
                 continue  # Skip duplicate external dataset
 
             seen_node_ids.add(external_id)
+            seen_dataset_names.add(_normalize_name(dataset_name))
 
             external_node = ArtifactLineageNode(
                 artifact_id=external_id,

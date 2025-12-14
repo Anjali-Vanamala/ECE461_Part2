@@ -14,7 +14,7 @@ Returns
 -------
 code_quality_score : int
     calculated with the following metrics:
-        - reusability -> checks the documentation lenght of the readme, weight: 0.4x
+        - reusability -> checks the documentation lenght ~ the readme, weight: 0.4x
         - reliability -> for model input, # of downloads; for github code, # of stars + # of forks, weight: 0.4x
         - testability -> readme filter words count, weight: 0.2x
 
@@ -33,6 +33,8 @@ def code_quality(
     model_readme: str,
     code_readme: str
 ) -> Tuple[float, float]:
+    """
+    Calculate code quality score based on reusability, reliability, and testability."""
     import time
 
     start = time.time()

@@ -1,4 +1,4 @@
-
+"""Ramp-Up Time Metric Calculations"""
 import time
 from typing import Any, Dict, Tuple
 

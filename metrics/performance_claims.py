@@ -1,4 +1,6 @@
-# Evidence of claims (benchmarks, evals)
+"""
+Evidence of claims (benchmarks, evals)
+"""
 import os
 import time
 from typing import Any
@@ -9,22 +11,21 @@ from huggingface_hub import hf_hub_download, model_info
 
 import logger
 
-"""
-Use Purdue GenAI Studio to measure performance claims.
-
-Parameters
-----------
-prompt : str
-    Request for information and the README for the model.
-
-Returns
--------
-string
-    Response from LLM. Should be just a float in string format
-"""
-
 
 def query_genai_studio(prompt: str) -> str:
+    """
+    Use Purdue GenAI Studio to measure performance claims.
+
+    Parameters
+    ----------
+    prompt : str
+        Request for information and the README for the model.
+
+    Returns
+    -------
+    string
+        Response from LLM. Should be just a float in string format
+    """
     # get api key from environment variable
     api_key = os.environ.get("GEN_AI_STUDIO_API_KEY")
     if not api_key:
@@ -55,25 +56,23 @@ def query_genai_studio(prompt: str) -> str:
         return "0.0"
 
 
-"""
-Fetches the model card JSON from Hugging Face given a model URL.
-
-Parameters
-----------
-model_url : str
-    Hugging Face model URL.
-
-Returns
--------
-tuple (str, object)
-str
-    The model id parsed from the url
-object
-    model_info object from Hugging Face
-"""
-
-
 def fetch_model_card(model_url: str) -> tuple[str, Any]:
+    """
+    Fetches the model card JSON from Hugging Face given a model URL.
+
+    Parameters
+    ----------
+    model_url : str
+        Hugging Face model URL.
+
+    Returns
+    -------
+    tuple (str, object)
+    str
+        The model id parsed from the url
+    object
+        model_info object from Hugging Face
+    """
     parsed = urlparse(model_url)
     path = parsed.path.strip("/")
     parts = path.split("/")
@@ -88,25 +87,23 @@ def fetch_model_card(model_url: str) -> tuple[str, Any]:
     return model_id, info
 
 
-"""
-Computes a score 0-1 based on evidence supporting model performance.
-
-Parameters
-----------
-model_url : str
-    URL to Hugging Face model.
-
-Returns
--------
-tuple(float, float)
-float
-    Score in range 0-1.
-float
-    Latency in seconds.
-"""
-
-
 def performance_claims(model_url: str) -> tuple[float, float]:
+    """
+    Computes a score 0-1 based on evidence supporting model performance.
+
+    Parameters
+    ----------
+    model_url : str
+        URL to Hugging Face model.
+
+    Returns
+    -------
+    tuple(float, float)
+    float
+        Score in range 0-1.
+    float
+        Latency in seconds.
+    """
     # start latency timer
     start = time.time()
     logger.info("Calculating performance_claims metric")

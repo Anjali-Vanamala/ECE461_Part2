@@ -1,14 +1,3 @@
-# If the dataset used for training and benchmarking is well documented,
-#    along with any example code
-import os
-import re
-import time
-from typing import Optional, Tuple
-
-import requests
-
-import logger
-
 """
 Use Purdue GenAI Studio to measure dataset documentation.
 
@@ -22,6 +11,14 @@ Returns
 string
     Response from LLM. Should be just a float in string format
 """
+import os
+import re
+import time
+from typing import Optional, Tuple
+
+import requests
+
+import logger
 
 
 def extract_and_validate_readme_code(readme: str) -> bool:
@@ -42,6 +39,7 @@ def extract_and_validate_readme_code(readme: str) -> bool:
 
 
 def query_genai_studio(prompt: str) -> str:
+    """Query Purdue GenAI Studio with the given prompt."""
     # get api key from environment variable
     api_key = os.environ.get("GEN_AI_STUDIO_API_KEY")
     if not api_key:
@@ -74,27 +72,6 @@ def query_genai_studio(prompt: str) -> str:
         return "0.0"
 
 
-"""
-Indicates if the dataset used for training and benchmarking
-is well documented, along with any example code.
-
-Parameters
-----------
-code_url :   string
-    Example code url
-dataset_url: string
-    Dataset url
-
-Returns
--------
-tuple[float,float]
-float
-    Score in range 0 (bad) - 1 (good)
-float
-    latency of metric in seconds
-"""
-
-
 def dataset_and_code_score(
     code_info: dict | None,
     dataset_url: str,
@@ -102,6 +79,25 @@ def dataset_and_code_score(
     *,
     dataset_name: Optional[str] = None
 ) -> Tuple[float, float]:
+    """
+    Indicates if the dataset used for training and benchmarking
+    is well documented, along with any example code.
+
+    Parameters
+    ----------
+    code_url :   string
+        Example code url
+    dataset_url: string
+        Dataset url
+
+    Returns
+    -------
+    tuple[float,float]
+    float
+        Score in range 0 (bad) - 1 (good)
+    float
+        latency of metric in seconds
+    """
     # start latency timer
     start = time.time()
     logger.info("Calculating dataset_and_score metric")
@@ -166,8 +162,10 @@ def dataset_and_code_score(
 # UNIT TEST
 
 
-class Test_datasetandcodescore:
+class TestDatasetAndCodeScore:
+    """Unit tests for dataset_and_code_score metric."""
     def testbert(self):
+        """Test dataset_and_code_score with BERT model and BookCorpus dataset."""
         code_url = "https://github.com/google-research/bert"
         dataset_url = "https://huggingface.co/datasets/bookcorpus/bookcorpus"
         score, latency = dataset_and_code_score(code_url, dataset_url)

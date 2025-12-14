@@ -1,4 +1,23 @@
-# from parse_categories import masterScoring
+"""
+Bus Factor and Project Health Metrics
+
+This module computes Bus Factor and related project health scores
+for APIs, GitHub repos, or HuggingFace spaces, estimating project
+resilience based on contributors, maintenance activity, and organizational backing.
+
+Functions
+---------
+_rate_limit()
+    Enforces GitHub API rate limiting.
+calculate_active_maintenance_score(api_info)
+    Scores based on recent updates.
+calculate_contributor_diversity_score(api_info)
+    Scores based on contributor count and diversity.
+calculate_org_backing_score(api_info)
+    Scores based on known organizational backing.
+bus_factor(api_info)
+    Computes combined Bus Factor score and returns it with latency.
+"""
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
@@ -10,20 +29,20 @@ from metrics_helpers.get_github_url import extract_github_url
 
 # Rate limiting constants
 RATE_LIMIT_DELAY = 0.1  # 100ms between API calls
-_last_api_call_time = 0.0
+_LAST_API_CALL_TIME = 0.0
 
 
 def _rate_limit() -> None:
     """Ensure we don't exceed GitHub API rate limits."""
-    global _last_api_call_time
+    global _LAST_API_CALL_TIME
     current_time = time.time()
-    time_since_last = current_time - _last_api_call_time
+    time_since_last = current_time - _LAST_API_CALL_TIME
 
     if time_since_last < RATE_LIMIT_DELAY:
         sleep_time = RATE_LIMIT_DELAY - time_since_last
         time.sleep(sleep_time)
 
-    _last_api_call_time = time.time()
+    _LAST_API_CALL_TIME = time.time()
 
 
 def calculate_active_maintenance_score(api_info: Dict[str, Any]) -> float:
@@ -121,10 +140,10 @@ def calculate_org_backing_score(api_info: Dict[str, Any]) -> float:
         Organizational backing score (0-1)
     """
 
-    KNOWN_ORGS = {"google", "meta", "microsoft", "openai", "apple", "ibm", "huggingface"}
+    known_orgs = {"google", "meta", "microsoft", "openai", "apple", "ibm", "huggingface"}
 
     author = api_info.get("author", "").lower()
-    if any(org in author for org in KNOWN_ORGS):
+    if any(org in author for org in known_orgs):
         return 1.0
     elif author:
         return 0.5

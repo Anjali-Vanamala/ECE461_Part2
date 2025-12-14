@@ -45,6 +45,8 @@ def _manage_cache_size() -> None:
 
 
 def get_parent_models(model_info_dict: dict) -> list[str]:
+    """
+    Extract parent model IDs from Hugging Face model info."""
     model_id = model_info_dict.get("id")
     parents = []
 

@@ -1,3 +1,10 @@
+"""
+DynamoDB-backed artifact storage module.
+
+Provides functions to create, update, retrieve, delete, and query artifacts
+(models, datasets, code) in a DynamoDB table. Also supports artifact linking,
+model ratings, licenses, README management, and processing status tracking.
+"""
 from __future__ import annotations
 
 import json
@@ -24,10 +31,12 @@ print(f"[DynamoDB] Initialized - Table: {TABLE_NAME}, Region: {AWS_REGION}")
 
 
 def generate_artifact_id() -> ArtifactID:
+    """Generate a new unique artifact ID."""
     return str(uuid.uuid4())
 
 
 def _normalized(name: Optional[str]) -> Optional[str]:
+    """Return normalized (lowercase, stripped) version of name, or None if name is None."""
     return name.strip().lower() if isinstance(name, str) else None
 
 

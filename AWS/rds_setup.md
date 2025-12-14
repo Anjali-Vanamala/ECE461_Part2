@@ -9,6 +9,30 @@
 
 ---
 
+## Current Progress & Status
+
+### ✅ Completed Steps
+1. **Security Group Created**: `ece461-rds-sg` (sg-08d87976fec1b8ed3)
+2. **DB Subnet Group Created**: `ece461-rds-subnet-group` (VPC: vpc-044c2485fbca6f3bc)
+3. **RDS Instance Created**: `ece461-postgres` (Status: `available`)
+   - Endpoint: `ece461-postgres.cnee4ueesi3l.us-east-2.rds.amazonaws.com`
+   - Engine: PostgreSQL 15.15
+   - Instance Class: db.t3.micro
+   - Storage: 20GB gp2
+
+### ⚠️ In Progress / Pending
+1. **Making RDS Publicly Accessible**: Modification requested but may not be complete
+2. **Security Group Rules**: Need to add CloudShell IP for initialization
+3. **Database Schema Initialization**: Waiting for connectivity
+
+### 🔧 Next Steps Required
+See **"Troubleshooting: Connection Timeout from CloudShell"** section below for commands to:
+- Verify and complete the public accessibility modification
+- Add CloudShell IP to security group
+- Initialize the database schema
+
+---
+
 ## Step 1: Create Security Group for RDS
 
 Get your current IP address (for local development access):
@@ -136,7 +160,7 @@ aws rds create-db-instance \
   --db-instance-identifier ece461-postgres \
   --db-instance-class db.t3.micro \
   --engine postgres \
-  --engine-version 15.4 \
+  --engine-version 15.15 \
   --master-username postgres \
   --master-user-password "$DB_PASSWORD" \
   --allocated-storage 20 \
@@ -149,6 +173,10 @@ aws rds create-db-instance \
   --no-publicly-accessible \
   --region us-east-2 \
   --output json > /tmp/rds-instance.json
+
+# Note: If engine-version 15.15 is not available, omit --engine-version to use default
+# Or list available versions:
+# aws rds describe-db-engine-versions --engine postgres --region us-east-2 --query 'DBEngineVersions[?contains(EngineVersion, `15`)].EngineVersion' --output text
 
 echo "✅ RDS instance creation started"
 echo "⏳ This will take 5-10 minutes. Check status with:"
@@ -362,8 +390,145 @@ echo "✅ Verification complete!"
 **Issue: "DB instance not found"**
 - Solution: Wait for instance creation to complete (5-10 minutes). Check status with: `aws rds describe-db-instances --db-instance-identifier ece461-postgres --region us-east-2 --query 'DBInstances[0].DBInstanceStatus' --output text`
 
-**Issue: "Connection timeout" or "Connection refused"**
-- Solution: Check security group rules allow your IP. Update with: `aws ec2 authorize-security-group-ingress --group-id <SG_ID> --protocol tcp --port 5432 --cidr <YOUR_IP>/32 --region us-east-2`
+**Issue: "Connection timeout" or "Connection refused" from CloudShell**
+
+This occurs when:
+1. RDS instance is not publicly accessible (created with `--no-publicly-accessible`)
+2. Security group doesn't allow CloudShell's IP address
+
+**Solution Steps:**
+
+**Step 1: Check RDS Modification Status**
+```bash
+aws rds describe-db-instances \
+  --db-instance-identifier ece461-postgres \
+  --region us-east-2 \
+  --query 'DBInstances[0].[DBInstanceStatus,PubliclyAccessible,PendingModifiedValues]' \
+  --output table
+```
+
+**Step 2: Make RDS Publicly Accessible (if not already)**
+```bash
+aws rds modify-db-instance \
+  --db-instance-identifier ece461-postgres \
+  --publicly-accessible \
+  --apply-immediately \
+  --region us-east-2
+
+# Wait for modification to complete (may take 5-10 minutes)
+aws rds wait db-instance-available \
+  --db-instance-identifier ece461-postgres \
+  --region us-east-2
+
+echo "✅ RDS instance is now publicly accessible"
+```
+
+**Step 3: Get CloudShell IP and Add to Security Group**
+```bash
+# Get CloudShell's public IP
+CLOUDSHELL_IP=$(curl -s https://checkip.amazonaws.com)
+echo "CloudShell IP: $CLOUDSHELL_IP"
+
+# Get security group ID from RDS instance
+SG_ID=$(aws rds describe-db-instances \
+  --db-instance-identifier ece461-postgres \
+  --region us-east-2 \
+  --query 'DBInstances[0].VpcSecurityGroups[0].VpcSecurityGroupId' \
+  --output text)
+
+echo "Security Group ID: $SG_ID"
+
+# Add CloudShell IP to security group
+aws ec2 authorize-security-group-ingress \
+  --group-id $SG_ID \
+  --protocol tcp \
+  --port 5432 \
+  --cidr $CLOUDSHELL_IP/32 \
+  --region us-east-2
+
+echo "✅ Added CloudShell IP ($CLOUDSHELL_IP) to security group"
+```
+
+**Step 4: Verify Public Accessibility**
+```bash
+aws rds describe-db-instances \
+  --db-instance-identifier ece461-postgres \
+  --region us-east-2 \
+  --query 'DBInstances[0].PubliclyAccessible' \
+  --output text
+```
+
+**Step 5: Initialize Schema (after connectivity is established)**
+```bash
+RDS_ENDPOINT=$(cat /tmp/rds-endpoint.txt | cut -d'=' -f2)
+DB_PASSWORD=$(cat /tmp/rds-password.txt | cut -d'=' -f2)
+
+python3 << EOF
+import psycopg2
+
+try:
+    conn = psycopg2.connect(
+        host="$RDS_ENDPOINT",
+        database="artifacts_db",
+        user="postgres",
+        password="$DB_PASSWORD",
+        port=5432,
+        connect_timeout=10
+    )
+    cur = conn.cursor()
+    
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS artifacts (
+            artifact_id VARCHAR(255) PRIMARY KEY,
+            artifact_type VARCHAR(50) NOT NULL,
+            name VARCHAR(500) NOT NULL,
+            name_normalized VARCHAR(500),
+            url VARCHAR(2000) NOT NULL,
+            artifact_data JSONB NOT NULL,
+            rating JSONB,
+            license VARCHAR(200),
+            dataset_id VARCHAR(255),
+            dataset_name VARCHAR(500),
+            dataset_name_normalized VARCHAR(500),
+            dataset_url VARCHAR(2000),
+            code_id VARCHAR(255),
+            code_name VARCHAR(500),
+            code_name_normalized VARCHAR(500),
+            code_url VARCHAR(2000),
+            processing_status VARCHAR(50) DEFAULT 'completed'
+        )
+    """)
+    
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_artifact_type ON artifacts(artifact_type)",
+        "CREATE INDEX IF NOT EXISTS idx_name_normalized ON artifacts(name_normalized)",
+        "CREATE INDEX IF NOT EXISTS idx_url ON artifacts(url)",
+        "CREATE INDEX IF NOT EXISTS idx_dataset_id ON artifacts(dataset_id)",
+        "CREATE INDEX IF NOT EXISTS idx_code_id ON artifacts(code_id)",
+        "CREATE INDEX IF NOT EXISTS idx_dataset_name_normalized ON artifacts(dataset_name_normalized)",
+        "CREATE INDEX IF NOT EXISTS idx_code_name_normalized ON artifacts(code_name_normalized)",
+        "CREATE INDEX IF NOT EXISTS idx_artifact_type_name ON artifacts(artifact_type, name_normalized)",
+        "CREATE INDEX IF NOT EXISTS idx_artifact_type_url ON artifacts(artifact_type, url)"
+    ]
+    
+    for index_sql in indexes:
+        cur.execute(index_sql)
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    print("✅ Database schema initialized successfully!")
+    
+except Exception as e:
+    print(f"❌ Error: {e}")
+    import traceback
+    traceback.print_exc()
+    exit(1)
+EOF
+```
+
+**Note:** For production, consider making RDS private again after initialization and accessing it only from within the VPC (Lambda/ECS).
 
 **Issue: "Authentication failed"**
 - Solution: Verify password matches what you set in Step 3. Password is stored in `/tmp/rds-password.txt` (if you didn't delete it).
@@ -373,6 +538,10 @@ echo "✅ Verification complete!"
 
 **Issue: "Insufficient permissions"**
 - Solution: Ensure your AWS credentials have `rds:*`, `ec2:*` permissions, or use an IAM user/role with RDS and EC2 access.
+
+**Issue: "Cannot find version 15.4 for postgres"**
+- Solution: List available versions: `aws rds describe-db-engine-versions --engine postgres --region us-east-2 --query 'DBEngineVersions[?contains(EngineVersion, `15`)].EngineVersion' --output text`
+- Use a valid version (e.g., `15.15`) or omit `--engine-version` to use the default.
 
 ---
 

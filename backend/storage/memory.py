@@ -175,6 +175,7 @@ def save_artifact(
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
     code_url: Optional[str] = None,
+    readme: Optional[str] = None,
     processing_status: Optional[str] = None,
     lineage: Optional[LineageMetadata] = None,
     base_model_name: Optional[str] = None,
@@ -192,6 +193,7 @@ def save_artifact(
             record.license = license or record.license
             record.lineage = lineage or record.lineage
             record.base_model_name = base_model_name or record.base_model_name
+            record.readme = readme or record.readme
             if processing_status is not None:
                 record.processing_status = processing_status
         else:
@@ -204,6 +206,7 @@ def save_artifact(
                 code_name=code_name,
                 code_url=code_url,
                 base_model_name=base_model_name,
+                readme=readme,
                 processing_status=processing_status or "completed",
                 lineage=lineage,
             )
@@ -321,6 +324,12 @@ def save_model_license(artifact_id: ArtifactID, license: str) -> None:
         record.license = license
 
 
+def save_model_readme(artifact_id: ArtifactID, readme: str) -> None:
+    if artifact_id in _MODELS:
+        record = _MODELS[artifact_id]
+        record.readme = readme
+
+
 def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
     record = _MODELS.get(artifact_id)
     if not record:
@@ -338,6 +347,13 @@ def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
 def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
     """Get the ModelRecord for a given artifact ID."""
     return _MODELS.get(artifact_id)
+
+
+def get_model_readme(artifact_id: ArtifactID) -> Optional[str]:
+    record = _MODELS.get(artifact_id)
+    if not record:
+        return None
+    return record.readme
 
 
 def get_processing_status(artifact_id: ArtifactID) -> Optional[str]:

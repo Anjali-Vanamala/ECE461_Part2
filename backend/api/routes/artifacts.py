@@ -16,11 +16,9 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
-                            ArtifactData, ArtifactID, ArtifactLineageEdge,
-                            ArtifactLineageGraph, ArtifactLineageNode,
-                            ArtifactMetadata, ArtifactQuery,
-                            ArtifactRegistration, ArtifactType, ModelRating,
-                            SimpleLicenseCheckRequest)
+                            ArtifactData, ArtifactID, ArtifactMetadata,
+                            ArtifactQuery, ArtifactRegistration, ArtifactType,
+                            ModelRating, SimpleLicenseCheckRequest)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory, s3
 
@@ -266,14 +264,13 @@ def _get_download_filename(artifact: Artifact, source_url: str) -> str:
     return f"{safe_name}{extension}"
 
 
-def calibrate_regex_timeout() -> float:
+def calibrate_regex_timeout(test_text) -> float:
     """
     Measures how long regex takes in this platform for a safe case.
     The timeout is set to 2x the baseline to avoid false-positive timeouts.
     """
     test_pattern = r"a+"
     test2_pattern = r"ece461"
-    test_text = "a" * 5000
 
     start = time.perf_counter()
     regex.search(test_pattern, test_text)
@@ -287,12 +284,7 @@ def calibrate_regex_timeout() -> float:
     return max(0.0001, baseline * 8, baseline2 * 8)
 
 
-# Compute once at import time
-REGEX_TIMEOUT = calibrate_regex_timeout()
-print(f"[Regex] Calibrated REGEX_TIMEOUT = {REGEX_TIMEOUT:.6f} seconds")
-
-
-def safe_regex_search(pattern: str, text: str, timeout: float = REGEX_TIMEOUT):
+def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | None:
     try:
         return bool(regex.search(pattern, text, timeout=timeout))
     except TimeoutError:
@@ -317,17 +309,29 @@ async def regex_artifact_search(payload: dict = Body(...)):
     results: List[ArtifactMetadata] = []
 
     # Initial catastrophic check
-    initial_test = safe_regex_search(regex_str, "a" * 5000)
+    test_string = "a" * 5000
+    timeout_1 = calibrate_regex_timeout(test_string)
+    initial_test = safe_regex_search(regex_str, "a" * 5000, timeout_1)
     if initial_test is None:
         raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
     for store in memory._TYPE_TO_STORE.values():
         for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name
-            test = safe_regex_search(regex_str, name)
-            if test is None:
+            test_readme = None
+            if record.artifact.metadata.type == ArtifactType.MODEL:
+                readme = memory.get_model_readme(record.artifact.metadata.id)
+            else:
+                readme = "temp"
+            if readme is not None and len(readme) > 10:
+                timeout = calibrate_regex_timeout(readme)
+                test_readme = safe_regex_search(regex_str, readme, timeout)
+            else:
+                timeout = timeout_1
+            test = safe_regex_search(regex_str, name, timeout)
+            if test is None and test_readme is None:
                 raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
-            if test:
+            if test or test_readme:
                 results.append(record.artifact.metadata)
 
     if not results:
@@ -427,7 +431,7 @@ def process_model_artifact_async(
         )
 
         # Compute the artifact (long-running)
-        artifact, rating, dataset_name, dataset_url, code_name, code_url, license, base_model_name = compute_model_artifact(
+        artifact, rating, dataset_name, dataset_url, code_name, code_url, license, readme = compute_model_artifact(
             url,
             artifact_id=artifact_id,
             name_override=name,
@@ -468,6 +472,7 @@ def process_model_artifact_async(
             dataset_url=dataset_url,
             code_name=code_name,
             code_url=code_url,
+            readme=readme,
             processing_status="completed",
             lineage=lineage,
             base_model_name=base_model_name,

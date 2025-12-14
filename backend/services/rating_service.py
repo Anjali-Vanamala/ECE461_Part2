@@ -509,4 +509,4 @@ def compute_model_artifact(
 
     license = _extract_model_license(model_info, readme_text)
 
-    return artifact, rating, dataset_name, dataset_url, code_name, code_url, license, base_model_hint
+    return artifact, rating, dataset_name, dataset_url, code_name, code_url, license, readme_text

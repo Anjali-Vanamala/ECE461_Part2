@@ -230,4 +230,65 @@ export async function fetchHealthComponents(windowMinutes: number = 60, includeT
   }
 }
 
+// Download Benchmark API functions
+export async function startDownloadBenchmark() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health/download-benchmark/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    
+    if (!response.ok) {
+      const errorText = response.statusText || `HTTP ${response.status}`
+      let errorDetail = errorText
+      try {
+        const errorData = await response.json()
+        errorDetail = errorData.detail || errorData.message || errorText
+      } catch {
+        // If response body isn't JSON, use status text
+      }
+      throw new Error(`Failed to start download benchmark: ${errorDetail}`)
+    }
+    
+    return response.json()
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(`Network error: Unable to connect to API. Please check if the API is running at ${API_BASE_URL}`)
+    }
+    throw error
+  }
+}
+
+export async function getDownloadBenchmarkStatus(jobId: string) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health/download-benchmark/${jobId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    
+    if (!response.ok) {
+      const errorText = response.statusText || `HTTP ${response.status}`
+      let errorDetail = errorText
+      try {
+        const errorData = await response.json()
+        errorDetail = errorData.detail || errorData.message || errorText
+      } catch {
+        // If response body isn't JSON, use status text
+      }
+      throw new Error(`Failed to get download benchmark status: ${errorDetail}`)
+    }
+    
+    return response.json()
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(`Network error: Unable to connect to API. Please check if the API is running at ${API_BASE_URL}`)
+    }
+    throw error
+  }
+}
+
 

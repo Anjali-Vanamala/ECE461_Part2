@@ -94,3 +94,4 @@ def run_in_background(task_func: Callable, *args, **kwargs) -> None:
         # For non-Lambda, we still need to call it, but this function
         # is meant to be used with BackgroundTasks.add_task()
         task_func(*args, **kwargs)
+

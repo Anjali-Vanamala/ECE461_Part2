@@ -40,3 +40,4 @@ handler = Mangum(
 )
 
 logger.info("Lambda handler initialized successfully")
+

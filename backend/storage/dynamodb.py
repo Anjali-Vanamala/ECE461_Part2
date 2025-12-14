@@ -82,6 +82,7 @@ def _item_to_record(item: Dict) -> CodeRecord | DatasetRecord | ModelRecord:
             code_id=item.get("code_id"),
             code_name=item.get("code_name"),
             code_url=item.get("code_url"),
+            readme=item.get("readme"),
             processing_status=item.get("processing_status", "completed"),
         )
     elif artifact_type == ArtifactType.DATASET:
@@ -99,6 +100,7 @@ def save_artifact(
     dataset_url: Optional[str] = None,
     code_name: Optional[str] = None,
     code_url: Optional[str] = None,
+    readme: Optional[str] = None,
     processing_status: Optional[str] = None,
 ) -> Artifact:
     """Insert or update an artifact entry in DynamoDB."""
@@ -142,6 +144,12 @@ def save_artifact(
             item["license"] = license
         elif existing_item and "license" in existing_item:
             item["license"] = existing_item["license"]
+
+        # Preserve existing readme if not provided
+        if readme is not None:
+            item["readme"] = readme
+        elif existing_item and "readme" in existing_item:
+            item["readme"] = existing_item["readme"]
 
         # Preserve existing dataset fields if not provided
         if dataset_name is not None:
@@ -522,6 +530,24 @@ def save_model_license(artifact_id: ArtifactID, license: str) -> None:
             print(f"[DynamoDB] Error saving model license: {e}")
 
 
+def save_model_readme(artifact_id: ArtifactID, readme: str) -> None:
+    """Save or update a model readme."""
+    try:
+        table.update_item(
+            Key={"artifact_id": artifact_id},
+            UpdateExpression="SET readme = :readme",
+            ConditionExpression="artifact_type = :type",
+            ExpressionAttributeValues={
+                ":readme": readme,
+                ":type": ArtifactType.MODEL.value,
+            },
+        )
+        print(f"[DynamoDB] Saved readme for model: {artifact_id}")
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            print(f"[DynamoDB] Error saving model readme: {e}")
+
+
 def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
     """Get the license for a model."""
     try:
@@ -536,6 +562,23 @@ def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
         return item.get("license")
     except ClientError as e:
         print(f"[DynamoDB] Error getting model license: {e}")
+        return None
+
+
+def get_model_readme(artifact_id: ArtifactID) -> Optional[str]:
+    """Get the readme for a model."""
+    try:
+        response = table.get_item(Key={"artifact_id": artifact_id})
+        if "Item" not in response:
+            return None
+
+        item = response["Item"]
+        if item.get("artifact_type") != ArtifactType.MODEL.value:
+            return None
+
+        return item.get("readme")
+    except ClientError as e:
+        print(f"[DynamoDB] Error getting model readme: {e}")
         return None
 
 

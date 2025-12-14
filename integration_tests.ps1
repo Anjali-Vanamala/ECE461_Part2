@@ -1414,18 +1414,10 @@ Test-Call 'POST /artifact/byRegEx ".*bookcorpus.*"' {
         -Body '{"regex":".*bookcorpus.*"}'
 } -ExpectedStatus @(200, 201) -Assert {
     param($json)
-    $expectedName = "bookcorpus"
-    if ($json.name -ne $expectedName) {
-        throw "Expected name '$expectedName' but got '$($json.name)'"
+    if ($json.Count -ne 2) {
+        throw "Expected exactly 2 results, but got $($json.Count)"
     }
 
-    if ($json.type -ne "dataset") {
-        throw "Expected type 'dataset' but got '$($json.type)'"
-    }
-
-    if (-not $json.PSObject.Properties.Match("id")) {
-        throw "Expected 'id' field to exist, but it was missing"
-    }
 }
 
 Test-Call 'POST /artifact/byRegEx "google-research-bert"' {

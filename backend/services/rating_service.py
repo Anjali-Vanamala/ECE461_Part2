@@ -351,7 +351,7 @@ def compute_model_artifact(
     *,
     artifact_id: Optional[str] = None,
     name_override: Optional[str] = None,
-) -> tuple[Artifact, ModelRating, Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+) -> tuple[Artifact, ModelRating, Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     name = name_override or _derive_name_from_url(url)
     artifact_id = artifact_id or memory.generate_artifact_id()
 
@@ -487,4 +487,4 @@ def compute_model_artifact(
 
     license = _extract_model_license(model_info, readme_text)
 
-    return artifact, rating, dataset_name, dataset_url, code_name, code_url, license
+    return artifact, rating, dataset_name, dataset_url, code_name, code_url, license, readme_text

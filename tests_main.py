@@ -2294,7 +2294,7 @@ class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
             mock_compute.return_value = MagicMock()
 
             client = TestClient(app)
-            memory.clear_all()
+            memory.reset()
 
             response = client.post(
                 "/artifacts/model",
@@ -2303,7 +2303,7 @@ class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
 
             # Models return 202 (ACCEPTED) for async processing
             assert response.status_code == 202
-            memory.clear_all()
+            memory.reset()
 
     async def test_artifact_registration_works_in_ecs(self):
         """Test that artifact registration works correctly in ECS environment."""
@@ -2322,7 +2322,7 @@ class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
                 mock_compute.return_value = MagicMock()
 
                 client = TestClient(app)
-                memory.clear_all()
+                memory.reset()
 
                 response = client.post(
                     "/artifacts/model",
@@ -2331,7 +2331,7 @@ class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
 
                 # Models return 202 (ACCEPTED) for async processing
                 assert response.status_code == 202
-                memory.clear_all()
+                memory.reset()
         finally:
             if original:
                 os.environ["COMPUTE_BACKEND"] = original

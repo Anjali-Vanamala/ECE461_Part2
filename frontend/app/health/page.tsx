@@ -3,6 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { 
   Activity, 
   AlertCircle, 
@@ -20,7 +21,7 @@ import {
   BarChart3
 } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
-import { fetchHealth, fetchHealthComponents, startDownloadBenchmark, getDownloadBenchmarkStatus } from "@/lib/api"
+import { fetchHealth, fetchHealthComponents, startDownloadBenchmark, getDownloadBenchmarkStatus, BACKEND_ENDPOINTS, BackendType } from "@/lib/api"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend } from "@/components/ui/chart"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar } from "recharts"
 
@@ -41,6 +42,13 @@ export default function HealthPage() {
   const [downloadBenchmarkError, setDownloadBenchmarkError] = useState<string | null>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Backend selection state for benchmarking
+  const [selectedBackend, setSelectedBackend] = useState<BackendType>('ecs')
+  const [benchmarkResultsByBackend, setBenchmarkResultsByBackend] = useState<Record<BackendType, any>>({
+    ecs: null,
+    lambda: null,
+  })
+
   // Detect dark mode
   useEffect(() => {
     const checkDarkMode = () => {
@@ -57,6 +65,31 @@ export default function HealthPage() {
   
   // Load saved download benchmark results from localStorage and resume polling if needed
   useEffect(() => {
+    // Load per-backend results
+    const savedEcsResults = localStorage.getItem('downloadBenchmarkResults_ecs')
+    const savedLambdaResults = localStorage.getItem('downloadBenchmarkResults_lambda')
+
+    const loadedResults: Record<BackendType, any> = { ecs: null, lambda: null }
+
+    if (savedEcsResults) {
+      try {
+        loadedResults.ecs = JSON.parse(savedEcsResults)
+      } catch (e) {
+        console.error('Failed to parse saved ECS benchmark results:', e)
+      }
+    }
+
+    if (savedLambdaResults) {
+      try {
+        loadedResults.lambda = JSON.parse(savedLambdaResults)
+      } catch (e) {
+        console.error('Failed to parse saved Lambda benchmark results:', e)
+      }
+    }
+
+    setBenchmarkResultsByBackend(loadedResults)
+
+    // Also load the legacy single result for backward compatibility
     const savedResults = localStorage.getItem('downloadBenchmarkResults')
     if (savedResults) {
       try {
@@ -71,15 +104,26 @@ export default function HealthPage() {
     // Check if there's a running benchmark to resume
     const savedJobId = localStorage.getItem('downloadBenchmarkJobId')
     const savedRunning = localStorage.getItem('downloadBenchmarkRunning')
+    const savedBackend = localStorage.getItem('downloadBenchmarkBackend') as BackendType | null
     
     if (savedJobId && savedRunning === 'true') {
-      console.log('Resuming polling for benchmark job:', savedJobId)
+      // Restore selected backend if available
+      if (savedBackend && (savedBackend === 'ecs' || savedBackend === 'lambda')) {
+        setSelectedBackend(savedBackend)
+      }
+      
+      console.log('Resuming polling for benchmark job:', savedJobId, 'on backend:', savedBackend || 'unknown')
       setDownloadBenchmarkRunning(true)
+      
+      // Get the backend URL for polling
+      const backendUrl = savedBackend && (savedBackend === 'ecs' || savedBackend === 'lambda')
+        ? BACKEND_ENDPOINTS[savedBackend].url
+        : undefined
       
       // Resume polling
       const pollInterval = setInterval(async () => {
         try {
-          const statusResponse = await getDownloadBenchmarkStatus(savedJobId)
+          const statusResponse = await getDownloadBenchmarkStatus(savedJobId, backendUrl)
           
           if (statusResponse.progress) {
             setDownloadBenchmarkProgress(statusResponse.progress)
@@ -89,7 +133,8 @@ export default function HealthPage() {
           }
           
           if (statusResponse.status === 'completed') {
-            console.log('Download benchmark completed! Results:', statusResponse.results)
+            const completedBackend = savedBackend || 'ecs' // Default to ecs if not saved
+            console.log(`Download benchmark completed on ${completedBackend}! Results:`, statusResponse.results)
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current)
               pollIntervalRef.current = null
@@ -98,10 +143,21 @@ export default function HealthPage() {
             setDownloadBenchmarkRunning(false)
             setDownloadBenchmarkProgress(null)
             setDownloadBenchmarkCurrentProgress(null)
+            // Save per-backend results
+            if (completedBackend === 'ecs' || completedBackend === 'lambda') {
+              localStorage.setItem(`downloadBenchmarkResults_${completedBackend}`, JSON.stringify(statusResponse.results))
+              localStorage.setItem(`downloadBenchmarkCompletedAt_${completedBackend}`, new Date().toISOString())
+              setBenchmarkResultsByBackend(prev => ({
+                ...prev,
+                [completedBackend]: statusResponse.results
+              }))
+            }
+            // Also save to legacy key for backward compat
             localStorage.setItem('downloadBenchmarkResults', JSON.stringify(statusResponse.results))
             localStorage.setItem('downloadBenchmarkCompletedAt', new Date().toISOString())
             localStorage.removeItem('downloadBenchmarkJobId')
             localStorage.removeItem('downloadBenchmarkRunning')
+            localStorage.removeItem('downloadBenchmarkBackend')
           } else if (statusResponse.status === 'failed') {
             console.error('Download benchmark failed:', statusResponse.error)
             if (pollIntervalRef.current) {
@@ -114,6 +170,7 @@ export default function HealthPage() {
             setDownloadBenchmarkCurrentProgress(null)
             localStorage.removeItem('downloadBenchmarkJobId')
             localStorage.removeItem('downloadBenchmarkRunning')
+            localStorage.removeItem('downloadBenchmarkBackend')
           }
         } catch (err) {
           console.error('Error checking download benchmark status:', err)
@@ -125,6 +182,7 @@ export default function HealthPage() {
           setDownloadBenchmarkRunning(false)
           localStorage.removeItem('downloadBenchmarkJobId')
           localStorage.removeItem('downloadBenchmarkRunning')
+          localStorage.removeItem('downloadBenchmarkBackend')
         }
       }, 2000)
       
@@ -201,6 +259,29 @@ export default function HealthPage() {
         return <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
       default:
         return <AlertCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+    }
+  }
+
+  // Helper function to safely calculate percentage difference
+  const calculatePercentageDifference = (
+    ecsValue: number | undefined,
+    lambdaValue: number | undefined,
+    isLowerBetter: boolean = false
+  ): { percentage: string; isBetter: boolean; faster: string } | null => {
+    if (!ecsValue || !lambdaValue || ecsValue === 0 || lambdaValue === 0) {
+      return null
+    }
+    
+    const diff = ((lambdaValue / ecsValue - 1) * 100)
+    const isBetter = isLowerBetter 
+      ? ecsValue < lambdaValue 
+      : ecsValue > lambdaValue
+    const faster = isBetter ? 'ECS' : 'Lambda'
+    
+    return {
+      percentage: diff.toFixed(1),
+      isBetter,
+      faster
     }
   }
 
@@ -626,42 +707,92 @@ export default function HealthPage() {
             {/* Download Benchmark Section */}
             <Card className="mb-6 bg-card/50 border-border/50">
               <div className="border-b border-border/50 p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <BarChart3 className="h-6 w-6 text-chart-1" />
-                    <div>
-                      <h2 className="text-xl font-semibold text-foreground">Download Performance Benchmark</h2>
-                      <p className="text-sm text-muted-foreground">
-                        Measure throughput, latency, and performance metrics for 100 concurrent downloads
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <BarChart3 className="h-6 w-6 text-chart-1" />
+                      <div>
+                        <h2 className="text-xl font-semibold text-foreground">Download Performance Benchmark</h2>
+                        <p className="text-sm text-muted-foreground">
+                          Compare ECS vs Lambda performance with 100 concurrent downloads
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Backend Selector */}
+                  <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between p-4 rounded-lg bg-muted/30">
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm font-medium text-foreground">Select Compute Backend</p>
+                      <div className="flex gap-2">
+                        {(Object.keys(BACKEND_ENDPOINTS) as BackendType[]).map((backendKey) => {
+                          const backend = BACKEND_ENDPOINTS[backendKey]
+                          return (
+                            <Tooltip key={backendKey}>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Button
+                                    variant={selectedBackend === backendKey ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => setSelectedBackend(backendKey)}
+                                    disabled={downloadBenchmarkRunning}
+                                    className="gap-2"
+                                  >
+                                    <Server className="h-4 w-4" />
+                                    {backend.name}
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              {downloadBenchmarkRunning && (
+                                <TooltipContent>
+                                  <p>Cannot change backend while benchmark is running</p>
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">
+                        {BACKEND_ENDPOINTS[selectedBackend].description}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cold Start: {BACKEND_ENDPOINTS[selectedBackend].coldStart}
                       </p>
                     </div>
                   </div>
-                  <Button
-                    onClick={async () => {
-                      try {
-                        setDownloadBenchmarkRunning(true)
-                        setDownloadBenchmarkResults(null)
-                        setDownloadBenchmarkError(null)
-                        setDownloadBenchmarkProgress(null)
-                        setDownloadBenchmarkCurrentProgress(null)
+
+                  {/* Run Benchmark Button */}
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={async () => {
+                        const backendUrl = BACKEND_ENDPOINTS[selectedBackend].url
+                        try {
+                          setDownloadBenchmarkRunning(true)
+                          setDownloadBenchmarkResults(null)
+                          setDownloadBenchmarkError(null)
+                          setDownloadBenchmarkProgress(null)
+                          setDownloadBenchmarkCurrentProgress(null)
+
+                          const startResponse = await startDownloadBenchmark(backendUrl)
+                          const jobId = startResponse.job_id
+                          console.log(`Download benchmark started on ${selectedBackend} with job ID:`, jobId)
                         
-                        const startResponse = await startDownloadBenchmark()
-                        const jobId = startResponse.job_id
-                        console.log('Download benchmark started with job ID:', jobId)
-                        
-                        // Store jobId and running state in localStorage
-                        localStorage.setItem('downloadBenchmarkJobId', jobId)
-                        localStorage.setItem('downloadBenchmarkRunning', 'true')
-                        
-                        // Clear any existing interval
-                        if (pollIntervalRef.current) {
-                          clearInterval(pollIntervalRef.current)
-                        }
-                        
-                        // Poll for results every 2 seconds
-                        const pollInterval = setInterval(async () => {
-                          try {
-                            const statusResponse = await getDownloadBenchmarkStatus(jobId)
+                          // Store jobId, running state, and selected backend in localStorage
+                          localStorage.setItem('downloadBenchmarkJobId', jobId)
+                          localStorage.setItem('downloadBenchmarkRunning', 'true')
+                          localStorage.setItem('downloadBenchmarkBackend', selectedBackend)
+
+                          // Clear any existing interval
+                          if (pollIntervalRef.current) {
+                            clearInterval(pollIntervalRef.current)
+                          }
+
+                          // Poll for results every 2 seconds
+                          const pollInterval = setInterval(async () => {
+                            try {
+                              const statusResponse = await getDownloadBenchmarkStatus(jobId, backendUrl)
                             
                             if (statusResponse.progress) {
                               setDownloadBenchmarkProgress(statusResponse.progress)
@@ -670,63 +801,77 @@ export default function HealthPage() {
                               setDownloadBenchmarkCurrentProgress(statusResponse.current_progress)
                             }
                             
-                            if (statusResponse.status === 'completed') {
-                              console.log('Download benchmark completed! Results:', statusResponse.results)
+                              if (statusResponse.status === 'completed') {
+                                console.log(`Download benchmark completed on ${selectedBackend}! Results:`, statusResponse.results)
+                                clearInterval(pollInterval)
+                                pollIntervalRef.current = null
+                                setDownloadBenchmarkResults(statusResponse.results)
+                                setDownloadBenchmarkRunning(false)
+                                setDownloadBenchmarkProgress(null)
+                                setDownloadBenchmarkCurrentProgress(null)
+                                // Save per-backend results
+                                localStorage.setItem(`downloadBenchmarkResults_${selectedBackend}`, JSON.stringify(statusResponse.results))
+                                localStorage.setItem(`downloadBenchmarkCompletedAt_${selectedBackend}`, new Date().toISOString())
+                                // Also save to legacy key for backward compat
+                                localStorage.setItem('downloadBenchmarkResults', JSON.stringify(statusResponse.results))
+                                localStorage.setItem('downloadBenchmarkCompletedAt', new Date().toISOString())
+                                localStorage.removeItem('downloadBenchmarkJobId')
+                                localStorage.removeItem('downloadBenchmarkRunning')
+                                localStorage.removeItem('downloadBenchmarkBackend')
+                                // Update per-backend state
+                                setBenchmarkResultsByBackend(prev => ({
+                                  ...prev,
+                                  [selectedBackend]: statusResponse.results
+                                }))
+                              } else if (statusResponse.status === 'failed') {
+                                console.error('Download benchmark failed:', statusResponse.error)
+                                clearInterval(pollInterval)
+                                pollIntervalRef.current = null
+                                setDownloadBenchmarkError(statusResponse.error || 'Download benchmark failed')
+                                setDownloadBenchmarkRunning(false)
+                                setDownloadBenchmarkProgress(null)
+                                setDownloadBenchmarkCurrentProgress(null)
+                                localStorage.removeItem('downloadBenchmarkJobId')
+                                localStorage.removeItem('downloadBenchmarkRunning')
+                                localStorage.removeItem('downloadBenchmarkBackend')
+                              }
+                            } catch (err) {
+                              console.error('Error checking download benchmark status:', err)
                               clearInterval(pollInterval)
                               pollIntervalRef.current = null
-                              setDownloadBenchmarkResults(statusResponse.results)
+                              setDownloadBenchmarkError(err instanceof Error ? err.message : "Failed to check benchmark status")
                               setDownloadBenchmarkRunning(false)
-                              setDownloadBenchmarkProgress(null)
-                              setDownloadBenchmarkCurrentProgress(null)
-                              localStorage.setItem('downloadBenchmarkResults', JSON.stringify(statusResponse.results))
-                              localStorage.setItem('downloadBenchmarkCompletedAt', new Date().toISOString())
                               localStorage.removeItem('downloadBenchmarkJobId')
                               localStorage.removeItem('downloadBenchmarkRunning')
-                            } else if (statusResponse.status === 'failed') {
-                              console.error('Download benchmark failed:', statusResponse.error)
-                              clearInterval(pollInterval)
-                              pollIntervalRef.current = null
-                              setDownloadBenchmarkError(statusResponse.error || 'Download benchmark failed')
-                              setDownloadBenchmarkRunning(false)
-                              setDownloadBenchmarkProgress(null)
-                              setDownloadBenchmarkCurrentProgress(null)
-                              localStorage.removeItem('downloadBenchmarkJobId')
-                              localStorage.removeItem('downloadBenchmarkRunning')
+                              localStorage.removeItem('downloadBenchmarkBackend')
                             }
-                          } catch (err) {
-                            console.error('Error checking download benchmark status:', err)
-                            clearInterval(pollInterval)
-                            pollIntervalRef.current = null
-                            setDownloadBenchmarkError(err instanceof Error ? err.message : "Failed to check benchmark status")
-                            setDownloadBenchmarkRunning(false)
-                            localStorage.removeItem('downloadBenchmarkJobId')
-                            localStorage.removeItem('downloadBenchmarkRunning')
-                          }
-                        }, 2000)
+                          }, 2000)
                         
                         pollIntervalRef.current = pollInterval
                         
-                        // Cleanup after 15 minutes (safety timeout)
-                        setTimeout(() => {
-                          if (pollIntervalRef.current) {
-                            clearInterval(pollIntervalRef.current)
-                            pollIntervalRef.current = null
-                          }
-                          if (downloadBenchmarkRunning) {
-                            setDownloadBenchmarkError("Benchmark timeout - check status manually")
-                            setDownloadBenchmarkRunning(false)
-                            localStorage.removeItem('downloadBenchmarkJobId')
-                            localStorage.removeItem('downloadBenchmarkRunning')
-                          }
-                        }, 900000)
-                      } catch (err) {
-                        setDownloadBenchmarkError(err instanceof Error ? err.message : "Failed to start download benchmark")
-                        console.error("Error starting download benchmark:", err)
-                        setDownloadBenchmarkRunning(false)
-                        localStorage.removeItem('downloadBenchmarkJobId')
-                        localStorage.removeItem('downloadBenchmarkRunning')
-                      }
-                    }}
+                          // Cleanup after 15 minutes (safety timeout)
+                          setTimeout(() => {
+                            if (pollIntervalRef.current) {
+                              clearInterval(pollIntervalRef.current)
+                              pollIntervalRef.current = null
+                            }
+                            if (downloadBenchmarkRunning) {
+                              setDownloadBenchmarkError("Benchmark timeout - check status manually")
+                              setDownloadBenchmarkRunning(false)
+                              localStorage.removeItem('downloadBenchmarkJobId')
+                              localStorage.removeItem('downloadBenchmarkRunning')
+                              localStorage.removeItem('downloadBenchmarkBackend')
+                            }
+                          }, 900000)
+                        } catch (err) {
+                          setDownloadBenchmarkError(err instanceof Error ? err.message : "Failed to start download benchmark")
+                          console.error("Error starting download benchmark:", err)
+                          setDownloadBenchmarkRunning(false)
+                          localStorage.removeItem('downloadBenchmarkJobId')
+                          localStorage.removeItem('downloadBenchmarkRunning')
+                          localStorage.removeItem('downloadBenchmarkBackend')
+                        }
+                      }}
                     disabled={downloadBenchmarkRunning}
                     className="gap-2"
                   >
@@ -742,9 +887,10 @@ export default function HealthPage() {
                       </>
                     )}
                   </Button>
+                  </div>
                 </div>
               </div>
-              
+
               <div className="p-6">
                 {downloadBenchmarkRunning && (
                   <div className="mb-6">
@@ -922,6 +1068,208 @@ export default function HealthPage() {
                       </div>
                     </div>
                   </>
+                )}
+
+                {/* ECS vs Lambda Comparison */}
+                {(benchmarkResultsByBackend.ecs || benchmarkResultsByBackend.lambda) && (
+                  <div className="mt-8 pt-6 border-t border-border/50">
+                    <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5" />
+                      ECS vs Lambda Comparison
+                    </h3>
+
+                    {/* Show message if only one backend has results */}
+                    {(!benchmarkResultsByBackend.ecs || !benchmarkResultsByBackend.lambda) && (
+                      <div className="mb-4 p-3 rounded-lg bg-muted/30 text-sm text-muted-foreground">
+                        Run benchmarks on both ECS and Lambda to see a side-by-side comparison.
+                        {benchmarkResultsByBackend.ecs && " (ECS results available)"}
+                        {benchmarkResultsByBackend.lambda && " (Lambda results available)"}
+                      </div>
+                    )}
+
+                    {/* Comparison Table */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border/50">
+                            <th className="text-left p-3 font-medium text-muted-foreground">Metric</th>
+                            <th className="text-right p-3 font-medium text-muted-foreground">
+                              <div className="flex items-center justify-end gap-2">
+                                <Server className="h-4 w-4" />
+                                ECS (Fargate)
+                              </div>
+                            </th>
+                            <th className="text-right p-3 font-medium text-muted-foreground">
+                              <div className="flex items-center justify-end gap-2">
+                                <Server className="h-4 w-4" />
+                                Lambda
+                              </div>
+                            </th>
+                            <th className="text-right p-3 font-medium text-muted-foreground">Difference</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Throughput RPS */}
+                          <tr className="border-b border-border/30">
+                            <td className="p-3 text-foreground">Throughput (req/s)</td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.ecs?.black_box_metrics?.throughput?.requests_per_second?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.lambda?.black_box_metrics?.throughput?.requests_per_second?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {(() => {
+                                const ecsValue = benchmarkResultsByBackend.ecs?.black_box_metrics?.throughput?.requests_per_second
+                                const lambdaValue = benchmarkResultsByBackend.lambda?.black_box_metrics?.throughput?.requests_per_second
+                                const diff = calculatePercentageDifference(ecsValue, lambdaValue, false)
+                                if (!diff) return '-'
+                                return (
+                                  <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                    {diff.percentage}% ({diff.faster} faster)
+                                  </span>
+                                )
+                              })()}
+                            </td>
+                          </tr>
+                          {/* Mean Latency */}
+                          <tr className="border-b border-border/30">
+                            <td className="p-3 text-foreground">Mean Latency (ms)</td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.ecs?.black_box_metrics?.latency?.mean_ms?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.lambda?.black_box_metrics?.latency?.mean_ms?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {(() => {
+                                const ecsValue = benchmarkResultsByBackend.ecs?.black_box_metrics?.latency?.mean_ms
+                                const lambdaValue = benchmarkResultsByBackend.lambda?.black_box_metrics?.latency?.mean_ms
+                                const diff = calculatePercentageDifference(ecsValue, lambdaValue, true)
+                                if (!diff) return '-'
+                                return (
+                                  <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                    {diff.percentage}% ({diff.faster} faster)
+                                  </span>
+                                )
+                              })()}
+                            </td>
+                          </tr>
+                          {/* Median Latency */}
+                          <tr className="border-b border-border/30">
+                            <td className="p-3 text-foreground">Median Latency (ms)</td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.ecs?.black_box_metrics?.latency?.median_ms?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.lambda?.black_box_metrics?.latency?.median_ms?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {(() => {
+                                const ecsValue = benchmarkResultsByBackend.ecs?.black_box_metrics?.latency?.median_ms
+                                const lambdaValue = benchmarkResultsByBackend.lambda?.black_box_metrics?.latency?.median_ms
+                                const diff = calculatePercentageDifference(ecsValue, lambdaValue, true)
+                                if (!diff) return '-'
+                                return (
+                                  <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                    {diff.percentage}% ({diff.faster} faster)
+                                  </span>
+                                )
+                              })()}
+                            </td>
+                          </tr>
+                          {/* P99 Latency */}
+                          <tr className="border-b border-border/30">
+                            <td className="p-3 text-foreground">P99 Latency (ms)</td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.ecs?.black_box_metrics?.latency?.p99_ms?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.lambda?.black_box_metrics?.latency?.p99_ms?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {(() => {
+                                const ecsValue = benchmarkResultsByBackend.ecs?.black_box_metrics?.latency?.p99_ms
+                                const lambdaValue = benchmarkResultsByBackend.lambda?.black_box_metrics?.latency?.p99_ms
+                                const diff = calculatePercentageDifference(ecsValue, lambdaValue, true)
+                                if (!diff) return '-'
+                                return (
+                                  <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                    {diff.percentage}% ({diff.faster} faster)
+                                  </span>
+                                )
+                              })()}
+                            </td>
+                          </tr>
+                          {/* Success Rate */}
+                          <tr className="border-b border-border/30">
+                            <td className="p-3 text-foreground">Success Rate</td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.ecs?.black_box_metrics?.request_summary?.success_rate?.toFixed(2) || '-'}%
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.lambda?.black_box_metrics?.request_summary?.success_rate?.toFixed(2) || '-'}%
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {(() => {
+                                const ecsValue = benchmarkResultsByBackend.ecs?.black_box_metrics?.request_summary?.success_rate
+                                const lambdaValue = benchmarkResultsByBackend.lambda?.black_box_metrics?.request_summary?.success_rate
+                                if (ecsValue === undefined || lambdaValue === undefined) return '-'
+                                const diff = ecsValue - lambdaValue
+                                const isBetter = ecsValue >= lambdaValue
+                                return (
+                                  <span className={isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                    {diff.toFixed(2)}%
+                                  </span>
+                                )
+                              })()}
+                            </td>
+                          </tr>
+                          {/* Total Duration */}
+                          <tr>
+                            <td className="p-3 text-foreground">Total Duration (s)</td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.ecs?.black_box_metrics?.request_summary?.total_duration_seconds?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {benchmarkResultsByBackend.lambda?.black_box_metrics?.request_summary?.total_duration_seconds?.toFixed(2) || '-'}
+                            </td>
+                            <td className="p-3 text-right font-mono">
+                              {(() => {
+                                const ecsValue = benchmarkResultsByBackend.ecs?.black_box_metrics?.request_summary?.total_duration_seconds
+                                const lambdaValue = benchmarkResultsByBackend.lambda?.black_box_metrics?.request_summary?.total_duration_seconds
+                                const diff = calculatePercentageDifference(ecsValue, lambdaValue, true)
+                                if (!diff) return '-'
+                                return (
+                                  <span className={diff.isBetter ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                    {diff.percentage}% ({diff.faster} faster)
+                                  </span>
+                                )
+                              })()}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Timestamps */}
+                    <div className="mt-4 flex gap-6 text-xs text-muted-foreground">
+                      {benchmarkResultsByBackend.ecs && (
+                        <div>
+                          ECS tested: {localStorage.getItem('downloadBenchmarkCompletedAt_ecs')
+                            ? new Date(localStorage.getItem('downloadBenchmarkCompletedAt_ecs') || '').toLocaleString()
+                            : 'N/A'}
+                        </div>
+                      )}
+                      {benchmarkResultsByBackend.lambda && (
+                        <div>
+                          Lambda tested: {localStorage.getItem('downloadBenchmarkCompletedAt_lambda')
+                            ? new Date(localStorage.getItem('downloadBenchmarkCompletedAt_lambda') || '').toLocaleString()
+                            : 'N/A'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             </Card>

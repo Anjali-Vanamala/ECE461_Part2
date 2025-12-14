@@ -1219,8 +1219,8 @@ async def get_artifact_lineage(
             logger.info(f"Found base model {lineage.base_model_name} (ID: {base_model_id}) for artifact {artifact_id}")
         else:
             # Base model not in registry - add as external reference
-            # Generate a stable pseudo-ID for external references
-            external_id = f"external-{lineage.base_model_name.replace('/', '-')}"
+            # Use consistent external ID generation for HuggingFace compatibility
+            external_id = _generate_external_id("model", lineage.base_model_name)
 
             # Check for duplicates before adding
             if external_id not in seen_node_ids:
@@ -1247,6 +1247,21 @@ async def get_artifact_lineage(
     def _normalize_name(name: str) -> str:
         """Normalize dataset name for comparison (strip and lowercase)."""
         return name.strip().lower() if name else ""
+    
+    def _generate_external_id(prefix: str, name: str) -> str:
+        """
+        Generate consistent external ID for HuggingFace artifacts.
+        Ensures same artifact gets same ID across different queries (for "same graph" requirement).
+        Uses HuggingFace naming conventions: lowercase, hyphens for spaces/slashes.
+        """
+        # Normalize to HuggingFace format: lowercase, replace spaces/slashes with hyphens
+        normalized = name.strip().lower().replace(' ', '-').replace('/', '-').replace('_', '-')
+        # Remove any duplicate hyphens
+        while '--' in normalized:
+            normalized = normalized.replace('--', '-')
+        # Remove leading/trailing hyphens
+        normalized = normalized.strip('-')
+        return f"external-{prefix}-{normalized}"
 
     seen_dataset_names = set()
 
@@ -1321,7 +1336,8 @@ async def get_artifact_lineage(
             logger.info(f"Found dataset {dataset_name} (ID: {dataset_id}) for artifact {artifact_id}")
         else:
             # Dataset not in registry - add as external reference
-            external_id = f"external-dataset-{dataset_name.replace('/', '-')}"
+            # Use consistent external ID generation for HuggingFace compatibility
+            external_id = _generate_external_id("dataset", dataset_name)
 
             # Check for duplicates using the external ID
             if external_id in seen_node_ids:
@@ -1384,6 +1400,28 @@ async def get_artifact_lineage(
                         relationship="training_dataset",
                     )
                     edges.append(edge)
+        elif model_record.dataset_name:
+            # External dataset from README
+            # Use consistent external ID generation (same as config.json) for "same graph" requirement
+            external_id = _generate_external_id("dataset", model_record.dataset_name)
+            if external_id not in seen_node_ids:
+                dataset_node = ArtifactLineageNode(
+                    artifact_id=external_id,
+                    name=model_record.dataset_name,
+                    source="model_metadata",
+                    metadata={"external": "true", "note": "From README"},
+                )
+                nodes.append(dataset_node)
+                seen_node_ids.add(external_id)
+                logger.info(f"Added old-style external dataset relationship: {model_record.dataset_name}")
+
+            if not edge_exists(external_id, artifact_id, "training_dataset"):
+                edge = ArtifactLineageEdge(
+                    from_node_artifact_id=external_id,
+                    to_node_artifact_id=artifact_id,
+                    relationship="training_dataset",
+                )
+                edges.append(edge)
 
         # Add old-style code relationship (from README)
         if model_record.code_id:
@@ -1409,6 +1447,28 @@ async def get_artifact_lineage(
                         relationship="implemented_with",
                     )
                     edges.append(edge)
+        elif model_record.code_name:
+             # External code from README
+            # Use consistent external ID generation for HuggingFace compatibility
+            external_id = _generate_external_id("code", model_record.code_name)
+            if external_id not in seen_node_ids:
+                code_node = ArtifactLineageNode(
+                    artifact_id=external_id,
+                    name=model_record.code_name,
+                    source="model_metadata",
+                    metadata={"external": "true", "note": "From README"},
+                )
+                nodes.append(code_node)
+                seen_node_ids.add(external_id)
+                logger.info(f"Added old-style external code relationship: {model_record.code_name}")
+
+            if not edge_exists(external_id, artifact_id, "implemented_with"):
+                edge = ArtifactLineageEdge(
+                    from_node_artifact_id=external_id,
+                    to_node_artifact_id=artifact_id,
+                    relationship="implemented_with",
+                )
+                edges.append(edge)
 
     logger.info(f"Built lineage graph for artifact {artifact_id}: {len(nodes)} nodes, {len(edges)} edges")
 

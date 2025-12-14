@@ -50,19 +50,21 @@ def test_backend_selection_works(driver):
     WebDriverWait(driver, 15).until(
         EC.presence_of_element_located((By.XPATH, "//button[contains(., 'ECS') or contains(., 'Lambda')]"))
     )
-    
+
     # Verify both buttons exist
     ecs_buttons = driver.find_elements(By.XPATH, "//button[contains(., 'ECS')]")
     lambda_buttons = driver.find_elements(By.XPATH, "//button[contains(., 'Lambda')]")
     assert len(ecs_buttons) > 0, "ECS button not found"
     assert len(lambda_buttons) > 0, "Lambda button not found"
-    
+
     # Test switching to Lambda
     lambda_buttons[0].click()
-    WebDriverWait(driver, 2).until(
-        lambda d: "Serverless" in d.find_element(By.TAG_NAME, "body").text or 
-                  "Lambda" in d.find_element(By.TAG_NAME, "body").text
-    )
+
+    def check_text(d):
+        text = d.find_element(By.TAG_NAME, "body").text
+        return "Serverless" in text or "Lambda" in text
+
+    WebDriverWait(driver, 2).until(check_text)
 
 
 def test_benchmark_section_present(driver):
@@ -71,10 +73,10 @@ def test_benchmark_section_present(driver):
     WebDriverWait(driver, 15).until(
         EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Benchmark')]"))
     )
-    
+
     # Verify benchmark button exists
     benchmark_buttons = driver.find_elements(
-        By.XPATH, 
+        By.XPATH,
         "//button[contains(., 'Run') or contains(., 'Benchmark') or contains(., 'Start')]"
     )
     assert len(benchmark_buttons) > 0, "Benchmark button not found"

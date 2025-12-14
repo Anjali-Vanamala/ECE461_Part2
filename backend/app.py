@@ -1,3 +1,18 @@
+"""
+FastAPI application for the Model Registry API.
+
+Features:
+- Loads environment variables from a `.env` file if present.
+- Configures logging and CORS middleware.
+- Handles request validation errors with a custom 400 response.
+- Includes routers for health, artifacts, system, and tracks endpoints.
+- Provides a root endpoint (`/`) returning a simple welcome message.
+
+API:
+    Title: Model Registry API
+    Version: 0.1.0
+    License: MIT
+"""
 import logging
 import os
 from pathlib import Path
@@ -21,6 +36,10 @@ if env_file.exists():
                 key, value = line.split('=', 1)
                 os.environ.setdefault(key, value)
 
+# Hardcode /prod for API Gateway stage path
+# API Gateway strips /prod before forwarding, so route handlers remain unchanged
+root_path = "/prod"
+
 app = fastapi.FastAPI(
     title="Model Registry API",
     description="API for storing, rating, and viewing models",
@@ -28,7 +47,8 @@ app = fastapi.FastAPI(
     license_info={
         "name": "MIT License",
         "url": "https://opensource.org/licenses/MIT",
-    }
+    },
+    root_path=root_path,  # Set root path for API Gateway stage (e.g., /prod)
 )
 
 # Add CORS middleware to allow frontend requests
@@ -43,6 +63,12 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
+    """
+    Handle request validation errors.
+
+    Returns a 400 JSON response when the incoming request is malformed
+    or missing required fields.
+    """
     return JSONResponse(
         status_code=400,
         content={"detail": "400: Bad request. There are missing field(s), it is formed improperly, or is invalid.."}
@@ -57,6 +83,11 @@ app.include_router(tracks.router)
 
 @app.get("/")
 def read_root():
+    """
+    Root endpoint of the API.
+
+    Returns a simple welcome message.
+    """
     return {"message": "Hello, World!"}
 
 

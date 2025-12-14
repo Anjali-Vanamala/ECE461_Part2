@@ -1,3 +1,11 @@
+"""
+Model evaluation printer.
+
+This module provides functionality to format and print a comprehensive
+JSON summary of model evaluation metrics. The output is intended to
+be machine-readable and suitable for automated processing.
+"""
+
 import json
 
 

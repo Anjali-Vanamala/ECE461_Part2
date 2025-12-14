@@ -1,3 +1,8 @@
+"""
+Functions for computing and registering model artifacts, including
+metadata extraction from HuggingFace models, GitHub code repositories,
+dataset linkage, license extraction, and scoring using quality metrics.
+"""
 from __future__ import annotations
 
 import os
@@ -28,6 +33,7 @@ if GITHUB_TOKEN:
 
 
 def _derive_name_from_url(url: str) -> str:
+    """Derive a simple artifact name from a URL."""
     url = url.strip().rstrip("/")
     if not url:
         return "artifact"
@@ -42,6 +48,7 @@ def _derive_name_from_url(url: str) -> str:
 
 
 def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
+    """Fetch model info and README text from HuggingFace given a model URL."""
     parsed = urlparse(raw_model_url)
     model_path = parsed.path.strip("/")
     parts = model_path.split("/")
@@ -161,6 +168,7 @@ def _fetch_model_info(raw_model_url: str) -> Tuple[dict, str]:
 
 
 def _extract_dataset_name(model_info: dict, readme_text: str) -> Optional[str]:
+    """Extract dataset name from cardData, tags, or README."""
     datasets = model_info.get("datasets")
     if isinstance(datasets, list) and datasets:
         candidate = datasets[0]
@@ -172,7 +180,29 @@ def _extract_dataset_name(model_info: dict, readme_text: str) -> Optional[str]:
     return None
 
 
+def _extract_base_model(model_info: dict, readme_text: str) -> Optional[str]:
+    """Extract base model from cardData or tags."""
+    # 1. Check cardData
+    card = model_info.get("cardData") or {}
+    base_model = card.get("base_model")
+    if isinstance(base_model, str) and base_model.strip():
+        return base_model.strip()
+    if isinstance(base_model, list) and base_model:
+        # If multiple, take the first one
+        if isinstance(base_model[0], str):
+            return base_model[0].strip()
+
+    # 2. Check tags for "base_model:name"
+    tags = model_info.get("tags", [])
+    for tag in tags:
+        if isinstance(tag, str) and tag.startswith("base_model:"):
+            return tag.split(":", 1)[1].strip()
+
+    return None
+
+
 def _extract_code_repo(model_info: dict, readme_text: str) -> Optional[str]:
+    """Extract code repository URL from cardData or README."""
     card_data = model_info.get("cardData") or {}
 
     # 1. Prefer HF card metadata
@@ -205,6 +235,7 @@ def _extract_code_repo(model_info: dict, readme_text: str) -> Optional[str]:
 
 
 def _resolve_dataset(dataset_name: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """Resolve dataset name to registered artifact or HuggingFace URL."""
     if not dataset_name:
         return None, None
 
@@ -218,6 +249,7 @@ def _resolve_dataset(dataset_name: Optional[str]) -> Tuple[Optional[str], Option
 
 
 def _fetch_code_metadata(code_url: str) -> Tuple[dict[str, Any], str]:
+    """Fetch code repository metadata and README from GitHub."""
     code_info: dict[str, Any] = {}
     code_readme = ""
 
@@ -259,7 +291,7 @@ def _resolve_code(
     code_repo: Optional[str],
     code_name: Optional[str]
 ) -> Tuple[Optional[str], Optional[str], dict[str, Any], str]:
-
+    """Resolve code repository URL and name, fetch metadata."""
     # If no repo detected → nothing to do
     if not code_repo:
         logger.info("No GitHub repo detected.")
@@ -352,6 +384,7 @@ def compute_model_artifact(
     artifact_id: Optional[str] = None,
     name_override: Optional[str] = None,
 ) -> tuple[Artifact, ModelRating, Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """Compute model artifact and rating from HuggingFace model URL."""
     name = name_override or _derive_name_from_url(url)
     artifact_id = artifact_id or memory.generate_artifact_id()
 

@@ -1,9 +1,32 @@
 // API configuration
-// Always use AWS API Gateway for testing
+// Always use AWS API Gateway for production
 const API_BASE_URL = 'https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod'
 
 // Export API base URL for use in components
 export { API_BASE_URL }
+
+// Backend endpoints for component selection (ECS vs Lambda benchmarking)
+export const BACKEND_ENDPOINTS = {
+  ecs: {
+    id: 'ecs',
+    name: 'ECS (Fargate)',
+    url: 'https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod',
+    description: 'Container-based compute on AWS Fargate',
+    compute: 'Container',
+    coldStart: 'None (always running)',
+  },
+  lambda: {
+    id: 'lambda',
+    name: 'Lambda (Serverless)',
+    // HTTP API Gateway with $default stage - no stage path needed in URL
+    url: 'https://6d924g49aa.execute-api.us-east-2.amazonaws.com',
+    description: 'Serverless compute with AWS Lambda',
+    compute: 'Serverless',
+    coldStart: 'Possible (scales to zero)',
+  },
+} as const
+
+export type BackendType = keyof typeof BACKEND_ENDPOINTS
 
 // Artifact type definition
 export type ArtifactType = 'model' | 'dataset' | 'code'
@@ -231,15 +254,16 @@ export async function fetchHealthComponents(windowMinutes: number = 60, includeT
 }
 
 // Download Benchmark API functions
-export async function startDownloadBenchmark() {
+export async function startDownloadBenchmark(backendUrl?: string) {
+  const baseUrl = backendUrl || API_BASE_URL
   try {
-    const response = await fetch(`${API_BASE_URL}/health/download-benchmark/start`, {
+    const response = await fetch(`${baseUrl}/health/download-benchmark/start`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
     })
-    
+
     if (!response.ok) {
       const errorText = response.statusText || `HTTP ${response.status}`
       let errorDetail = errorText
@@ -251,25 +275,26 @@ export async function startDownloadBenchmark() {
       }
       throw new Error(`Failed to start download benchmark: ${errorDetail}`)
     }
-    
+
     return response.json()
   } catch (error) {
     if (error instanceof TypeError) {
-      throw new Error(`Network error: Unable to connect to API. Please check if the API is running at ${API_BASE_URL}`)
+      throw new Error(`Network error: Unable to connect to API. Please check if the API is running at ${baseUrl}`)
     }
     throw error
   }
 }
 
-export async function getDownloadBenchmarkStatus(jobId: string) {
+export async function getDownloadBenchmarkStatus(jobId: string, backendUrl?: string) {
+  const baseUrl = backendUrl || API_BASE_URL
   try {
-    const response = await fetch(`${API_BASE_URL}/health/download-benchmark/${jobId}`, {
+    const response = await fetch(`${baseUrl}/health/download-benchmark/${jobId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
     })
-    
+
     if (!response.ok) {
       const errorText = response.statusText || `HTTP ${response.status}`
       let errorDetail = errorText
@@ -281,11 +306,11 @@ export async function getDownloadBenchmarkStatus(jobId: string) {
       }
       throw new Error(`Failed to get download benchmark status: ${errorDetail}`)
     }
-    
+
     return response.json()
   } catch (error) {
     if (error instanceof TypeError) {
-      throw new Error(`Network error: Unable to connect to API. Please check if the API is running at ${API_BASE_URL}`)
+      throw new Error(`Network error: Unable to connect to API. Please check if the API is running at ${baseUrl}`)
     }
     throw error
   }

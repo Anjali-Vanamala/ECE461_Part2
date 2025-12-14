@@ -131,10 +131,15 @@ export function ArtifactDetailClient({ type, id }: { type: ArtifactType; id: str
 
           <div className="flex flex-col gap-3 md:flex-row">
             <Button size="lg" asChild disabled={!id}>
-              <Link href={id ? `/artifacts/${type}/${id}/download` : "#"} className="gap-2">
+              <a 
+                href={id ? `${API_BASE_URL}/artifacts/${type}/${id}/download` : "#"} 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="gap-2"
+              >
                 <Download className="h-4 w-4" />
                 Download
-              </Link>
+              </a>
             </Button>
             <Button variant="outline" size="lg" className="gap-2 bg-transparent">
               <Share2 className="h-4 w-4" />

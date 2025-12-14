@@ -1,3 +1,14 @@
+"""
+Health API endpoints and monitoring utilities.
+
+Provides:
+- /health: heartbeat check
+- /health/components: detailed component health
+- /health/download-benchmark/start: start download benchmark
+- /health/download-benchmark/{job_id}: get benchmark status
+
+Tracks download benchmark jobs using background threads.
+"""
 import logging
 import os
 import threading
@@ -25,6 +36,8 @@ active_download_benchmark_threads: Dict[str, threading.Thread] = {}
 
 @router.get("/health", summary="Heartbeat check (BASELINE)")
 async def health_summary() -> HealthSummaryResponse:
+    """
+    Get a summary of the health status of the API service."""
     now = datetime.now(timezone.utc)
     window_minutes = 60
 
@@ -72,6 +85,8 @@ async def health_components(
     window_minutes: int = Query(60, ge=5, le=1440),
     include_timeline: bool = Query(False),
 ) -> HealthComponentCollection:
+    """
+    Get detailed health information for API components."""
     now = datetime.now(timezone.utc)
 
     # Get real metrics

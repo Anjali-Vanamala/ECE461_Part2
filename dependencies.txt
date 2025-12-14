@@ -12,7 +12,5 @@ pydantic
 boto3
 regex
 mangum
-sqlalchemy
-psycopg2-binary
 aiohttp
 certifi

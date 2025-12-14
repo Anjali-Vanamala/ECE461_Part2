@@ -1862,7 +1862,7 @@ class Test_Lineage:
         assert len(data["edges"]) == 0
         assert data["nodes"][0]["artifact_id"] == "no-lineage-id"
         assert data["nodes"][0]["name"] == "test-model"
-        assert data["nodes"][0]["source"] == "registry"
+        assert data["nodes"][0]["source"] == "config_json"
 
     def test_lineage_with_base_model_in_registry(self):
         """Test lineage with base model that exists in registry."""
@@ -1872,7 +1872,7 @@ class Test_Lineage:
         from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
                                     ArtifactType)
         from backend.storage import memory
-        from backend.storage.records import LineageMetadata, ModelRecord
+        from backend.storage.records import LineageMetadata
 
         memory.reset()
 
@@ -1911,7 +1911,7 @@ class Test_Lineage:
         assert base_node["source"] == "config_json"
 
     def test_lineage_with_base_model_not_in_registry(self):
-        """Test lineage with base model that doesn't exist in registry (external)."""
+        """Test lineage with base model that doesn't exist in registry (external models are excluded)."""
         from fastapi.testclient import TestClient
 
         from backend.app import app
@@ -1938,19 +1938,56 @@ class Test_Lineage:
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data["nodes"]) == 2  # Child + external base model
+        # External models are not included - only models in registry
+        assert len(data["nodes"]) == 1  # Just the child model
+        assert len(data["edges"]) == 0  # No edges since base model is external
+        assert data["nodes"][0]["artifact_id"] == "child-model-id"
+        assert data["nodes"][0]["name"] == "fine-tuned-model"
+
+    def test_lineage_with_descendant_models(self):
+        """Test lineage with descendant models (children that use this as base)."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+        from backend.storage.records import LineageMetadata
+
+        memory.reset()
+
+        # Create parent model
+        parent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="parent-model-id", name="bert-base", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/bert-base"),
+        )
+        memory.save_artifact(parent_artifact)
+
+        # Create child model with lineage pointing to parent
+        child_artifact = Artifact(
+            metadata=ArtifactMetadata(id="child-model-id", name="fine-tuned-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/fine-tuned-model"),
+        )
+        lineage = LineageMetadata(
+            base_model_name="bert-base",
+            config_metadata={}
+        )
+        memory.save_artifact(child_artifact, lineage=lineage)
+
+        # Query lineage from parent - should include child
+        client = TestClient(app)
+        response = client.get("/artifact/model/parent-model-id/lineage")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["nodes"]) == 2  # Parent + child
         assert len(data["edges"]) == 1
         assert data["edges"][0]["relationship"] == "base_model"
+        assert data["edges"][0]["from_node_artifact_id"] == "parent-model-id"
+        assert data["edges"][0]["to_node_artifact_id"] == "child-model-id"
 
-        # Check external base model node
-        external_node = next(n for n in data["nodes"] if n["artifact_id"].startswith("external-"))
-        assert external_node["name"] == "external-base-model"
-        assert external_node["source"] == "config_json"
-        assert external_node["metadata"]["external"] == "true"
-        assert external_node["metadata"]["note"] == "Not in registry"
-
-    def test_lineage_with_dataset_in_registry(self):
-        """Test lineage with dataset that exists in registry."""
+    def test_lineage_with_recursive_ancestors(self):
+        """Test lineage with recursive ancestor traversal (grandparent models)."""
         from fastapi.testclient import TestClient
 
         from backend.app import app
@@ -1961,78 +1998,50 @@ class Test_Lineage:
 
         memory.reset()
 
-        # Create dataset
-        dataset_artifact = Artifact(
-            metadata=ArtifactMetadata(id="dataset-id", name="bookcorpus", type=ArtifactType.DATASET),
-            data=ArtifactData(url="https://huggingface.co/datasets/bookcorpus"),
+        # Create grandparent model
+        grandparent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="grandparent-id", name="base-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/base-model"),
         )
-        memory.save_artifact(dataset_artifact)
+        memory.save_artifact(grandparent_artifact)
 
-        # Create model with lineage pointing to dataset
-        model_artifact = Artifact(
-            metadata=ArtifactMetadata(id="model-id", name="trained-model", type=ArtifactType.MODEL),
-            data=ArtifactData(url="https://huggingface.co/trained-model"),
+        # Create parent model with lineage pointing to grandparent
+        parent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="parent-id", name="intermediate-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/intermediate-model"),
         )
-        lineage = LineageMetadata(
-            dataset_names=["bookcorpus"],
+        parent_lineage = LineageMetadata(
+            base_model_name="base-model",
             config_metadata={}
         )
-        memory.save_artifact(model_artifact, lineage=lineage)
+        memory.save_artifact(parent_artifact, lineage=parent_lineage)
 
+        # Create child model with lineage pointing to parent
+        child_artifact = Artifact(
+            metadata=ArtifactMetadata(id="child-id", name="final-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/final-model"),
+        )
+        child_lineage = LineageMetadata(
+            base_model_name="intermediate-model",
+            config_metadata={}
+        )
+        memory.save_artifact(child_artifact, lineage=child_lineage)
+
+        # Query lineage from child - should include parent and grandparent
         client = TestClient(app)
-        response = client.get("/artifact/model/model-id/lineage")
+        response = client.get("/artifact/model/child-id/lineage")
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data["nodes"]) == 2  # Model + dataset
-        assert len(data["edges"]) == 1
-        assert data["edges"][0]["relationship"] == "training_dataset"
-        assert data["edges"][0]["from_node_artifact_id"] == "dataset-id"
-        assert data["edges"][0]["to_node_artifact_id"] == "model-id"
+        assert len(data["nodes"]) == 3  # Child + parent + grandparent
+        assert len(data["edges"]) == 2  # parent->child, grandparent->parent
 
-        # Check dataset node
-        dataset_node = next(n for n in data["nodes"] if n["artifact_id"] == "dataset-id")
-        assert dataset_node["name"] == "bookcorpus"
-        assert dataset_node["source"] == "config_json"
+        # Verify edges
+        edge_parent_child = next(e for e in data["edges"] if e["to_node_artifact_id"] == "child-id")
+        assert edge_parent_child["from_node_artifact_id"] == "parent-id"
 
-    def test_lineage_with_dataset_not_in_registry(self):
-        """Test lineage with dataset that doesn't exist in registry (external)."""
-        from fastapi.testclient import TestClient
-
-        from backend.app import app
-        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
-                                    ArtifactType)
-        from backend.storage import memory
-        from backend.storage.records import LineageMetadata
-
-        memory.reset()
-
-        # Create model with lineage pointing to external dataset
-        model_artifact = Artifact(
-            metadata=ArtifactMetadata(id="model-id", name="trained-model", type=ArtifactType.MODEL),
-            data=ArtifactData(url="https://huggingface.co/trained-model"),
-        )
-        lineage = LineageMetadata(
-            dataset_names=["external-dataset"],
-            config_metadata={}
-        )
-        memory.save_artifact(model_artifact, lineage=lineage)
-
-        client = TestClient(app)
-        response = client.get("/artifact/model/model-id/lineage")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data["nodes"]) == 2  # Model + external dataset
-        assert len(data["edges"]) == 1
-        assert data["edges"][0]["relationship"] == "training_dataset"
-
-        # Check external dataset node
-        external_node = next(n for n in data["nodes"] if n["artifact_id"].startswith("external-dataset-"))
-        assert external_node["name"] == "external-dataset"
-        assert external_node["source"] == "config_json"
-        assert external_node["metadata"]["external"] == "true"
-        assert external_node["metadata"]["type"] == "dataset"
+        edge_grandparent_parent = next(e for e in data["edges"] if e["to_node_artifact_id"] == "parent-id")
+        assert edge_grandparent_parent["from_node_artifact_id"] == "grandparent-id"
 
     def test_lineage_response_structure(self):
         """Test that lineage response has correct structure."""
@@ -2046,6 +2055,13 @@ class Test_Lineage:
 
         memory.reset()
 
+        # Create base model
+        base_artifact = Artifact(
+            metadata=ArtifactMetadata(id="base-id", name="base-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/base-model"),
+        )
+        memory.save_artifact(base_artifact)
+
         # Create model with lineage
         model_artifact = Artifact(
             metadata=ArtifactMetadata(id="test-model-id", name="test-model", type=ArtifactType.MODEL),
@@ -2053,7 +2069,6 @@ class Test_Lineage:
         )
         lineage = LineageMetadata(
             base_model_name="base-model",
-            dataset_names=["test-dataset"],
             config_metadata={"model_type": "bert", "repository_url": "https://huggingface.co/test-model"}
         )
         memory.save_artifact(model_artifact, lineage=lineage)
@@ -2087,3 +2102,63 @@ class Test_Lineage:
         primary_node = next(n for n in data["nodes"] if n["artifact_id"] == "test-model-id")
         assert primary_node["name"] == "test-model"
         assert primary_node["source"] == "config_json"
+
+    def test_lineage_same_graph_for_related_models(self):
+        """Test that querying related models produces the same graph."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+        from backend.storage.records import LineageMetadata
+
+        memory.reset()
+
+        # Create grandparent
+        grandparent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="grandparent-id", name="grandparent", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/grandparent"),
+        )
+        memory.save_artifact(grandparent_artifact)
+
+        # Create parent
+        parent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="parent-id", name="parent", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/parent"),
+        )
+        parent_lineage = LineageMetadata(base_model_name="grandparent", config_metadata={})
+        memory.save_artifact(parent_artifact, lineage=parent_lineage)
+
+        # Create child
+        child_artifact = Artifact(
+            metadata=ArtifactMetadata(id="child-id", name="child", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/child"),
+        )
+        child_lineage = LineageMetadata(base_model_name="parent", config_metadata={})
+        memory.save_artifact(child_artifact, lineage=child_lineage)
+
+        client = TestClient(app)
+
+        # Query from parent
+        response_parent = client.get("/artifact/model/parent-id/lineage")
+        assert response_parent.status_code == 200
+        data_parent = response_parent.json()
+
+        # Query from child
+        response_child = client.get("/artifact/model/child-id/lineage")
+        assert response_child.status_code == 200
+        data_child = response_child.json()
+
+        # Both should have the same nodes (all 3 models)
+        assert len(data_parent["nodes"]) == 3
+        assert len(data_child["nodes"]) == 3
+
+        # Both should have the same edges
+        assert len(data_parent["edges"]) == 2
+        assert len(data_child["edges"]) == 2
+
+        # Verify all node IDs are the same
+        parent_node_ids = {n["artifact_id"] for n in data_parent["nodes"]}
+        child_node_ids = {n["artifact_id"] for n in data_child["nodes"]}
+        assert parent_node_ids == child_node_ids == {"grandparent-id", "parent-id", "child-id"}

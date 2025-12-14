@@ -1,14 +1,16 @@
 import os
 import pathlib
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 BASE_URL = os.getenv("BASE_URL", "http://localhost:3000")
 SCREENSHOT_DIR = pathlib.Path("screenshots")
 SCREENSHOT_DIR.mkdir(exist_ok=True)
+
 
 def create_driver():
     options = Options()
@@ -16,6 +18,7 @@ def create_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     return webdriver.Chrome(options=options)
+
 
 def test_homepage_loads():
     driver = create_driver()

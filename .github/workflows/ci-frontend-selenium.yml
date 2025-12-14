@@ -25,11 +25,11 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      # Serve built frontend (Amplify-like)
-      - name: Serve frontend
+      - name: Start Next.js frontend
         working-directory: frontend
         run: |
-          npx serve -s build -l 3000 &
+          npm run build
+          npm run start &
           npx wait-on http://localhost:3000
 
       - name: Setup Python

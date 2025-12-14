@@ -303,11 +303,6 @@ def get_model_rating(artifact_id: ArtifactID) -> Optional[ModelRating]:
     return record.rating
 
 
-def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
-    """Get full model record with relationships (dataset_id, code_id)."""
-    return _MODELS.get(artifact_id)
-
-
 def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
     record = _MODELS.get(artifact_id)
     if not record:

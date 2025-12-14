@@ -13,4 +13,3 @@ boto3
 regex
 aiohttp
 certifi
-httpx

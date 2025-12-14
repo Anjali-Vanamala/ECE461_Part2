@@ -8,7 +8,6 @@ import time
 from typing import List
 from urllib.parse import urlparse
 
-import httpx
 import regex
 import requests
 from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
@@ -481,16 +480,16 @@ async def process_model_artifact_async(
             temp_file_path = temp_file.name
             temp_file.close()
 
-            # Download with streaming to handle large files (async)
-            async with httpx.AsyncClient(timeout=600.0, follow_redirects=True) as client:
-                async with client.stream('GET', source_download_url) as download_response:
-                    download_response.raise_for_status()
+            # Download with streaming to handle large files
+            DOWNLOAD_TIMEOUT = 600  # 10 minutes for large model files
+            source_response = requests.get(source_download_url, stream=True, timeout=DOWNLOAD_TIMEOUT)
+            source_response.raise_for_status()
 
-                    # Write to temp file in chunks
-                    with open(temp_file_path, 'wb') as f:
-                        async for chunk in download_response.aiter_bytes(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
+            # Write to temp file in chunks
+            with open(temp_file_path, 'wb') as f:
+                for chunk in source_response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
 
             logger.info(f"Downloaded artifact {artifact_id} to temp file, size: {os.path.getsize(temp_file_path)} bytes")
 
@@ -710,85 +709,35 @@ async def _proxy_download_fallback(
             detail="Failed to determine source download URL.",
         )
 
-    # Fetch from source with streaming (async)
-    DOWNLOAD_TIMEOUT = 300.0  # 5 minutes
+    # Fetch from source with streaming
+    DOWNLOAD_TIMEOUT = 300  # 5 minutes
     filename = _get_download_filename(artifact, source_download_url)
-    content_type = 'application/octet-stream'  # Default
 
-    async def stream_response():
-        """Async generator to stream the response"""
-        try:
-            async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
-                async with client.stream('GET', source_download_url) as source_response:
-                    # Check status code before streaming
-                    if source_response.status_code == 404:
-                        # Return empty stream - error will be handled by status check
-                        return
-
-                    source_response.raise_for_status()
-
-                    # Stream chunks to client
-                    async for chunk in source_response.aiter_bytes(chunk_size=8192):
-                        if chunk:
-                            yield chunk
-        except httpx.TimeoutException:
-            # Can't raise HTTPException in generator, but we can stop streaming
-            return
-        except httpx.ConnectError:
-            return
-        except httpx.HTTPStatusError:
-            return
-        except Exception:
-            return
-
-    # Validate the request BEFORE creating StreamingResponse
-    # This allows us to raise HTTPException before streaming starts
     try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            # Make a quick HEAD request to validate and get headers
-            try:
-                head_response = await client.head(source_download_url)
-                if head_response.status_code == 200:
-                    content_type = head_response.headers.get('Content-Type', content_type)
-                elif head_response.status_code == 404:
-                    raise HTTPException(
-                        status_code=status.HTTP_502_BAD_GATEWAY,
-                        detail="Source file not found.",
-                    )
-            except httpx.TimeoutException:
-                raise HTTPException(
-                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                    detail="Download timeout from source.",
-                )
-            except httpx.ConnectError:
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Cannot connect to source server.",
-                )
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    raise HTTPException(
-                        status_code=status.HTTP_502_BAD_GATEWAY,
-                        detail="Source file not found.",
-                    )
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Source download failed.",
-                )
-            except HTTPException:
-                # Re-raise HTTPExceptions
-                raise
-            except Exception:
-                # For other errors, try to proceed with streaming
-                # (some servers don't support HEAD)
-                pass
-    except HTTPException:
-        # Re-raise HTTPExceptions from validation
-        raise
-    except Exception:
-        # If validation fails but it's not an HTTPException, continue
-        # (some servers don't support HEAD requests)
-        pass
+        source_response = requests.get(source_download_url, stream=True, timeout=DOWNLOAD_TIMEOUT)
+        source_response.raise_for_status()
+    except requests.Timeout:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Download timeout from source.",
+        )
+    except requests.ConnectionError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Cannot connect to source server.",
+        )
+    except requests.HTTPError as e:
+        if e.response and e.response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Source file not found.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Source download failed.",
+        )
+
+    content_type = source_response.headers.get('Content-Type', 'application/octet-stream')
 
     # Build headers
     headers = {
@@ -796,9 +745,9 @@ async def _proxy_download_fallback(
         "Accept-Ranges": "bytes",
     }
 
-    # Return streaming response with async generator
+    # Return streaming response
     return StreamingResponse(
-        stream_response(),
+        source_response.iter_content(chunk_size=8192),
         media_type=content_type,
         headers=headers
     )

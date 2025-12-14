@@ -13,16 +13,17 @@ from typing import MutableMapping, Optional, cast
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+# pylint: disable=invalid-name
 try:
-    _BOTO3 = __import__("boto3")  # module-level "constant" now UPPER_CASE
+    import boto3  # type: ignore 
 except Exception:
-    _BOTO3 = None  # type: ignore[assignment]
+    boto3 = None  # type: ignore
 
 from backend.services.metrics_tracker import record_request
 
 LOG_LEVEL: int = 1  # 0 = silent, 1 = info, 2 = debug
 CLOUDWATCH_NAMESPACE = "ECE461/API"
-CLOUDWATCH_AVAILABLE = _BOTO3 is not None
+CLOUDWATCH_AVAILABLE = boto3 is not None
 
 logger = logging.getLogger("backend.middleware.logging")
 
@@ -34,9 +35,9 @@ class LoggingMiddleware:
         """Initialize the logging middleware."""
         self.app = app
         self.cloudwatch = None
-        if CLOUDWATCH_AVAILABLE and _BOTO3 is not None:
+        if CLOUDWATCH_AVAILABLE and boto3 is not None:
             try:
-                self.cloudwatch = _BOTO3.client("cloudwatch")
+                self.cloudwatch = boto3.client("cloudwatch")
             except Exception:
                 logger.debug("CloudWatch client initialization failed", exc_info=True)
                 self.cloudwatch = None

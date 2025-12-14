@@ -1,8 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Only use static export in production builds (for S3 deployment)
-  // In development, allow dynamic routes to work properly
-  ...(process.env.NODE_ENV === 'production' ? { output: 'export' } : {}),
+  // Amplify supports Next.js SSR/SSG natively, so no static export needed
+  // Dynamic routes and server-side rendering will work properly
   typescript: {
     ignoreBuildErrors: true,
   },

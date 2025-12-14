@@ -1809,3 +1809,138 @@ class Test_Metrics_Tracker:
         summary = get_request_summary(60)
         # The route should appear in per_route
         assert isinstance(summary["per_route"], dict)
+
+
+class Test_Update_Endpoint:
+    """Test suite for artifact update endpoint functionality."""
+
+    def test_update_model_artifact_async(self):
+        """Test that updating a model artifact triggers async processing."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        client = TestClient(app)
+        response = client.put("/artifacts/model/model-id", json=artifact.dict())
+
+        assert response.status_code == 202
+        data = response.json()
+        assert data["metadata"]["id"] == "model-id"
+        # Check that artifact is saved in memory with "processing" status
+        stored = memory.get_artifact(ArtifactType.MODEL, "model-id")
+        assert stored is not None
+
+    def test_update_non_model_artifact_immediate(self):
+        """Test that non-model artifacts are updated immediately."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Save an initial artifact
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="dataset-id", name="test-dataset", type=ArtifactType.DATASET),
+            data=ArtifactData(url="https://huggingface.co/datasets/test/dataset"),
+        )
+        memory.save_artifact(artifact)
+
+        client = TestClient(app)
+        artifact.data.url = "https://huggingface.co/datasets/test/dataset-v2"
+        response = client.put("/artifacts/dataset/dataset-id", json=artifact.dict())
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["url"] == "https://huggingface.co/datasets/test/dataset-v2"
+
+    def test_update_artifact_id_mismatch(self):
+        """Test that mismatched artifact ID in payload returns 400."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="wrong-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        client = TestClient(app)
+        response = client.put("/artifacts/model/model-id", json=artifact.dict())
+
+        assert response.status_code == 400
+        assert "metadata" in response.json()["detail"].lower()
+
+    def test_update_nonexistent_artifact_returns_404(self):
+        """Updating a non-existent non-model artifact returns 404."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="nonexistent-id", name="test-dataset", type=ArtifactType.DATASET),
+            data=ArtifactData(url="https://huggingface.co/datasets/test/dataset"),
+        )
+        client = TestClient(app)
+        response = client.put("/artifacts/dataset/nonexistent-id", json=artifact.dict())
+
+        assert response.status_code == 404
+        assert "does not exist" in response.json()["detail"].lower()
+
+
+class Test_Delete_Endpoint:
+    """Test suite for artifact delete endpoint functionality."""
+
+    def test_delete_existing_artifact(self):
+        """Test successful deletion of an artifact."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="delete-id", name="test-artifact", type=ArtifactType.DATASET),
+            data=ArtifactData(url="https://huggingface.co/test/artifact"),
+        )
+        memory.save_artifact(artifact)
+
+        client = TestClient(app)
+        response = client.delete("/artifacts/dataset/delete-id")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["deleted"] == "delete-id"
+        # Artifact should no longer exist
+        assert memory.get_artifact(ArtifactType.DATASET, "delete-id") is None
+
+    def test_delete_nonexistent_artifact_returns_404(self):
+        """Deleting a non-existent artifact returns 404."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+        client = TestClient(app)
+        response = client.delete("/artifacts/dataset/nonexistent-id")
+
+        assert response.status_code == 404
+        assert "does not exist" in response.json()["detail"].lower()

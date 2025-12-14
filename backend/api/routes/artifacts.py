@@ -1351,6 +1351,69 @@ async def get_artifact_lineage(
 
             logger.info(f"Dataset {dataset_name} not in registry, added as external reference")
 
+    # 6. Add old-style relationships (dataset_id, code_id) from ModelRecord
+    # These come from README parsing, not config.json
+    model_record = memory.get_model_record(artifact_id)
+    if model_record:
+        # Helper to check if an edge already exists
+        def edge_exists(from_id: str, to_id: str, rel: str) -> bool:
+            return any(
+                e.from_node_artifact_id == from_id
+                and e.to_node_artifact_id == to_id
+                and e.relationship == rel
+                for e in edges
+            )
+
+        # Add old-style dataset relationship (from README)
+        if model_record.dataset_id:
+            dataset_artifact = memory.get_artifact(ArtifactType.DATASET, model_record.dataset_id)
+            if dataset_artifact:
+                # Only add if not already in nodes (avoid duplicates with config.json lineage)
+                if model_record.dataset_id not in seen_node_ids:
+                    dataset_node = ArtifactLineageNode(
+                        artifact_id=model_record.dataset_id,
+                        name=dataset_artifact.metadata.name,
+                        source="model_metadata",
+                        metadata={"repository_url": dataset_artifact.data.url} if dataset_artifact.data.url else None,
+                    )
+                    nodes.append(dataset_node)
+                    seen_node_ids.add(model_record.dataset_id)
+                    logger.info(f"Added old-style dataset relationship: {model_record.dataset_id}")
+
+                # Add edge if it doesn't already exist
+                if not edge_exists(model_record.dataset_id, artifact_id, "training_dataset"):
+                    edge = ArtifactLineageEdge(
+                        from_node_artifact_id=model_record.dataset_id,
+                        to_node_artifact_id=artifact_id,
+                        relationship="training_dataset",
+                    )
+                    edges.append(edge)
+
+        # Add old-style code relationship (from README)
+        if model_record.code_id:
+            code_artifact = memory.get_artifact(ArtifactType.CODE, model_record.code_id)
+            if code_artifact:
+                # Only add if not already in nodes
+                if model_record.code_id not in seen_node_ids:
+                    code_node = ArtifactLineageNode(
+                        artifact_id=model_record.code_id,
+                        name=code_artifact.metadata.name,
+                        source="model_metadata",
+                        metadata={"repository_url": code_artifact.data.url} if code_artifact.data.url else None,
+                    )
+                    nodes.append(code_node)
+                    seen_node_ids.add(model_record.code_id)
+                    logger.info(f"Added old-style code relationship: {model_record.code_id}")
+
+                # Add edge if it doesn't already exist
+                if not edge_exists(model_record.code_id, artifact_id, "implemented_with"):
+                    edge = ArtifactLineageEdge(
+                        from_node_artifact_id=model_record.code_id,
+                        to_node_artifact_id=artifact_id,
+                        relationship="implemented_with",
+                    )
+                    edges.append(edge)
+
     logger.info(f"Built lineage graph for artifact {artifact_id}: {len(nodes)} nodes, {len(edges)} edges")
 
     return ArtifactLineageGraph(nodes=nodes, edges=edges)

@@ -310,6 +310,11 @@ def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
     return record.license
 
 
+def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
+    """Get the ModelRecord for a given artifact ID."""
+    return _MODELS.get(artifact_id)
+
+
 def get_processing_status(artifact_id: ArtifactID) -> Optional[str]:
     """Get the processing status of a model artifact."""
     record = _MODELS.get(artifact_id)

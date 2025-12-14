@@ -19,7 +19,7 @@ import {
   FileText,
   BarChart3
 } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { fetchHealth, fetchHealthComponents, startDownloadBenchmark, getDownloadBenchmarkStatus } from "@/lib/api"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend } from "@/components/ui/chart"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar } from "recharts"
@@ -39,6 +39,7 @@ export default function HealthPage() {
   const [downloadBenchmarkProgress, setDownloadBenchmarkProgress] = useState<string | null>(null)
   const [downloadBenchmarkCurrentProgress, setDownloadBenchmarkCurrentProgress] = useState<string | null>(null) // X/100 format
   const [downloadBenchmarkError, setDownloadBenchmarkError] = useState<string | null>(null)
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Detect dark mode
   useEffect(() => {
@@ -54,7 +55,7 @@ export default function HealthPage() {
     return () => observer.disconnect()
   }, [])
   
-  // Load saved download benchmark results from localStorage
+  // Load saved download benchmark results from localStorage and resume polling if needed
   useEffect(() => {
     const savedResults = localStorage.getItem('downloadBenchmarkResults')
     if (savedResults) {
@@ -64,6 +65,77 @@ export default function HealthPage() {
         console.log('Loaded saved download benchmark results from localStorage')
       } catch (e) {
         console.error('Failed to parse saved download benchmark results:', e)
+      }
+    }
+    
+    // Check if there's a running benchmark to resume
+    const savedJobId = localStorage.getItem('downloadBenchmarkJobId')
+    const savedRunning = localStorage.getItem('downloadBenchmarkRunning')
+    
+    if (savedJobId && savedRunning === 'true') {
+      console.log('Resuming polling for benchmark job:', savedJobId)
+      setDownloadBenchmarkRunning(true)
+      
+      // Resume polling
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusResponse = await getDownloadBenchmarkStatus(savedJobId)
+          
+          if (statusResponse.progress) {
+            setDownloadBenchmarkProgress(statusResponse.progress)
+          }
+          if (statusResponse.current_progress) {
+            setDownloadBenchmarkCurrentProgress(statusResponse.current_progress)
+          }
+          
+          if (statusResponse.status === 'completed') {
+            console.log('Download benchmark completed! Results:', statusResponse.results)
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            setDownloadBenchmarkResults(statusResponse.results)
+            setDownloadBenchmarkRunning(false)
+            setDownloadBenchmarkProgress(null)
+            setDownloadBenchmarkCurrentProgress(null)
+            localStorage.setItem('downloadBenchmarkResults', JSON.stringify(statusResponse.results))
+            localStorage.setItem('downloadBenchmarkCompletedAt', new Date().toISOString())
+            localStorage.removeItem('downloadBenchmarkJobId')
+            localStorage.removeItem('downloadBenchmarkRunning')
+          } else if (statusResponse.status === 'failed') {
+            console.error('Download benchmark failed:', statusResponse.error)
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current)
+              pollIntervalRef.current = null
+            }
+            setDownloadBenchmarkError(statusResponse.error || 'Download benchmark failed')
+            setDownloadBenchmarkRunning(false)
+            setDownloadBenchmarkProgress(null)
+            setDownloadBenchmarkCurrentProgress(null)
+            localStorage.removeItem('downloadBenchmarkJobId')
+            localStorage.removeItem('downloadBenchmarkRunning')
+          }
+        } catch (err) {
+          console.error('Error checking download benchmark status:', err)
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+          setDownloadBenchmarkError(err instanceof Error ? err.message : "Failed to check benchmark status")
+          setDownloadBenchmarkRunning(false)
+          localStorage.removeItem('downloadBenchmarkJobId')
+          localStorage.removeItem('downloadBenchmarkRunning')
+        }
+      }, 2000)
+      
+      pollIntervalRef.current = pollInterval
+      
+      // Cleanup on unmount
+      return () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current)
+          pollIntervalRef.current = null
+        }
       }
     }
   }, [])
@@ -577,6 +649,15 @@ export default function HealthPage() {
                         const jobId = startResponse.job_id
                         console.log('Download benchmark started with job ID:', jobId)
                         
+                        // Store jobId and running state in localStorage
+                        localStorage.setItem('downloadBenchmarkJobId', jobId)
+                        localStorage.setItem('downloadBenchmarkRunning', 'true')
+                        
+                        // Clear any existing interval
+                        if (pollIntervalRef.current) {
+                          clearInterval(pollIntervalRef.current)
+                        }
+                        
                         // Poll for results every 2 seconds
                         const pollInterval = setInterval(async () => {
                           try {
@@ -592,40 +673,58 @@ export default function HealthPage() {
                             if (statusResponse.status === 'completed') {
                               console.log('Download benchmark completed! Results:', statusResponse.results)
                               clearInterval(pollInterval)
+                              pollIntervalRef.current = null
                               setDownloadBenchmarkResults(statusResponse.results)
                               setDownloadBenchmarkRunning(false)
                               setDownloadBenchmarkProgress(null)
                               setDownloadBenchmarkCurrentProgress(null)
                               localStorage.setItem('downloadBenchmarkResults', JSON.stringify(statusResponse.results))
                               localStorage.setItem('downloadBenchmarkCompletedAt', new Date().toISOString())
+                              localStorage.removeItem('downloadBenchmarkJobId')
+                              localStorage.removeItem('downloadBenchmarkRunning')
                             } else if (statusResponse.status === 'failed') {
                               console.error('Download benchmark failed:', statusResponse.error)
                               clearInterval(pollInterval)
+                              pollIntervalRef.current = null
                               setDownloadBenchmarkError(statusResponse.error || 'Download benchmark failed')
                               setDownloadBenchmarkRunning(false)
                               setDownloadBenchmarkProgress(null)
                               setDownloadBenchmarkCurrentProgress(null)
+                              localStorage.removeItem('downloadBenchmarkJobId')
+                              localStorage.removeItem('downloadBenchmarkRunning')
                             }
                           } catch (err) {
                             console.error('Error checking download benchmark status:', err)
                             clearInterval(pollInterval)
+                            pollIntervalRef.current = null
                             setDownloadBenchmarkError(err instanceof Error ? err.message : "Failed to check benchmark status")
                             setDownloadBenchmarkRunning(false)
+                            localStorage.removeItem('downloadBenchmarkJobId')
+                            localStorage.removeItem('downloadBenchmarkRunning')
                           }
                         }, 2000)
                         
+                        pollIntervalRef.current = pollInterval
+                        
                         // Cleanup after 15 minutes (safety timeout)
                         setTimeout(() => {
-                          clearInterval(pollInterval)
+                          if (pollIntervalRef.current) {
+                            clearInterval(pollIntervalRef.current)
+                            pollIntervalRef.current = null
+                          }
                           if (downloadBenchmarkRunning) {
                             setDownloadBenchmarkError("Benchmark timeout - check status manually")
                             setDownloadBenchmarkRunning(false)
+                            localStorage.removeItem('downloadBenchmarkJobId')
+                            localStorage.removeItem('downloadBenchmarkRunning')
                           }
                         }, 900000)
                       } catch (err) {
                         setDownloadBenchmarkError(err instanceof Error ? err.message : "Failed to start download benchmark")
                         console.error("Error starting download benchmark:", err)
                         setDownloadBenchmarkRunning(false)
+                        localStorage.removeItem('downloadBenchmarkJobId')
+                        localStorage.removeItem('downloadBenchmarkRunning')
                       }
                     }}
                     disabled={downloadBenchmarkRunning}
@@ -820,30 +919,6 @@ export default function HealthPage() {
                             </p>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                    
-                    {/* White-Box Metrics */}
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground mb-4">White-Box Metrics (Explanation)</h3>
-                      <div className="p-4 rounded-lg bg-muted/30">
-                        <p className="text-sm text-muted-foreground mb-3">
-                          {downloadBenchmarkResults.white_box_metrics?.note || 'No white-box metrics available'}
-                        </p>
-                        {downloadBenchmarkResults.white_box_metrics?.error_breakdown && 
-                         Object.keys(downloadBenchmarkResults.white_box_metrics.error_breakdown).length > 0 && (
-                          <div>
-                            <h4 className="text-xs font-medium text-muted-foreground mb-2">Error Breakdown</h4>
-                            <div className="space-y-2">
-                              {Object.entries(downloadBenchmarkResults.white_box_metrics.error_breakdown).map(([error, count]: [string, any]) => (
-                                <div key={error} className="flex items-center justify-between p-2 rounded bg-destructive/10">
-                                  <p className="text-xs text-muted-foreground break-all">{error}</p>
-                                  <Badge variant="destructive" className="ml-2">{count}</Badge>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </>

@@ -12,7 +12,7 @@ import sys
 import ssl
 import certifi
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable
 import statistics
 
 # ================================
@@ -30,65 +30,38 @@ TINY_LLM_URL = "https://huggingface.co/arnir0/Tiny-LLM"
 CONCURRENT_REQUESTS = 100  # Total number of requests to make
 TIMEOUT_SECONDS = 300  # 5 minutes per request
 
-# Output files with timestamps
-timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-OUTPUT_JSON = f"benchmark_download_concurrent_{timestamp}.json"
 # Note: Files are downloaded but not saved to disk (only measured for metrics)
 
 
-class Colors:
-    """ANSI color codes for terminal output"""
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    WHITE = '\033[97m'
-    GRAY = '\033[90m'
-    RESET = '\033[0m'
-
-
-def print_colored(message: str, color: str = Colors.WHITE):
-    """Print colored message"""
-    print(f"{color}{message}{Colors.RESET}")
-
-
-async def find_tiny_llm_artifact_id(session: aiohttp.ClientSession) -> str:
+async def find_tiny_llm_artifact_id(session: aiohttp.ClientSession, base_url: str) -> str:
     """Find Tiny-LLM artifact ID using regex search endpoint"""
-    print_colored("Step 1: Finding Tiny-LLM artifact ID...", Colors.YELLOW)
-    
-    url = f"{BASE_URL}/artifact/byRegEx"
+    url = f"{base_url}/artifact/byRegEx"
     payload = {"regex": "Tiny-LLM"}
     
     try:
         async with session.post(url, json=payload) as response:
             if response.status == 404:
-                print_colored("ERROR: Tiny-LLM not found in registry. Please ingest it first.", Colors.RED)
-                print_colored(f"Ingest URL: {TINY_LLM_URL}", Colors.YELLOW)
-                sys.exit(1)
+                raise ValueError(f"Tiny-LLM not found in registry. Please ingest it first. URL: {TINY_LLM_URL}")
             
             response.raise_for_status()
             artifacts = await response.json()
             
             if not artifacts:
-                print_colored("ERROR: Tiny-LLM not found in registry. Please ingest it first.", Colors.RED)
-                print_colored(f"Ingest URL: {TINY_LLM_URL}", Colors.YELLOW)
-                sys.exit(1)
+                raise ValueError(f"Tiny-LLM not found in registry. Please ingest it first. URL: {TINY_LLM_URL}")
             
             # Filter to models only and get the first one
             tiny_llm = next((a for a in artifacts if a.get('type') == 'model'), None)
             
             if not tiny_llm:
-                print_colored("ERROR: Tiny-LLM model not found in registry. Please ingest it first.", Colors.RED)
-                print_colored(f"Ingest URL: {TINY_LLM_URL}", Colors.YELLOW)
-                sys.exit(1)
+                raise ValueError(f"Tiny-LLM model not found in registry. Please ingest it first. URL: {TINY_LLM_URL}")
             
             artifact_id = tiny_llm['id']
-            print_colored(f"Found Tiny-LLM with ID: {artifact_id}", Colors.GREEN)
             return artifact_id
             
     except Exception as e:
-        print_colored(f"ERROR: Failed to find artifact: {e}", Colors.RED)
-        sys.exit(1)
+        if isinstance(e, ValueError):
+            raise
+        raise RuntimeError(f"Failed to find artifact: {e}") from e
 
 
 async def download_one(
@@ -180,17 +153,33 @@ async def download_one(
     return result
 
 
-async def run_benchmark():
-    """Main benchmark function"""
-    print_colored("=== Concurrent Download Benchmark ===", Colors.CYAN)
-    print_colored(f"API Base URL: {BASE_URL}", Colors.WHITE)
-    print_colored(f"Target Model: {TINY_LLM_URL}", Colors.WHITE)
-    print_colored(f"Concurrent Requests: {CONCURRENT_REQUESTS}", Colors.WHITE)
-    print_colored("Note: Files will be downloaded but not saved to disk (only measured for metrics)", Colors.GRAY)
-    print()
+async def run_benchmark(
+    base_url: Optional[str] = None,
+    concurrent_requests: int = CONCURRENT_REQUESTS,
+    timeout_seconds: int = TIMEOUT_SECONDS,
+    progress_callback: Optional[Callable[[int, int, int, int], None]] = None
+) -> Dict:
+    """
+    Main benchmark function.
+    
+    Args:
+        base_url: API base URL (defaults to BASE_URL constant)
+        concurrent_requests: Number of concurrent download requests (defaults to CONCURRENT_REQUESTS)
+        timeout_seconds: Timeout per request in seconds (defaults to TIMEOUT_SECONDS)
+        progress_callback: Optional callback function(completed, total, successful, failed) for progress updates
+    
+    Returns:
+        Dictionary containing benchmark results
+    
+    Raises:
+        ValueError: If Tiny-LLM is not found in registry
+        RuntimeError: If benchmark execution fails
+    """
+    if base_url is None:
+        base_url = BASE_URL
     
     # Create aiohttp session with timeout
-    timeout = aiohttp.ClientTimeout(total=TIMEOUT_SECONDS)
+    timeout = aiohttp.ClientTimeout(total=timeout_seconds)
     
     # SSL context using certifi certificates
     ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -202,52 +191,39 @@ async def run_benchmark():
     
     async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
         # Step 1: Find artifact ID
-        artifact_id = await find_tiny_llm_artifact_id(session)
+        artifact_id = await find_tiny_llm_artifact_id(session, base_url)
         
         # Step 2: Perform concurrent downloads
-        print()
-        print_colored(f"Step 2: Performing {CONCURRENT_REQUESTS} concurrent downloads...", Colors.YELLOW)
-        print_colored("This may take several minutes...", Colors.YELLOW)
-        print()
-        
-        download_url = f"{BASE_URL}/artifacts/model/{artifact_id}/download"
+        download_url = f"{base_url}/artifacts/model/{artifact_id}/download"
         
         overall_start = datetime.now()
         
         # Create all download tasks
         tasks = [
             download_one(session, download_url, i, timeout)
-            for i in range(1, CONCURRENT_REQUESTS + 1)
+            for i in range(1, concurrent_requests + 1)
         ]
         
-        # Run all downloads concurrently with progress tracking
-        print_colored(f"Starting {CONCURRENT_REQUESTS} concurrent download requests...", Colors.CYAN)
-        print_colored("All requests are running concurrently (no local concurrency limit)", Colors.GRAY)
-        print()
-        
         # Track progress (use a dict for thread-safe updates)
-        all_results = [None] * CONCURRENT_REQUESTS
+        all_results = [None] * concurrent_requests
         progress = {'completed': 0, 'successful': 0, 'failed': 0}
         
-        def print_progress():
-            """Print current progress"""
-            elapsed = (datetime.now() - overall_start).total_seconds()
-            print_colored(
-                f"  Progress: {progress['completed']}/{CONCURRENT_REQUESTS} completed "
-                f"({progress['successful']} successful, {progress['failed']} failed) | "
-                f"Elapsed: {elapsed:.1f}s",
-                Colors.CYAN
-            )
-        
         async def progress_reporter():
-            """Background task to print progress updates every 2 seconds"""
-            while progress['completed'] < CONCURRENT_REQUESTS:
+            """Background task to report progress updates every 2 seconds"""
+            while progress['completed'] < concurrent_requests:
                 await asyncio.sleep(2.0)
-                if progress['completed'] < CONCURRENT_REQUESTS:
-                    print_progress()
-        
-        # Use asyncio.as_completed to track progress as tasks finish
-        print_colored("Downloading... (updates every 2 seconds)", Colors.GRAY)
+                if progress['completed'] < concurrent_requests and progress_callback:
+                    # Call progress callback: (completed, total, successful, failed)
+                    try:
+                        progress_callback(
+                            progress['completed'],
+                            concurrent_requests,
+                            progress['successful'],
+                            progress['failed']
+                        )
+                    except Exception:
+                        # Don't let callback errors break the benchmark
+                        pass
         
         # Start progress reporter task
         progress_task = asyncio.create_task(progress_reporter())
@@ -271,17 +247,11 @@ async def run_benchmark():
                         progress['successful'] += 1
                     else:
                         progress['failed'] += 1
-                    
-                    # Progress is printed by background task every 2 seconds
-                    # Only print final completion message
-                    if progress['completed'] == CONCURRENT_REQUESTS:
-                        print_progress()
                         
                 except Exception as e:
                     # Handle unexpected exceptions (shouldn't happen, but safety net)
                     progress['completed'] += 1
                     progress['failed'] += 1
-                    print_colored(f"  Unexpected error: {e}", Colors.RED)
         finally:
             # Cancel progress reporter when done
             progress_task.cancel()
@@ -289,38 +259,51 @@ async def run_benchmark():
                 await progress_task
             except asyncio.CancelledError:
                 pass
+            
+            # Final progress update
+            if progress_callback:
+                try:
+                    progress_callback(
+                        progress['completed'],
+                        concurrent_requests,
+                        progress['successful'],
+                        progress['failed']
+                    )
+                except Exception:
+                    pass
         
         # Filter out None results and ensure we have all results
         all_results = [r for r in all_results if r is not None]
         
-        # Ensure we have exactly CONCURRENT_REQUESTS results
-        if len(all_results) < CONCURRENT_REQUESTS:
-            print_colored(
-                f"WARNING: Only got {len(all_results)} results, expected {CONCURRENT_REQUESTS}",
-                Colors.YELLOW
-            )
-        
         overall_end = datetime.now()
         overall_duration = (overall_end - overall_start).total_seconds()
         
-        print()  # Final newline after progress updates
-        print_colored("All downloads completed!", Colors.GREEN)
-        
         successful = sum(1 for r in all_results if r.get('success', False))
         failed = len(all_results) - successful
-        print_colored(f"  Successful: {successful}", Colors.WHITE)
-        print_colored(f"  Failed: {failed}", Colors.RED if failed > 0 else Colors.WHITE)
-        print_colored(f"  Total duration: {round(overall_duration, 2)} seconds", Colors.WHITE)
         
         # Step 3: Calculate statistics
-        print()
-        print_colored("Step 3: Calculating statistics...", Colors.YELLOW)
-        
         successful_results = [r for r in all_results if r.get('success', False)]
         
         if not successful_results:
-            print_colored("ERROR: No successful downloads. Cannot calculate statistics.", Colors.RED)
-            sys.exit(1)
+            # Collect error information for debugging
+            error_samples = []
+            status_codes = {}
+            for r in all_results[:10]:  # Sample first 10 errors
+                if r and not r.get('success', False):
+                    error_msg = r.get('error', 'Unknown error')
+                    status = r.get('status_code', 'N/A')
+                    error_samples.append(f"Status {status}: {error_msg[:100]}")
+                    status_codes[status] = status_codes.get(status, 0) + 1
+            
+            error_summary = f"All {concurrent_requests} downloads failed. "
+            if status_codes:
+                error_summary += f"Status codes: {dict(status_codes)}. "
+            if error_samples:
+                error_summary += f"Sample errors: {'; '.join(error_samples[:3])}"
+            else:
+                error_summary += "No error details available."
+            
+            raise RuntimeError(error_summary)
         
         latencies = sorted([r['total_time_ms'] for r in successful_results])
         
@@ -335,7 +318,7 @@ async def run_benchmark():
         # Calculate throughput
         total_bytes = sum(r['response_size_bytes'] for r in successful_results)
         throughput_rps = round(successful / overall_duration, 2) if overall_duration > 0 else 0
-        throughput_mbps = round((total_bytes * 8) / (overall_duration * 1000000), 2) if overall_duration > 0 else 0
+        throughput_mbps = round((total_bytes * 8) / (overall_duration * 1_000_000), 2) if overall_duration > 0 else 0
         avg_file_size = round(total_bytes / successful, 0) if successful > 0 else 0
         
         # Build results object
@@ -347,12 +330,12 @@ async def run_benchmark():
         
         results = {
             'test_configuration': {
-                'api_base_url': BASE_URL,
+                'api_base_url': base_url,
                 'model_url': TINY_LLM_URL,
                 'artifact_id': artifact_id,
-                'total_requests': CONCURRENT_REQUESTS,
-                'concurrent_requests': CONCURRENT_REQUESTS,
-                'timeout_seconds': TIMEOUT_SECONDS,
+                'total_requests': concurrent_requests,
+                'concurrent_requests': concurrent_requests,
+                'timeout_seconds': timeout_seconds,
                 'test_timestamp': datetime.now().isoformat(),
                 'note': 'Files are downloaded but not saved to disk (only measured for metrics)'
             },
@@ -374,10 +357,10 @@ async def run_benchmark():
                     'all_latencies_ms': latencies
                 },
                 'request_summary': {
-                    'total_requests': CONCURRENT_REQUESTS,
+                    'total_requests': concurrent_requests,
                     'successful': successful,
                     'failed': failed,
-                    'success_rate': round((successful / CONCURRENT_REQUESTS) * 100, 2),
+                    'success_rate': round((successful / concurrent_requests) * 100, 2),
                     'total_duration_seconds': round(overall_duration, 2)
                 }
             },
@@ -388,47 +371,26 @@ async def run_benchmark():
             'request_details': all_results[:10]  # First 10 for reference
         }
         
-        # Step 4: Output results
-        print()
-        print_colored("=== Results ===", Colors.CYAN)
-        print_colored("Request Summary:", Colors.WHITE)
-        print_colored(f"  Total Requests: {CONCURRENT_REQUESTS}", Colors.WHITE)
-        print_colored(f"  Successful: {successful}", Colors.GREEN)
-        print_colored(f"  Failed: {failed}", Colors.RED if failed > 0 else Colors.GRAY)
-        print_colored(f"  Success Rate: {round((successful / CONCURRENT_REQUESTS) * 100, 2)}%", Colors.WHITE)
-        print_colored(f"  Total Duration: {round(overall_duration, 2)} seconds", Colors.WHITE)
-        print()
-        print_colored("Throughput:", Colors.WHITE)
-        print_colored(f"  Requests/Second: {throughput_rps}", Colors.WHITE)
-        print_colored(f"  Throughput: {throughput_mbps} Mbps", Colors.WHITE)
-        print_colored(f"  Total Downloaded: {round(total_bytes / (1024 * 1024), 2)} MB", Colors.WHITE)
-        print_colored(f"  Average File Size: {round(avg_file_size / 1024, 2)} KB", Colors.WHITE)
-        print()
-        print_colored("Latency (ms):", Colors.WHITE)
-        print_colored(f"  Mean:   {round(mean_latency, 2)}", Colors.WHITE)
-        print_colored(f"  Median: {round(median_latency, 2)}", Colors.WHITE)
-        print_colored(f"  P99:    {round(p99_latency, 2)}", Colors.WHITE)
-        print_colored(f"  Min:    {round(min_latency, 2)}", Colors.WHITE)
-        print_colored(f"  Max:    {round(max_latency, 2)}", Colors.WHITE)
-        print()
-        
-        # Save to JSON
-        with open(OUTPUT_JSON, 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
-        
-        print_colored(f"Results saved to: {OUTPUT_JSON}", Colors.GREEN)
-        print_colored("Note: Downloaded files were not saved to disk (only measured for metrics)", Colors.GRAY)
-        print()
+        return results
 
 
 if __name__ == "__main__":
+    """Standalone execution - prints results to stdout as JSON"""
+    import json
+    
+    def print_progress(completed: int, total: int, successful: int, failed: int):
+        """Progress callback for standalone execution"""
+        print(f"Progress: {completed}/{total} completed ({successful} successful, {failed} failed)", file=sys.stderr)
+    
     try:
-        asyncio.run(run_benchmark())
+        results = asyncio.run(run_benchmark(progress_callback=print_progress))
+        # Output JSON to stdout for subprocess compatibility
+        print(json.dumps(results, indent=2, ensure_ascii=False))
     except KeyboardInterrupt:
-        print_colored("\nBenchmark interrupted by user", Colors.YELLOW)
+        print("Benchmark interrupted by user", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print_colored(f"\nERROR: {e}", Colors.RED)
+        print(f"ERROR: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         sys.exit(1)

@@ -1,9 +1,7 @@
 import json
 import logging
 import os
-import subprocess
 import threading
-import glob
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
@@ -130,179 +128,91 @@ async def health_components(
 
 
 def run_download_benchmark_script(job_id: str):
-    """Run the Python download benchmark script in a background thread"""
+    """Run the Python download benchmark function in a background thread"""
     import traceback
+    import sys
+    import asyncio
+    from pathlib import Path
     
     logger.info(f"Starting download benchmark job {job_id}")
     
     try:
-        # Get the script path (project root)
-        script_path = Path(__file__).parent.parent.parent.parent / "benchmark_concurrent_download.py"
+        # Import the benchmark function directly
+        # Add project root to path to import the script
+        project_root = Path(__file__).parent.parent.parent.parent
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
         
-        logger.info(f"Looking for script at: {script_path}")
-        
-        if not script_path.exists():
-            error_msg = f"Benchmark script not found at {script_path}"
+        try:
+            from benchmark_concurrent_download import run_benchmark
+        except ImportError as e:
+            error_msg = f"Failed to import benchmark function: {e}"
             logger.error(error_msg)
             download_benchmark_jobs[job_id]["status"] = "failed"
             download_benchmark_jobs[job_id]["error"] = error_msg
             return
         
-        # Find Python executable
-        python_cmd = "python3"
-        import shutil
-        if not shutil.which(python_cmd):
-            python_cmd = "python"
-            if not shutil.which(python_cmd):
-                error_msg = "Python not found. Please ensure Python 3 is installed and in PATH."
-                logger.error(error_msg)
-                download_benchmark_jobs[job_id]["status"] = "failed"
-                download_benchmark_jobs[job_id]["error"] = error_msg
-                return
-        
-        download_benchmark_jobs[job_id]["progress"] = "Executing Python benchmark script..."
+        download_benchmark_jobs[job_id]["progress"] = "Initializing benchmark..."
         download_benchmark_jobs[job_id]["current_progress"] = "0/100"  # Track X/100 downloads
-        logger.info(f"Executing Python script: {python_cmd} {script_path}")
+        logger.info("Starting benchmark function...")
         logger.info("This may take 3-5 minutes to complete...")
         
-        # Run the script with real-time output capture
-        import re
-        # Use -u flag for unbuffered output to ensure real-time progress
-        process = subprocess.Popen(
-            [python_cmd, "-u", str(script_path)],  # -u = unbuffered
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,  # Line buffered
-            cwd=str(script_path.parent)
-        )
-        
-        # Capture stdout line by line to extract progress
-        stdout_lines = []
-        stderr_lines = []
-        
-        # Progress regex pattern: "  Progress: 12/100 completed" (more flexible)
-        progress_pattern = re.compile(r'Progress:\s*(\d+)/(\d+)\s+completed', re.IGNORECASE)
-        # ANSI escape code pattern (for removing color codes)
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        
-        def read_output(pipe, lines_list, is_stderr=False):
-            """Read output from pipe and update progress"""
+        # Progress callback to update job status
+        def progress_callback(completed: int, total: int, successful: int, failed: int):
+            """Update job progress from benchmark callback"""
             try:
-                for line in iter(pipe.readline, ''):
-                    if not line:
-                        break
-                    line = line.rstrip()
-                    lines_list.append(line)
-                    
-                    # Parse progress updates (strip ANSI codes first)
-                    if not is_stderr:
-                        # Remove ANSI color codes for parsing
-                        clean_line = ansi_escape.sub('', line)
-                        match = progress_pattern.search(clean_line)
-                        if match:
-                            completed = match.group(1)
-                            total = match.group(2)
-                            progress_str = f"{completed}/{total}"
-                            download_benchmark_jobs[job_id]["current_progress"] = progress_str
-                            download_benchmark_jobs[job_id]["progress"] = f"Downloading... {progress_str} completed"
-                            logger.info(f"Progress update: {progress_str}")
-                        # Debug: log lines that contain "Progress" but didn't match
-                        elif "Progress" in clean_line.lower() or "completed" in clean_line.lower():
-                            logger.debug(f"Progress-like line that didn't match: {clean_line[:100]}")
+                progress_str = f"{completed}/{total}"
+                download_benchmark_jobs[job_id]["current_progress"] = progress_str
+                download_benchmark_jobs[job_id]["progress"] = f"Downloading... {progress_str} completed"
+                logger.info(f"Progress update: {progress_str} ({successful} successful, {failed} failed)")
             except Exception as e:
-                logger.error(f"Error reading output: {e}")
-            finally:
-                pipe.close()
+                logger.error(f"Error in progress callback: {e}")
         
-        # Start threads to read stdout and stderr
-        import threading
-        stdout_thread = threading.Thread(target=read_output, args=(process.stdout, stdout_lines))
-        stderr_thread = threading.Thread(target=read_output, args=(process.stderr, stderr_lines, True))
-        stdout_thread.start()
-        stderr_thread.start()
+        # Get API base URL from environment or use AWS API Gateway (production)
+        # For local testing, set API_BASE_URL=http://localhost:8000
+        api_base_url = os.getenv("API_BASE_URL", "https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod")
         
-        # Wait for process to complete
-        return_code = process.wait(timeout=600)  # 10 minute timeout
+        # Create a new event loop for this thread to avoid interfering with FastAPI's event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
-        # Wait for output threads to finish
-        stdout_thread.join(timeout=5)
-        stderr_thread.join(timeout=5)
-        
-        stdout_text = '\n'.join(stdout_lines)
-        stderr_text = '\n'.join(stderr_lines)
-        
-        logger.info(f"Script completed with return code: {return_code}")
-        logger.info(f"Script stdout length: {len(stdout_text)} chars")
-        logger.info(f"Script stderr length: {len(stderr_text)} chars")
-        
-        if stdout_text:
-            logger.info(f"Script stdout (last 1000 chars): {stdout_text[-1000:]}")
-        if stderr_text:
-            logger.warning(f"Script stderr: {stderr_text}")
-        
-        result = type('Result', (), {
-            'returncode': return_code,
-            'stdout': stdout_text,
-            'stderr': stderr_text
-        })()
-        
-        if result.returncode != 0:
-            error_msg = (
-                f"Benchmark script failed with return code {result.returncode}. "
-                f"Error: {result.stderr[:1000] if result.stderr else 'No error output'}. "
-                f"Stdout: {result.stdout[-500:] if result.stdout else 'None'}"
+        try:
+            # Run the async benchmark function
+            download_benchmark_jobs[job_id]["progress"] = "Running benchmark..."
+            results = loop.run_until_complete(
+                run_benchmark(
+                    base_url=api_base_url,
+                    progress_callback=progress_callback
+                )
             )
-            logger.error(error_msg)
-            download_benchmark_jobs[job_id]["status"] = "failed"
-            download_benchmark_jobs[job_id]["error"] = error_msg
-            download_benchmark_jobs[job_id]["stdout"] = result.stdout[-2000:] if result.stdout else None
-            download_benchmark_jobs[job_id]["stderr"] = result.stderr[-2000:] if result.stderr else None
-            return
+            
+            # Store results
+            download_benchmark_jobs[job_id]["status"] = "completed"
+            download_benchmark_jobs[job_id]["results"] = results
+            download_benchmark_jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+            download_benchmark_jobs[job_id]["progress"] = "Completed successfully"
+            download_benchmark_jobs[job_id]["current_progress"] = None  # Clear progress on completion
+            logger.info(f"Download benchmark job {job_id} completed successfully")
+            logger.info(f"Results keys: {list(results.keys()) if isinstance(results, dict) else 'Not a dict'}")
+        finally:
+            # Clean up the event loop
+            loop.close()
         
-        download_benchmark_jobs[job_id]["progress"] = "Looking for output file..."
-        output_dir = script_path.parent
-        json_files = glob.glob(str(output_dir / "benchmark_download_concurrent_*.json"))
-        
-        logger.info(f"Found {len(json_files)} JSON output files")
-        
-        if not json_files:
-            error_msg = (
-                "Benchmark script did not generate output file. "
-                f"Script stdout: {result.stdout[:500] if result.stdout else 'None'}"
-            )
-            logger.error(error_msg)
-            download_benchmark_jobs[job_id]["status"] = "failed"
-            download_benchmark_jobs[job_id]["error"] = error_msg
-            download_benchmark_jobs[job_id]["stdout"] = result.stdout[-2000:] if result.stdout else None
-            return
-        
-        latest_json = max(json_files, key=os.path.getctime)
-        logger.info(f"Using output file: {latest_json}")
-        
-        with open(latest_json, 'r', encoding='utf-8') as f:
-            benchmark_data = json.load(f)
-        
-        download_benchmark_jobs[job_id]["status"] = "completed"
-        download_benchmark_jobs[job_id]["results"] = benchmark_data
-        download_benchmark_jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
-        download_benchmark_jobs[job_id]["progress"] = "Completed successfully"
-        logger.info(f"Download benchmark job {job_id} completed successfully")
-        logger.info(f"Results keys: {list(benchmark_data.keys()) if isinstance(benchmark_data, dict) else 'Not a dict'}")
-        
-    except subprocess.TimeoutExpired:
-        error_msg = "Benchmark script timed out after 10 minutes"
+    except ValueError as e:
+        # Tiny-LLM not found
+        error_msg = f"Benchmark failed: {str(e)}"
         logger.error(error_msg)
         download_benchmark_jobs[job_id]["status"] = "failed"
         download_benchmark_jobs[job_id]["error"] = error_msg
-        download_benchmark_jobs[job_id]["progress"] = "Timed out"
-    except json.JSONDecodeError as e:
-        error_msg = f"Failed to parse benchmark output JSON: {str(e)}"
+        download_benchmark_jobs[job_id]["progress"] = "Failed: Model not found"
+    except RuntimeError as e:
+        # Runtime errors (e.g., no successful downloads)
+        error_msg = f"Benchmark failed: {str(e)}"
         logger.error(error_msg)
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        # Include full error message (not truncated) for debugging
         download_benchmark_jobs[job_id]["status"] = "failed"
         download_benchmark_jobs[job_id]["error"] = error_msg
-        download_benchmark_jobs[job_id]["progress"] = "JSON parsing failed"
+        download_benchmark_jobs[job_id]["progress"] = f"Failed: {str(e)[:200]}"
     except Exception as e:
         error_msg = f"Error executing benchmark: {str(e)}"
         logger.exception(f"Exception in download benchmark job {job_id}: {error_msg}")

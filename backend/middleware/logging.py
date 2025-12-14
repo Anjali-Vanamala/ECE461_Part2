@@ -15,7 +15,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 # pylint: disable=invalid-name
 try:
-    import boto3  # type: ignore 
+    import boto3  # type: ignore
 except Exception:
     boto3 = None  # type: ignore
 

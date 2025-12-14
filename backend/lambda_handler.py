@@ -22,7 +22,6 @@ except ImportError:
 
 from backend.app import app
 
-# Configure logging for Lambda
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -30,8 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Create Mangum adapter for FastAPI app
-# lifespan="off" disables FastAPI lifespan events (not supported in Lambda)
-# api_gateway_base_path="" allows API Gateway path configuration
+# lifespan="off" - FastAPI lifespan events not supported in Lambda
 handler = Mangum(
     app,
     lifespan="off",

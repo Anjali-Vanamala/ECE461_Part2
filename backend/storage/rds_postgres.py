@@ -9,19 +9,16 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from urllib.parse import quote_plus
 from typing import Dict, Iterable, List, Optional
 
 try:
     from sqlalchemy import (
         JSON,
         String,
-        Text,
         create_engine,
         Column,
         Index,
-        select,
-        update,
-        delete,
     )
     from sqlalchemy.ext.declarative import declarative_base
     from sqlalchemy.orm import sessionmaker, Session
@@ -55,42 +52,45 @@ RDS_USERNAME = os.getenv("RDS_USERNAME", "postgres")
 RDS_PASSWORD = os.getenv("RDS_PASSWORD")
 RDS_PORT = os.getenv("RDS_PORT", "5432")
 
-if not SQLALCHEMY_AVAILABLE:
-    raise ImportError("SQLAlchemy is required for RDS backend. Install with: pip install sqlalchemy")
-
-if not PSYCOPG2_AVAILABLE:
-    raise ImportError("psycopg2 is required for PostgreSQL. Install with: pip install psycopg2-binary")
-
-# SQLAlchemy setup
-Base = declarative_base()
+# SQLAlchemy setup - only if available
+if SQLALCHEMY_AVAILABLE:
+    Base = declarative_base()
+else:
+    Base = None  # Will raise error when actually used
 
 
-class ArtifactModel(Base):
-    """SQLAlchemy model for artifacts table."""
-    __tablename__ = "artifacts"
+# Define model only if Base is available
+if Base is not None:
+    class ArtifactModel(Base):
+        """SQLAlchemy model for artifacts table."""
+        __tablename__ = "artifacts"
 
-    artifact_id = Column(String(255), primary_key=True)
-    artifact_type = Column(String(50), nullable=False, index=True)
-    name = Column(String(500), nullable=False)
-    name_normalized = Column(String(500), index=True)
-    url = Column(String(2000), nullable=False, index=True)
-    artifact_data = Column(JSON, nullable=False)  # Full artifact JSON
-    rating = Column(JSON, nullable=True)  # Model rating JSON
-    license = Column(String(200), nullable=True)
-    dataset_id = Column(String(255), nullable=True, index=True)
-    dataset_name = Column(String(500), nullable=True)
-    dataset_name_normalized = Column(String(500), index=True)
-    dataset_url = Column(String(2000), nullable=True)
-    code_id = Column(String(255), nullable=True, index=True)
-    code_name = Column(String(500), nullable=True)
-    code_name_normalized = Column(String(500), index=True)
-    code_url = Column(String(2000), nullable=True)
-    processing_status = Column(String(50), default="completed")
+        artifact_id = Column(String(255), primary_key=True)
+        artifact_type = Column(String(50), nullable=False, index=True)
+        name = Column(String(500), nullable=False)
+        name_normalized = Column(String(500), index=True)
+        url = Column(String(2000), nullable=False, index=True)
+        artifact_data = Column(JSON, nullable=False)  # Full artifact JSON
+        rating = Column(JSON, nullable=True)  # Model rating JSON
+        license = Column(String(200), nullable=True)
+        dataset_id = Column(String(255), nullable=True, index=True)
+        dataset_name = Column(String(500), nullable=True)
+        dataset_name_normalized = Column(String(500), index=True)
+        dataset_url = Column(String(2000), nullable=True)
+        code_id = Column(String(255), nullable=True, index=True)
+        code_name = Column(String(500), nullable=True)
+        code_name_normalized = Column(String(500), index=True)
+        code_url = Column(String(2000), nullable=True)
+        processing_status = Column(String(50), default="completed")
 
-    __table_args__ = (
-        Index("idx_artifact_type_name", "artifact_type", "name_normalized"),
-        Index("idx_artifact_type_url", "artifact_type", "url"),
-    )
+        __table_args__ = (
+            Index("idx_artifact_type_name", "artifact_type", "name_normalized"),
+            Index("idx_artifact_type_url", "artifact_type", "url"),
+        )
+else:
+    # Dummy class to prevent import errors when SQLAlchemy not available
+    class ArtifactModel:  # type: ignore
+        pass
 
 
 # Database connection
@@ -105,7 +105,11 @@ def _get_database_url() -> str:
     if not RDS_PASSWORD:
         raise ValueError("RDS_PASSWORD environment variable is required")
     
-    return f"postgresql://{RDS_USERNAME}:{RDS_PASSWORD}@{RDS_ENDPOINT}:{RDS_PORT}/{RDS_DB_NAME}"
+    # URL encode username and password to handle special characters
+    encoded_username = quote_plus(RDS_USERNAME)
+    encoded_password = quote_plus(RDS_PASSWORD)
+    
+    return f"postgresql://{encoded_username}:{encoded_password}@{RDS_ENDPOINT}:{RDS_PORT}/{RDS_DB_NAME}"
 
 
 def _get_engine():
@@ -126,6 +130,7 @@ def _get_engine():
 def _get_session() -> Session:
     """Get database session."""
     global _SessionLocal
+    _ensure_initialized()  # Ensure DB is initialized before creating session
     if _SessionLocal is None:
         _SessionLocal = sessionmaker(bind=_get_engine(), autocommit=False, autoflush=False)
     return _SessionLocal()
@@ -134,6 +139,13 @@ def _get_session() -> Session:
 def _init_database():
     """Initialize database tables (create if they don't exist)."""
     try:
+        # Only initialize if RDS is configured
+        if not RDS_ENDPOINT or not RDS_PASSWORD:
+            return  # Skip initialization if not configured
+        
+        if Base is None:
+            raise RuntimeError("SQLAlchemy Base not initialized - SQLAlchemy may not be installed")
+        
         Base.metadata.create_all(bind=_get_engine())
         print(f"[RDS PostgreSQL] Database initialized - Endpoint: {RDS_ENDPOINT}, DB: {RDS_DB_NAME}")
     except Exception as e:
@@ -141,12 +153,27 @@ def _init_database():
         raise
 
 
-# Initialize database on import
-try:
-    _init_database()
-except Exception as e:
-    print(f"[RDS PostgreSQL] Warning: Could not initialize database: {e}")
-    print("   Make sure RDS instance is running and credentials are correct")
+# Initialize database lazily - only when first accessed
+_initialized = False
+
+
+def _ensure_initialized():
+    """Ensure database is initialized (lazy initialization)."""
+    global _initialized
+    if not _initialized:
+        if not SQLALCHEMY_AVAILABLE:
+            raise ImportError("SQLAlchemy is required for RDS backend. Install with: pip install sqlalchemy")
+        if not PSYCOPG2_AVAILABLE:
+            raise ImportError("psycopg2 is required for PostgreSQL. Install with: pip install psycopg2-binary")
+        if Base is None:
+            raise RuntimeError("SQLAlchemy Base not initialized")
+        try:
+            _init_database()
+            _initialized = True
+        except Exception as e:
+            print(f"[RDS PostgreSQL] Warning: Could not initialize database: {e}")
+            print("   Make sure RDS instance is running and credentials are correct")
+            # Don't raise - allow code to continue (will fail on actual DB access)
 
 
 def generate_artifact_id() -> ArtifactID:
@@ -156,7 +183,10 @@ def generate_artifact_id() -> ArtifactID:
 
 def _normalized(name: Optional[str]) -> Optional[str]:
     """Normalize name for searching."""
-    return name.strip().lower() if isinstance(name, str) else None
+    if not name or not isinstance(name, str):
+        return None
+    normalized = name.strip().lower()
+    return normalized if normalized else None
 
 
 def _serialize_artifact(artifact: Artifact) -> Dict:
@@ -232,7 +262,7 @@ def save_artifact(
         normalized_name = _normalized(artifact.metadata.name)
 
         if existing:
-            # Update existing
+            # Update existing - preserve fields if not provided (like DynamoDB)
             existing.artifact_type = artifact_type.value
             existing.name = artifact.metadata.name
             existing.name_normalized = normalized_name
@@ -256,6 +286,10 @@ def save_artifact(
                     existing.code_url = code_url
                 if processing_status is not None:
                     existing.processing_status = processing_status
+                elif not existing.processing_status:
+                    existing.processing_status = "completed"
+            
+            model_obj = existing
         else:
             # Insert new
             db_model = ArtifactModel(
@@ -279,13 +313,20 @@ def save_artifact(
                 db_model.processing_status = processing_status or "completed"
 
             session.add(db_model)
-
-        session.commit()
-        print(f"[RDS PostgreSQL] Saved artifact: {artifact_type.value}:{artifact_id}")
+            model_obj = db_model
 
         # Link dataset/code by name if IDs not set
         if artifact_type == ArtifactType.MODEL and (dataset_name or code_name):
-            _link_dataset_code_by_name(session, artifact_id, dataset_name, code_name)
+            _link_dataset_code_by_name(session, model_obj, dataset_name, code_name)
+        
+        session.commit()
+        print(f"[RDS PostgreSQL] Saved artifact: {artifact_type.value}:{artifact_id}")
+
+        # Update models that reference this dataset/code
+        if artifact_type == ArtifactType.DATASET:
+            _update_models_with_dataset(artifact_id, artifact.metadata.name, artifact.data.url)
+        elif artifact_type == ArtifactType.CODE:
+            _update_models_with_code(artifact_id, artifact.metadata.name, artifact.data.url)
 
         return artifact
     except Exception as e:
@@ -298,40 +339,84 @@ def save_artifact(
 
 def _link_dataset_code_by_name(
     session: Session,
-    artifact_id: str,
+    model: ArtifactModel,
     dataset_name: Optional[str],
     code_name: Optional[str],
 ) -> None:
     """Link model to dataset/code by name if IDs not set."""
     if dataset_name:
         normalized = _normalized(dataset_name)
-        dataset = session.query(ArtifactModel).filter(
-            ArtifactModel.artifact_type == ArtifactType.DATASET.value,
-            ArtifactModel.name_normalized == normalized
-        ).first()
-        if dataset:
-            session.query(ArtifactModel).filter(
-                ArtifactModel.artifact_id == artifact_id
-            ).update({
-                "dataset_id": dataset.artifact_id,
-                "dataset_url": dataset.url
-            })
-            session.commit()
+        if normalized and not model.dataset_id:
+            dataset = session.query(ArtifactModel).filter(
+                ArtifactModel.artifact_type == ArtifactType.DATASET.value,
+                ArtifactModel.name_normalized == normalized
+            ).first()
+            if dataset:
+                model.dataset_id = dataset.artifact_id
+                model.dataset_url = dataset.url
 
     if code_name:
         normalized = _normalized(code_name)
-        code = session.query(ArtifactModel).filter(
-            ArtifactModel.artifact_type == ArtifactType.CODE.value,
-            ArtifactModel.name_normalized == normalized
-        ).first()
-        if code:
-            session.query(ArtifactModel).filter(
-                ArtifactModel.artifact_id == artifact_id
-            ).update({
-                "code_id": code.artifact_id,
-                "code_url": code.url
-            })
-            session.commit()
+        if normalized and not model.code_id:
+            code = session.query(ArtifactModel).filter(
+                ArtifactModel.artifact_type == ArtifactType.CODE.value,
+                ArtifactModel.name_normalized == normalized
+            ).first()
+            if code:
+                model.code_id = code.artifact_id
+                model.code_url = code.url
+
+
+def _update_models_with_dataset(dataset_id: str, dataset_name: str, dataset_url: str) -> None:
+    """Update all models that reference this dataset by name."""
+    normalized_name = _normalized(dataset_name)
+    if not normalized_name:
+        return
+    
+    session = _get_session()
+    try:
+        models = session.query(ArtifactModel).filter(
+            ArtifactModel.artifact_type == ArtifactType.MODEL.value,
+            ArtifactModel.dataset_name_normalized == normalized_name
+        ).filter(
+            ArtifactModel.dataset_id.is_(None)
+        ).all()
+        
+        for model in models:
+            model.dataset_id = dataset_id
+            model.dataset_url = dataset_url
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"[RDS PostgreSQL] Error updating models with dataset: {e}")
+    finally:
+        session.close()
+
+
+def _update_models_with_code(code_id: str, code_name: str, code_url: str) -> None:
+    """Update all models that reference this code by name."""
+    normalized_name = _normalized(code_name)
+    if not normalized_name:
+        return
+    
+    session = _get_session()
+    try:
+        models = session.query(ArtifactModel).filter(
+            ArtifactModel.artifact_type == ArtifactType.MODEL.value,
+            ArtifactModel.code_name_normalized == normalized_name
+        ).filter(
+            ArtifactModel.code_id.is_(None)
+        ).all()
+        
+        for model in models:
+            model.code_id = code_id
+            model.code_url = code_url
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"[RDS PostgreSQL] Error updating models with code: {e}")
+    finally:
+        session.close()
 
 
 def get_artifact(artifact_type: ArtifactType, artifact_id: ArtifactID) -> Optional[Artifact]:
@@ -592,7 +677,9 @@ def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
     """Find a dataset by normalized name."""
     session = _get_session()
     try:
-        normalized = _normalized(name) or ""
+        normalized = _normalized(name)
+        if not normalized:
+            return None
         db_model = session.query(ArtifactModel).filter(
             ArtifactModel.artifact_type == ArtifactType.DATASET.value,
             ArtifactModel.name_normalized == normalized
@@ -600,8 +687,7 @@ def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
 
         if db_model:
             record = _model_to_record(db_model)
-            if isinstance(record, DatasetRecord):
-                return record
+            return record if isinstance(record, DatasetRecord) else None
         return None
     except Exception as e:
         print(f"[RDS PostgreSQL] Error finding dataset by name: {e}")
@@ -614,7 +700,9 @@ def find_code_by_name(name: str) -> Optional[CodeRecord]:
     """Find a code artifact by normalized name."""
     session = _get_session()
     try:
-        normalized = _normalized(name) or ""
+        normalized = _normalized(name)
+        if not normalized:
+            return None
         db_model = session.query(ArtifactModel).filter(
             ArtifactModel.artifact_type == ArtifactType.CODE.value,
             ArtifactModel.name_normalized == normalized

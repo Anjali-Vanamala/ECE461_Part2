@@ -144,33 +144,25 @@ jobs:
               sleep 10
               
               RUNNING_JOBS=$(aws amplify list-jobs \
-          CURRENT_BRANCH="${{ github.ref_name }}"
-          
-          echo "=========================================="
-          echo "✅ Frontend CI/CD Pipeline Complete"
-          echo "=========================================="
-          echo ""
-          echo "Build Status: ✅ Passed"
-          echo "Lint Status: ✅ Passed"
-          echo "Branch: $CURRENT_BRANCH"
-          echo ""
-          if [ -n "$APP_ID" ]; then
-            echo "Amplify App ID: $APP_ID"
-            echo "Region: ${{ env.AWS_REGION }}"
-            echo ""
-            if [ "$CURRENT_BRANCH" == "main" ]; then
-              echo "📦 Deployment: Auto-deploy enabled (via Amplify webhook)"
-              echo "   GitHub Actions verifies but does not trigger deployment"
-            else
-              echo "📦 Deployment: Manual trigger enabled"
-              echo "   GitHub Actions can trigger deployment for this branch"
+                --app-id "$APP_ID" \
+                --branch-name "$BRANCH" \
+                --max-results 5 \
+                --region ${{ env.AWS_REGION }} \
+                --query 'jobSummaries[?status==`PENDING` || status==`RUNNING`]' \
+                --output json 2>/dev/null || echo "[]")
+              
+              RUNNING_COUNT=$(echo "$RUNNING_JOBS" | jq '. | length')
+              
+              if [ "$RUNNING_COUNT" -gt 0 ]; then
+                echo "✅ Deployment now in progress"
+                exit 0
+              else
+                echo "ℹ️  Still no deployment detected. Build validated, deployment expected via webhook."
+                exit 0
+              fi
             fi
-            echo "🔗 Console: https://console.aws.amazon.com/amplify/home?region=${{ env.AWS_REGION }}#/$APP_ID"
           else
-            echo "📦 Deployment: Handled by Amplify auto-deploy webhook"
-          fi
-          echo ""
-          echo "💡 Tip: Use 'workflow_dispatch' to manually trigger deployment for any branch
+            # Non-main branch: allow manual deployment
             echo "🚀 Triggering manual deployment for branch: $CURRENT_BRANCH"
             echo "   (Auto-deploy only applies to main branch)"
             echo ""
@@ -212,22 +204,30 @@ jobs:
       - name: Output deployment info
         run: |
           APP_ID="${{ steps.get-amplify-app.outputs.APP_ID }}"
+          CURRENT_BRANCH="${{ github.ref_name }}"
+          
           echo "=========================================="
           echo "✅ Frontend CI/CD Pipeline Complete"
           echo "=========================================="
           echo ""
           echo "Build Status: ✅ Passed"
           echo "Lint Status: ✅ Passed"
+          echo "Branch: $CURRENT_BRANCH"
           echo ""
           if [ -n "$APP_ID" ]; then
             echo "Amplify App ID: $APP_ID"
-            echo "Branch: ${{ env.AMPLIFY_BRANCH }}"
             echo "Region: ${{ env.AWS_REGION }}"
             echo ""
-            echo "📦 Deployment: Amplify auto-deploy enabled"
+            if [ "$CURRENT_BRANCH" == "main" ]; then
+              echo "📦 Deployment: Auto-deploy enabled (via Amplify webhook)"
+              echo "   GitHub Actions verifies but does not trigger deployment"
+            else
+              echo "📦 Deployment: Manual trigger enabled"
+              echo "   GitHub Actions can trigger deployment for this branch"
+            fi
             echo "🔗 Console: https://console.aws.amazon.com/amplify/home?region=${{ env.AWS_REGION }}#/$APP_ID"
           else
             echo "📦 Deployment: Handled by Amplify auto-deploy webhook"
           fi
           echo ""
-          echo "Note: This workflow validates builds. Amplify handles deployment automatically."
+          echo "💡 Tip: Use 'workflow_dispatch' to manually trigger deployment for any branch"

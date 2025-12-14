@@ -539,24 +539,6 @@ def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
         return None
 
 
-def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
-    """Get full model record with relationships (dataset_id, code_id)."""
-    try:
-        response = table.get_item(Key={"artifact_id": artifact_id})
-        if "Item" not in response:
-            return None
-
-        item = response["Item"]
-        if item.get("artifact_type") != ArtifactType.MODEL.value:
-            return None
-
-        # Type assertion: we've already verified it's a MODEL, so _item_to_record will return ModelRecord
-        return cast(ModelRecord, _item_to_record(item))
-    except ClientError as e:
-        print(f"[DynamoDB] Error getting model record: {e}")
-        return None
-
-
 def get_processing_status(artifact_id: ArtifactID) -> Optional[str]:
     """Get the processing status of a model artifact."""
     try:

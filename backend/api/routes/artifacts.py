@@ -16,11 +16,9 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
-                            ArtifactData, ArtifactID, ArtifactLineageEdge,
-                            ArtifactLineageGraph, ArtifactLineageNode,
-                            ArtifactMetadata, ArtifactQuery,
-                            ArtifactRegistration, ArtifactType, ModelRating,
-                            SimpleLicenseCheckRequest)
+                            ArtifactData, ArtifactID, ArtifactMetadata,
+                            ArtifactQuery, ArtifactRegistration, ArtifactType,
+                            ModelRating, SimpleLicenseCheckRequest)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory, s3
 
@@ -957,79 +955,6 @@ async def get_model_rating(
     if not rating:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist or lacks a rating.")
     return rating
-
-
-@router.get(
-    "/artifact/model/{artifact_id}/lineage",
-    response_model=ArtifactLineageGraph,
-    summary="Retrieve the lineage graph for this artifact. (BASELINE)",
-    responses={
-        400: {"description": "The lineage graph cannot be computed because the artifact metadata is missing or malformed."},
-        404: {"description": "Artifact does not exist."},
-    },
-)
-async def get_model_lineage(
-    artifact_id: ArtifactID = Path(..., description="Artifact id"),
-) -> ArtifactLineageGraph:
-    """Get the lineage graph for a model artifact showing its dependencies."""
-    # Get model record with relationships
-    model_record = memory.get_model_record(artifact_id)
-    if not model_record:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
-
-    nodes: List[ArtifactLineageNode] = []
-    edges: List[ArtifactLineageEdge] = []
-
-    # Add model node
-    model_node = ArtifactLineageNode(
-        artifact_id=model_record.artifact.metadata.id,
-        name=model_record.artifact.metadata.name,
-        source="model_metadata",
-        metadata={"type": "model"},
-    )
-    nodes.append(model_node)
-
-    # Add dataset node and edge if dataset exists
-    if model_record.dataset_id:
-        dataset = memory.get_artifact(ArtifactType.DATASET, model_record.dataset_id)
-        if dataset:
-            dataset_node = ArtifactLineageNode(
-                artifact_id=dataset.metadata.id,
-                name=dataset.metadata.name,
-                source="model_metadata",
-                metadata={"type": "dataset"},
-            )
-            nodes.append(dataset_node)
-
-            # Edge: dataset -> model (dataset is upstream dependency)
-            dataset_edge = ArtifactLineageEdge(
-                from_node_artifact_id=dataset.metadata.id,
-                to_node_artifact_id=model_record.artifact.metadata.id,
-                relationship="training_dataset",
-            )
-            edges.append(dataset_edge)
-
-    # Add code node and edge if code exists
-    if model_record.code_id:
-        code = memory.get_artifact(ArtifactType.CODE, model_record.code_id)
-        if code:
-            code_node = ArtifactLineageNode(
-                artifact_id=code.metadata.id,
-                name=code.metadata.name,
-                source="model_metadata",
-                metadata={"type": "code"},
-            )
-            nodes.append(code_node)
-
-            # Edge: code -> model (code is upstream dependency)
-            code_edge = ArtifactLineageEdge(
-                from_node_artifact_id=code.metadata.id,
-                to_node_artifact_id=model_record.artifact.metadata.id,
-                relationship="implemented_with",
-            )
-            edges.append(code_edge)
-
-    return ArtifactLineageGraph(nodes=nodes, edges=edges)
 
 
 @router.get(

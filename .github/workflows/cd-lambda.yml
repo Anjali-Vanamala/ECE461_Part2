@@ -21,6 +21,11 @@ on:
         description: 'Reason for manual deploy'
         required: false
         default: 'manual'
+      branch:
+        description: 'Branch to deploy from'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
@@ -40,6 +45,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
 
       - name: Setup Python
         uses: actions/setup-python@v5

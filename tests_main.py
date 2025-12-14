@@ -2297,7 +2297,7 @@ class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
             memory.reset()
 
             response = client.post(
-                "/artifacts/model",
+                "/artifact/model",
                 json={"url": "https://huggingface.co/gpt2", "name": "test-model"}
             )
 
@@ -2325,7 +2325,7 @@ class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
                 memory.reset()
 
                 response = client.post(
-                    "/artifacts/model",
+                    "/artifact/model",
                     json={"url": "https://huggingface.co/gpt2", "name": "test-model"}
                 )
 

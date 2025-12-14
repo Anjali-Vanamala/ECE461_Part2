@@ -9,6 +9,7 @@ temp_log.txt
 venv
 tmp/
 CLAUDE.md
+lambda-build/
 
 # Frontend dependencies
 node_modules/

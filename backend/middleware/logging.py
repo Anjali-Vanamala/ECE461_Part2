@@ -68,8 +68,9 @@ class LoggingMiddleware:
         # 🔥 LOG IMMEDIATELY WHEN REQUEST ARRIVES
         logger.info(f"[ARRIVED] {method} {path}")
 
-        # Collect body as it streams
+        # Collect bodies as they stream
         body_store: list[bytes] = []
+        response_body_store: list[bytes] = []
 
         async def receive_wrapper():
             """Wrap the receive callable to capture the request body."""
@@ -80,7 +81,6 @@ class LoggingMiddleware:
                 if chunk:
                     body_store.append(chunk)
 
-                # 🔥 LOG THE BODY AS SOON AS COMPLETE (BEFORE handler runs)
                 if not message.get("more_body", False):
                     try:
                         raw_body = b"".join(body_store).decode("utf-8", errors="replace")
@@ -91,9 +91,26 @@ class LoggingMiddleware:
             return message
 
         async def send_wrapper(message: MutableMapping[str, object]) -> None:
-            """Wrap the send callable to capture the response status."""
-            if message.get("type") == "http.response.start":
+            """Wrap the send callable to capture the response status and body."""
+            msg_type = message.get("type")
+
+            if msg_type == "http.response.start":
                 status_holder["status"] = cast(Optional[int], message.get("status"))
+
+            elif msg_type == "http.response.body":
+                chunk = cast(bytes, message.get("body", b""))
+                if chunk:
+                    response_body_store.append(chunk)
+
+                if not message.get("more_body", False):
+                    try:
+                        raw_response = b"".join(response_body_store).decode(
+                            "utf-8", errors="replace"
+                        )
+                    except Exception:
+                        raw_response = "<unreadable>"
+                    logger.info(f"[RESPONSE BODY] {raw_response}")
+
             await send(message)
 
         try:
@@ -105,7 +122,6 @@ class LoggingMiddleware:
             if not path.startswith("/health"):
                 record_request(method, path, status, client_ip, artifact_type)
 
-            # Log again after handling (old behavior preserved)
             try:
                 raw_body = b"".join(body_store).decode("utf-8", errors="replace")
             except Exception:

@@ -301,7 +301,7 @@ def calibrate_regex_timeout(test_text) -> float:
     baseline2 = time.perf_counter() - start
 
     # Never allow insanely tiny values
-    return max(0.01, baseline * 2, baseline2 * 2)
+    return max(0.01, baseline * 1.5, baseline2 * 1.5)
 
 
 def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | None:
@@ -343,7 +343,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
             name = record.artifact.metadata.name
             test_readme = None
             if record.artifact.metadata.type == ArtifactType.MODEL:
-                readme = memory.get_model_readme(record.artifact.metadata.id)
+                readme = record.readme
             else:
                 readme = "temp"
             if readme is not None and len(readme) > 10:

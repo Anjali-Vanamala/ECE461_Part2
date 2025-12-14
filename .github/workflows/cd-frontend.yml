@@ -19,6 +19,10 @@ on:
         description: 'Reason for manual deploy'
         required: false
         default: 'manual'
+      branch:
+        description: 'Amplify branch to deploy to (defaults to current branch)'
+        required: false
+        default: ''
 
 permissions:
   id-token: write
@@ -26,7 +30,6 @@ permissions:
 
 env:
   AWS_REGION: us-east-2
-  AMPLIFY_BRANCH: main
 
 jobs:
   build-deploy:
@@ -101,8 +104,25 @@ jobs:
       - name: Deploy or verify
         run: |
           APP_ID="${{ steps.get-amplify-app.outputs.APP_ID }}"
-          BRANCH="${{ env.AMPLIFY_BRANCH }}"
           CURRENT_BRANCH="${{ github.ref_name }}"
+          
+          # Determine which Amplify branch to deploy to
+          # For workflow_dispatch: use input branch if provided, otherwise use current branch
+          # For push to main: always use main
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            INPUT_BRANCH="${{ github.event.inputs.branch }}"
+            if [ -n "$INPUT_BRANCH" ]; then
+              BRANCH="$INPUT_BRANCH"
+            else
+              BRANCH="$CURRENT_BRANCH"
+            fi
+          else
+            # Push to main - always deploy to main branch
+            BRANCH="main"
+          fi
+          
+          echo "Current GitHub branch: $CURRENT_BRANCH"
+          echo "Target Amplify branch: $BRANCH"
           
           if [ -z "$APP_ID" ]; then
             echo "⚠️  Skipping deployment - App ID not available"
@@ -116,7 +136,9 @@ jobs:
           fi
           
           # Check if this is the main branch with auto-deploy enabled
-          if [ "$CURRENT_BRANCH" == "main" ]; then
+          # For push events to main, Amplify auto-deploy handles it
+          # For workflow_dispatch, we manually trigger
+          if [ "${{ github.event_name }}" == "push" ] && [ "$CURRENT_BRANCH" == "main" ]; then
             echo "🔍 Running on main branch - Amplify auto-deploy is enabled"
             echo "Checking if deployment is already in progress..."
             

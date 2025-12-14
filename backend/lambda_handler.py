@@ -33,8 +33,7 @@ logger = logging.getLogger(__name__)
 handler = Mangum(
     app,
     lifespan="off",
-    api_gateway_base_path="",
-    log_level=logging.INFO
+    api_gateway_base_path=""
 )
 
 logger.info("Lambda handler initialized successfully")

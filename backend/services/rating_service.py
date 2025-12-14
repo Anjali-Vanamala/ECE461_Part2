@@ -5,15 +5,15 @@ import re
 from typing import Any, Optional, Tuple
 from urllib.parse import urlparse
 
-import logger
 import requests as rq
 from huggingface_hub import HfApi, hf_hub_url
-from metric_concurrent import main as run_metrics
-from metrics.size import calculate_size_score
 
+import logger
 from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
                             ArtifactType, ModelRating, SizeScore)
 from backend.storage import memory
+from metric_concurrent import main as run_metrics
+from metrics.size import calculate_size_score
 
 # -----------------------------
 # GitHub Auth

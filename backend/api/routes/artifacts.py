@@ -264,14 +264,13 @@ def _get_download_filename(artifact: Artifact, source_url: str) -> str:
     return f"{safe_name}{extension}"
 
 
-def calibrate_regex_timeout() -> float:
+def calibrate_regex_timeout(test_text) -> float:
     """
     Measures how long regex takes in this platform for a safe case.
     The timeout is set to allow legitimate patterns while blocking catastrophic ones.
     """
     test_pattern = r"a+"
     test2_pattern = r"ece461"
-    test_text = "a" * 5000
 
     start = time.perf_counter()
     regex.search(test_pattern, test_text)
@@ -283,15 +282,10 @@ def calibrate_regex_timeout() -> float:
 
     # Use a more lenient multiplier to avoid false positives on valid patterns
     # Minimum 0.01 seconds to handle legitimate complex patterns
-    return max(0.01, baseline * 50, baseline2 * 50)
+    return max(0.01, baseline * 2, baseline2 * 2)
 
 
-# Compute once at import time
-REGEX_TIMEOUT = calibrate_regex_timeout()
-print(f"[Regex] Calibrated REGEX_TIMEOUT = {REGEX_TIMEOUT:.6f} seconds")
-
-
-def safe_regex_search(pattern: str, text: str, timeout: float = REGEX_TIMEOUT):
+def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | None:
     try:
         return bool(regex.search(pattern, text, timeout=timeout))
     except TimeoutError:
@@ -316,17 +310,29 @@ async def regex_artifact_search(payload: dict = Body(...)):
     results: List[ArtifactMetadata] = []
 
     # Initial catastrophic check
-    initial_test = safe_regex_search(regex_str, "a" * 5000)
+    test_string = "a" * 5000
+    timeout_1 = calibrate_regex_timeout(test_string)
+    initial_test = safe_regex_search(regex_str, "a" * 5000, timeout_1)
     if initial_test is None:
         raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
 
     for store in memory._TYPE_TO_STORE.values():
         for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name
-            test = safe_regex_search(regex_str, name)
-            if test is None:
+
+            if record.artifact.metadata.type == ArtifactType.MODEL:
+                readme = record.readme
+            else:
+                readme = "temp"
+            if readme is not None and len(readme) > 10:
+                timeout = calibrate_regex_timeout(readme)
+            else:
+                timeout = timeout_1
+            test = safe_regex_search(regex_str, name, timeout)
+            test_readme = safe_regex_search(regex_str, readme, timeout)
+            if test is None and test_readme is None:
                 raise HTTPException(400, "There is missing field(s) in the artifact_regex or it is formed improperly, or is invalid")
-            if test:
+            if test or test_readme:
                 results.append(record.artifact.metadata)
 
     if not results:
@@ -412,7 +418,7 @@ def process_model_artifact_async(
 
     try:
         # Compute the artifact (long-running)
-        artifact, rating, dataset_name, dataset_url, code_name, code_url, license = compute_model_artifact(
+        artifact, rating, dataset_name, dataset_url, code_name, code_url, license, readme = compute_model_artifact(
             url,
             artifact_id=artifact_id,
             name_override=name,
@@ -453,6 +459,7 @@ def process_model_artifact_async(
             dataset_url=dataset_url,
             code_name=code_name,
             code_url=code_url,
+            readme=readme,
             processing_status="completed",
         )
 

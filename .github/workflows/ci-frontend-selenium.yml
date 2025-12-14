@@ -1,0 +1,58 @@
+name: CI - Frontend Selenium Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  selenium:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # Serve built frontend (Amplify-like)
+      - name: Serve frontend
+        working-directory: frontend
+        run: |
+          npx serve -s build -l 3000 &
+          npx wait-on http://localhost:3000
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Selenium dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium pytest webdriver-manager
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Run Selenium tests (root folder)
+        env:
+          BASE_URL: http://localhost:3000
+        run: pytest
+
+      - name: Upload Selenium screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-screenshots
+          path: screenshots/

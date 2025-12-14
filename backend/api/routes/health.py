@@ -166,7 +166,7 @@ def run_download_benchmark_script(job_id: str):
             except Exception as e:
                 logger.error(f"Error in progress callback: {e}")
 
-        # Get API base URL from environment or use AWS API Gateway (production)
+        # Get API base URL from environment or use AWS endpoint (for production)
         # For local testing, set API_BASE_URL=http://localhost:8000
         api_base_url = os.getenv("API_BASE_URL", "https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod")
 

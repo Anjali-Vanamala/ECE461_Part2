@@ -118,10 +118,15 @@ export function ModelDetailClient({ id }: { id: string }) {
 
           <div className="flex flex-col gap-3 md:flex-row">
             <Button size="lg" asChild disabled={!id}>
-              <Link href={id ? `/models/${id}/download` : "#"} className="gap-2">
+              <a 
+                href={id ? `${API_BASE_URL}/artifacts/model/${id}/download` : "#"} 
+                className="gap-2"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <Download className="h-4 w-4" />
                 Download
-              </Link>
+              </a>
             </Button>
             <Button variant="outline" size="lg" className="gap-2 bg-transparent">
               <Share2 className="h-4 w-4" />

@@ -1,6 +1,6 @@
 // API configuration
-// Always use AWS API Gateway for testing
-const API_BASE_URL = 'https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod'
+// Use AWS API Gateway for production
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod'
 
 // Export API base URL for use in components
 export { API_BASE_URL }

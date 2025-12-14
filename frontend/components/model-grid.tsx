@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Download, Star, GitBranch, Loader2 } from "lucide-react"
 import { useEffect, useState, useMemo } from "react"
-import { fetchModels, fetchModelRating } from "@/lib/api"
+import { fetchModels, fetchModelRating, API_BASE_URL } from "@/lib/api"
 
 interface Model {
   id: string
@@ -155,12 +155,14 @@ export function ModelGrid({ searchQuery = "", viewMode = "grid" }: ModelGridProp
                 </Link>
               </Button>
               <Button asChild size="sm">
-                <Link 
-                  href={`/artifacts/model/${model.id}/download`} 
+                <a 
+                  href={`${API_BASE_URL}/artifacts/model/${model.id}/download`} 
                   aria-label={`Download ${model.name}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
                   Download
-                </Link>
+                </a>
               </Button>
             </div>
           </Card>
@@ -234,12 +236,14 @@ export function ModelGrid({ searchQuery = "", viewMode = "grid" }: ModelGridProp
                 </Link>
               </Button>
               <Button asChild size="sm" className="flex-1">
-                <Link 
-                  href={`/artifacts/model/${model.id}/download`} 
+                <a 
+                  href={`${API_BASE_URL}/artifacts/model/${model.id}/download`} 
                   aria-label={`Download ${model.name}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
                   Download
-                </Link>
+                </a>
               </Button>
             </div>
           </div>

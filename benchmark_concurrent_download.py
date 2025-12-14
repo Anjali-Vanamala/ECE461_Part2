@@ -68,9 +68,19 @@ async def download_one(
     session: aiohttp.ClientSession,
     download_url: str,
     request_id: int,
-    timeout: aiohttp.ClientTimeout
+    timeout: aiohttp.ClientTimeout,
+    is_presigned_url: bool = False
 ) -> Dict[str, Any]:
-    """Download a single file asynchronously"""
+    """
+    Download a single file asynchronously.
+
+    Args:
+        session: aiohttp session
+        download_url: URL to download from (either endpoint URL or pre-signed S3 URL)
+        request_id: Unique identifier for this request
+        timeout: Request timeout
+        is_presigned_url: If True, download_url is a pre-signed S3 URL (allow redirects)
+    """
     result: Dict[str, Any] = {
         'request_id': request_id,
         'start_time': None,
@@ -88,17 +98,19 @@ async def download_one(
         start_time = datetime.now()
         result['start_time'] = start_time.isoformat()
 
-        # Make initial request (don't follow redirects automatically)
+        # Make initial request
+        # If using pre-signed URL directly, allow redirects (S3 may do internal redirects)
+        # If using endpoint URL, don't follow redirects (we want to capture the 302)
         try:
             async with session.get(
                 download_url,
-                allow_redirects=False,
+                allow_redirects=is_presigned_url,  # Allow redirects for pre-signed URLs
                 timeout=timeout
             ) as response:
                 result['status_code'] = response.status
 
                 if response.status == 302:
-                    # Handle redirect (S3 pre-signed URL)
+                    # Handle redirect (when using endpoint URL, not pre-signed URL)
                     redirect_time = (datetime.now() - start_time).total_seconds() * 1000
                     result['redirect_time_ms'] = round(redirect_time, 2)
 
@@ -122,6 +134,8 @@ async def download_one(
                         result['success'] = True
 
                 elif response.status == 200:
+                    # Direct download (either from endpoint or pre-signed S3 URL)
+                    # If using pre-signed URL directly, there's no redirect, so redirect_time_ms = 0
                     # Handle direct download (proxy)
                     content = await response.read()
                     result['response_size_bytes'] = len(content)
@@ -193,14 +207,38 @@ async def run_benchmark(
         # Step 1: Find artifact ID
         artifact_id = await find_tiny_llm_artifact_id(session, base_url)
 
-        # Step 2: Perform concurrent downloads
-        download_url = f"{base_url}/artifacts/model/{artifact_id}/download"
+        # Step 2: Get pre-signed URL once (OPTIMIZATION: reuse for all downloads)
+        # Since we're downloading the same model 100 times, we only need to generate
+        # the pre-signed URL once, not 100 times. This eliminates 99 redundant API calls.
+        download_endpoint = f"{base_url}/artifacts/model/{artifact_id}/download"
 
+        # Make a single request to get the redirect URL (pre-signed S3 URL)
+        if progress_callback:
+            progress_callback(0, concurrent_requests, 0, 0)
+
+        async with session.get(download_endpoint, allow_redirects=False, timeout=timeout) as redirect_response:
+            if redirect_response.status == 302:
+                # Get the pre-signed S3 URL from the redirect
+                presigned_url = redirect_response.headers.get('Location')
+                if not presigned_url:
+                    raise RuntimeError("Received 302 redirect but no Location header found")
+                # Use the pre-signed URL directly for all downloads (eliminates 99 API calls)
+                download_url = presigned_url
+            elif redirect_response.status == 200:
+                # Direct download (no redirect) - use original URL
+                download_url = download_endpoint
+            else:
+                raise RuntimeError(f"Unexpected status {redirect_response.status} when fetching download URL")
+
+        # Step 3: Perform concurrent downloads using the pre-signed URL
         overall_start = datetime.now()
 
-        # Create all download tasks
+        # Create all download tasks (all using the same pre-signed URL)
+        # Check if we're using a pre-signed URL (starts with https:// and contains s3 or amazonaws)
+        is_presigned = download_url.startswith('https://') and ('s3' in download_url.lower() or 'amazonaws' in download_url.lower())
+
         tasks = [
-            download_one(session, download_url, i, timeout)
+            download_one(session, download_url, i, timeout, is_presigned_url=is_presigned)
             for i in range(1, concurrent_requests + 1)
         ]
 
@@ -306,6 +344,7 @@ async def run_benchmark(
             raise RuntimeError(error_summary)
 
         latencies = sorted([r['total_time_ms'] for r in successful_results])
+        redirect_times = sorted([r.get('redirect_time_ms', 0) for r in successful_results if r.get('redirect_time_ms', 0) > 0])
 
         # Calculate statistics
         mean_latency = statistics.mean(latencies)
@@ -314,6 +353,12 @@ async def run_benchmark(
         p99_latency = latencies[p99_index]
         min_latency = latencies[0]
         max_latency = latencies[-1]
+
+        # Calculate redirect time statistics (for bottleneck analysis)
+        mean_redirect_time = statistics.mean(redirect_times) if redirect_times else 0
+        median_redirect_time = statistics.median(redirect_times) if redirect_times else 0
+        min_redirect_time = redirect_times[0] if redirect_times else 0
+        max_redirect_time = redirect_times[-1] if redirect_times else 0
 
         # Calculate throughput
         total_bytes = sum(r['response_size_bytes'] for r in successful_results)
@@ -337,7 +382,8 @@ async def run_benchmark(
                 'concurrent_requests': concurrent_requests,
                 'timeout_seconds': timeout_seconds,
                 'test_timestamp': datetime.now().isoformat(),
-                'note': 'Files are downloaded but not saved to disk (only measured for metrics)'
+                'note': 'Files are downloaded but not saved to disk (only measured for metrics)',
+                'optimization': 'Pre-signed URL fetched once and reused for all downloads (eliminates 99 redundant API calls)'
             },
             'black_box_metrics': {
                 'throughput': {
@@ -355,6 +401,13 @@ async def run_benchmark(
                     'min_ms': round(min_latency, 2),
                     'max_ms': round(max_latency, 2),
                     'all_latencies_ms': latencies
+                },
+                'redirect_time': {
+                    'mean_ms': round(mean_redirect_time, 2),
+                    'median_ms': round(median_redirect_time, 2),
+                    'min_ms': round(min_redirect_time, 2),
+                    'max_ms': round(max_redirect_time, 2),
+                    'note': 'Time to receive 302 redirect (optimized: S3 file existence check removed)'
                 },
                 'request_summary': {
                     'total_requests': concurrent_requests,

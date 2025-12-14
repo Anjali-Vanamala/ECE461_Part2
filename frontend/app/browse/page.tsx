@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { Search, Download, Star, Loader2, Grid3x3, List } from "lucide-react"
-import { fetchArtifacts, fetchModelRating, type ArtifactType } from "@/lib/api"
+import { fetchArtifacts, fetchModelRating, API_BASE_URL, type ArtifactType } from "@/lib/api"
 
 export type ViewMode = "grid" | "list"
 
@@ -100,16 +100,16 @@ export default function BrowsePage() {
         <div className="mb-8">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
                 id="search-artifacts"
                 aria-label="Search artifacts"
                 placeholder={`Search ${artifactType}s...`}
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+              className="pl-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
             <div className="flex gap-2">
               <Button
                 variant={viewMode === "grid" ? "default" : "outline"}
@@ -222,12 +222,14 @@ export default function BrowsePage() {
                           </Link>
                         </Button>
                         <Button asChild size="sm" className="flex-1">
-                          <Link 
-                            href={`/artifacts/${artifact.type}/${artifact.id}/download`} 
+                          <a 
+                            href={`${API_BASE_URL}/artifacts/${artifact.type}/${artifact.id}/download`} 
                             aria-label={`Download ${artifact.name}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                           >
                             Download
-                          </Link>
+                          </a>
                         </Button>
                       </div>
                     </div>
@@ -237,54 +239,56 @@ export default function BrowsePage() {
             ) : (
               <div className="space-y-3">
                 {filteredArtifacts.map((artifact) => (
-                  <Card
+            <Card
                     key={artifact.id}
-                    className="bg-card/40 border-border/50 backdrop-blur p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:border-primary/50 transition-all"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
+              className="bg-card/40 border-border/50 backdrop-blur p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:border-primary/50 transition-all"
+            >
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
                         <h2 className="text-lg font-semibold text-foreground">{artifact.name}</h2>
                         {artifact.type === 'model' && (
-                          <div className="flex items-center gap-1">
-                            <Star className="h-4 w-4 fill-chart-2 text-chart-2" />
+                  <div className="flex items-center gap-1">
+                    <Star className="h-4 w-4 fill-chart-2 text-chart-2" />
                             <span className="text-sm font-medium">{artifact.rating.toFixed(1)}</span>
-                          </div>
+                  </div>
                         )}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
+                </div>
+                <div className="flex flex-wrap gap-2">
                         <Badge variant="secondary" className="text-xs">
                           {artifact.type}
                         </Badge>
                         {artifact.tags.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
+                    <Badge key={tag} variant="secondary" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
 
                     {artifact.type === 'model' && (
-                      <div className="flex items-center gap-6 text-xs text-muted-foreground md:justify-end">
-                        <span className="flex items-center gap-1">
-                          <Download className="h-3 w-3" />
+              <div className="flex items-center gap-6 text-xs text-muted-foreground md:justify-end">
+                <span className="flex items-center gap-1">
+                  <Download className="h-3 w-3" />
                           {artifact.downloads.toLocaleString()}
-                        </span>
+                </span>
                         <span>Repro: {(artifact.reproducibility * 100).toFixed(0)}%</span>
-                      </div>
+              </div>
                     )}
 
-                    <div className="flex gap-2 md:ml-auto">
-                      <Button asChild variant="outline" size="sm">
+              <div className="flex gap-2 md:ml-auto">
+                <Button asChild variant="outline" size="sm">
                         <Link href={`/artifacts/${artifact.type}/${artifact.id}`}
                               aria-label={`View details for ${artifact.name}`}
-                              >Details</Link>
-                      </Button>
-                      <Button asChild size="sm">
-                        <Link href={`/artifacts/${artifact.type}/${artifact.id}/download`}
-                              aria-label={`Download ${artifact.name}`}>Download</Link>
-                      </Button>
-                    </div>
-                  </Card>
+                        >Details</Link>
+                </Button>
+                <Button asChild size="sm">
+                        <a href={`${API_BASE_URL}/artifacts/${artifact.type}/${artifact.id}/download`}
+                              aria-label={`Download ${artifact.name}`}
+                              target="_blank"
+                              rel="noopener noreferrer">Download</a>
+                </Button>
+              </div>
+            </Card>
                 ))}
               </div>
             )}

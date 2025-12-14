@@ -884,6 +884,44 @@ export default function HealthPage() {
                         </div>
                       </div>
                       
+                      {/* Redirect Time (Bottleneck Analysis) */}
+                      {downloadBenchmarkResults.black_box_metrics?.redirect_time && (
+                        <div className="mb-4">
+                          <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                            Redirect Time (ms) - Optimized
+                          </h4>
+                          <p className="text-xs text-muted-foreground/70 mb-2 italic">
+                            {downloadBenchmarkResults.black_box_metrics.redirect_time.note || 'Time to receive 302 redirect'}
+                          </p>
+                          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                            <div className="p-3 rounded-lg bg-muted/30">
+                              <p className="text-xs text-muted-foreground">Mean</p>
+                              <p className="text-lg font-mono font-semibold text-foreground">
+                                {downloadBenchmarkResults.black_box_metrics.redirect_time.mean_ms?.toFixed(2) || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="p-3 rounded-lg bg-muted/30">
+                              <p className="text-xs text-muted-foreground">Median</p>
+                              <p className="text-lg font-mono font-semibold text-foreground">
+                                {downloadBenchmarkResults.black_box_metrics.redirect_time.median_ms?.toFixed(2) || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="p-3 rounded-lg bg-muted/30">
+                              <p className="text-xs text-muted-foreground">Min</p>
+                              <p className="text-lg font-mono font-semibold text-foreground">
+                                {downloadBenchmarkResults.black_box_metrics.redirect_time.min_ms?.toFixed(2) || 'N/A'}
+                              </p>
+                            </div>
+                            <div className="p-3 rounded-lg bg-muted/30">
+                              <p className="text-xs text-muted-foreground">Max</p>
+                              <p className="text-lg font-mono font-semibold text-foreground">
+                                {downloadBenchmarkResults.black_box_metrics.redirect_time.max_ms?.toFixed(2) || 'N/A'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
                       {/* Request Summary */}
                       <div>
                         <h4 className="text-xs font-medium text-muted-foreground mb-2">Request Summary</h4>

@@ -221,7 +221,8 @@ def save_artifact(
             record.license = license or record.license
             record.lineage = lineage or record.lineage
             record.base_model_name = base_model_name or record.base_model_name
-            record.readme = readme or record.readme
+            if readme is not None:
+                record.readme = readme
             if processing_status is not None:
                 record.processing_status = processing_status
         else:

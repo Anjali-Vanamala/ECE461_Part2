@@ -1,12 +1,10 @@
-import json
 import logging
 import os
 import threading
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from backend.models import (HealthComponentBrief, HealthComponentCollection,
                             HealthComponentDetail, HealthIssue,
@@ -129,20 +127,20 @@ async def health_components(
 
 def run_download_benchmark_script(job_id: str):
     """Run the Python download benchmark function in a background thread"""
-    import traceback
-    import sys
     import asyncio
+    import sys
+    import traceback
     from pathlib import Path
-    
+
     logger.info(f"Starting download benchmark job {job_id}")
-    
+
     try:
         # Import the benchmark function directly
         # Add project root to path to import the script
         project_root = Path(__file__).parent.parent.parent.parent
         if str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
-        
+
         try:
             from benchmark_concurrent_download import run_benchmark
         except ImportError as e:
@@ -151,12 +149,12 @@ def run_download_benchmark_script(job_id: str):
             download_benchmark_jobs[job_id]["status"] = "failed"
             download_benchmark_jobs[job_id]["error"] = error_msg
             return
-        
+
         download_benchmark_jobs[job_id]["progress"] = "Initializing benchmark..."
         download_benchmark_jobs[job_id]["current_progress"] = "0/100"  # Track X/100 downloads
         logger.info("Starting benchmark function...")
         logger.info("This may take 3-5 minutes to complete...")
-        
+
         # Progress callback to update job status
         def progress_callback(completed: int, total: int, successful: int, failed: int):
             """Update job progress from benchmark callback"""
@@ -167,15 +165,15 @@ def run_download_benchmark_script(job_id: str):
                 logger.info(f"Progress update: {progress_str} ({successful} successful, {failed} failed)")
             except Exception as e:
                 logger.error(f"Error in progress callback: {e}")
-        
+
         # Get API base URL from environment or use AWS API Gateway (production)
         # For local testing, set API_BASE_URL=http://localhost:8000
         api_base_url = os.getenv("API_BASE_URL", "https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod")
-        
+
         # Create a new event loop for this thread to avoid interfering with FastAPI's event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
+
         try:
             # Run the async benchmark function
             download_benchmark_jobs[job_id]["progress"] = "Running benchmark..."
@@ -185,7 +183,7 @@ def run_download_benchmark_script(job_id: str):
                     progress_callback=progress_callback
                 )
             )
-            
+
             # Store results
             download_benchmark_jobs[job_id]["status"] = "completed"
             download_benchmark_jobs[job_id]["results"] = results
@@ -197,7 +195,7 @@ def run_download_benchmark_script(job_id: str):
         finally:
             # Clean up the event loop
             loop.close()
-        
+
     except ValueError as e:
         # Tiny-LLM not found
         error_msg = f"Benchmark failed: {str(e)}"
@@ -238,22 +236,22 @@ async def start_download_benchmark() -> Dict:
     Returns a job_id that can be used to check status and get results.
     """
     import uuid
-    
+
     # Check if there's already a running benchmark
     running_jobs = [
         job_id for job_id, job in download_benchmark_jobs.items()
         if job.get("status") == "running"
     ]
-    
+
     if running_jobs:
         raise HTTPException(
             status_code=409,
             detail=f"A benchmark is already running (job_id: {running_jobs[0]})"
         )
-    
+
     # Generate job ID
     job_id = str(uuid.uuid4())
-    
+
     # Initialize job status
     download_benchmark_jobs[job_id] = {
         "job_id": job_id,
@@ -264,7 +262,7 @@ async def start_download_benchmark() -> Dict:
         "results": None,
         "error": None,
     }
-    
+
     # Start benchmark in background thread
     thread = threading.Thread(
         target=run_download_benchmark_script,
@@ -273,9 +271,9 @@ async def start_download_benchmark() -> Dict:
     )
     thread.start()
     active_download_benchmark_threads[job_id] = thread
-    
+
     logger.info(f"Started download benchmark job {job_id}")
-    
+
     return {
         "job_id": job_id,
         "status": "running",
@@ -290,9 +288,9 @@ async def get_download_benchmark_status(job_id: str) -> Dict:
     """
     if job_id not in download_benchmark_jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+
     job = download_benchmark_jobs[job_id]
-    
+
     response = {
         "job_id": job_id,
         "status": job.get("status", "unknown"),
@@ -300,7 +298,7 @@ async def get_download_benchmark_status(job_id: str) -> Dict:
         "progress": job.get("progress"),
         "current_progress": job.get("current_progress"),  # X/100 format
     }
-    
+
     if job.get("status") == "completed":
         response["results"] = job.get("results")
         response["completed_at"] = job.get("completed_at")
@@ -308,5 +306,5 @@ async def get_download_benchmark_status(job_id: str) -> Dict:
         response["error"] = job.get("error")
         response["stdout"] = job.get("stdout")
         response["stderr"] = job.get("stderr")
-    
+
     return response

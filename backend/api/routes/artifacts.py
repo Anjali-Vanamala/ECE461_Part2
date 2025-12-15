@@ -346,8 +346,6 @@ async def regex_artifact_search(payload: dict = Body(...)):
             test_readme = None
             if record.artifact.metadata.type == ArtifactType.MODEL or record.artifact.metadata.type == ArtifactType.CODE:
                 readme = memory.get_model_readme(record.artifact.metadata.id)
-                if record.artifact.metadata.type == ArtifactType.CODE:
-                    logger.debug(f"Readme for regex search: {name}, {str(readme).encode('cp1252', errors='replace').decode('cp1252')}, {record.artifact.metadata.type}")
             else:
                 readme = "temp"
             if readme is not None and len(readme) > 10:

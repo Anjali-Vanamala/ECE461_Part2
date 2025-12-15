@@ -315,7 +315,15 @@ def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | N
         return None
 
 
-@router.post("/artifact/byRegEx", response_model=List[ArtifactMetadata])
+@router.post(
+    "/artifact/byRegEx",
+    summary="Search artifacts by regex in name and README.",
+    responses={
+        200: {"description": "List of artifacts matching the regex."},
+        400: {"description": "Regex is missing, invalid, or causes catastrophic execution."},
+        404: {"description": "No artifact found under this regex."},
+    },
+)
 async def regex_artifact_search(payload: dict = Body(...)):
     """Search artifacts by regex on name and README."""
     if not payload or "regex" not in payload:
@@ -367,8 +375,11 @@ async def regex_artifact_search(payload: dict = Body(...)):
 
 @router.post(
     "/artifacts",
-    response_model=List[ArtifactMetadata],
-    summary="Get the artifacts from the registry. (BASELINE)",
+    summary="Query artifacts from the registry based on metadata. (BASELINE)",
+    responses={
+        200: {"description": "List of artifacts matching the query."},
+        400: {"description": "At least one artifact query is required."},
+    },
 )
 async def query_artifacts_endpoint(
     queries: List[ArtifactQuery],
@@ -391,7 +402,13 @@ async def query_artifacts_endpoint(
     return paginated
 
 
-@router.delete("/reset", summary="Reset the registry. (BASELINE)")
+@router.delete(
+    "/reset",
+    summary="Reset the artifact registry. (BASELINE)",
+    responses={
+        200: {"description": "Registry successfully reset."},
+    },
+)
 async def reset_registry() -> dict[str, str]:
     """Reset the entire artifact registry (for testing purposes)."""
     memory.reset()
@@ -578,8 +595,13 @@ def process_model_artifact_async(
 
 @router.post(
     "/artifact/{artifact_type}",
-    response_model=Artifact,
     summary="Register a new artifact. (BASELINE)",
+    responses={
+        201: {"description": "Artifact registered and processed immediately (datasets/code)."},
+        202: {"description": "Artifact accepted and processing in background (models)."},
+        409: {"description": "Artifact already exists."},
+        400: {"description": "Invalid registration payload."},
+    },
 )
 async def register_artifact(
     request: Request,
@@ -695,11 +717,11 @@ async def register_artifact(
     "/artifacts/{artifact_type}/{artifact_id}/download",
     summary="Download artifact bundle. (BASELINE)",
     responses={
-        200: {"description": "Stream artifact file"},
-        202: {"description": "Artifact still processing"},
+        200: {"description": "Stream artifact file (via pre-signed S3 URL)"},
+        202: {"description": "Artifact is still processing (models only)"},
         404: {"description": "Artifact does not exist"},
         424: {"description": "Artifact processing failed"},
-        502: {"description": "Source download failed"},
+        502: {"description": "Source download failed (proxy fallback)"},
         504: {"description": "Download timeout"},
     },
 )
@@ -866,13 +888,13 @@ def _proxy_download_fallback(
 
 @router.get(
     "/artifacts/{artifact_type}/{artifact_id:path}",
-    response_model=Artifact,
-    summary="Interact with the artifact with this id. (BASELINE)",
+    summary="Retrieve an artifact by type and ID. (BASELINE)",
     responses={
+        200: {"description": "Artifact retrieved successfully."},
         400: {"description": "Malformed artifact_type or artifact_id."},
         404: {"description": "Artifact does not exist."},
-        200: {"description": "Artifact retrieved successfully."},
-        504: {"description": "Processing timeout."},
+        424: {"description": "Model processing failed."},
+        504: {"description": "Model processing timeout."},
     },
 )
 async def get_artifact(
@@ -959,8 +981,13 @@ async def get_artifact(
 
 @router.put(
     "/artifacts/{artifact_type}/{artifact_id}",
-    response_model=Artifact,
-    summary="Update this content of the artifact. (BASELINE)",
+    summary="Update an existing artifact in the registry. (BASELINE)",
+    responses={
+        202: {"description": "Model artifact updated and processing asynchronously."},
+        200: {"description": "Non-model artifact updated immediately."},
+        400: {"description": "Payload metadata does not match path parameters."},
+        404: {"description": "Artifact does not exist."},
+    },
 )
 async def update_artifact(
     payload: Artifact,
@@ -1010,8 +1037,11 @@ async def update_artifact(
 
 @router.delete(
     "/artifacts/{artifact_type}/{artifact_id}",
-    status_code=status.HTTP_200_OK,
-    summary="Delete this artifact. (NON-BASELINE)",
+    summary="Delete an artifact from the registry. (NON-BASELINE)",
+    responses={
+        200: {"description": "Artifact successfully deleted."},
+        404: {"description": "Artifact does not exist."},
+    },
 )
 async def delete_artifact(
     artifact_type: ArtifactType = Path(..., description="Artifact type"),
@@ -1026,8 +1056,12 @@ async def delete_artifact(
 
 @router.get(
     "/artifact/model/{artifact_id}/rate",
-    response_model=ModelRating,
-    summary="Get ratings for this model artifact. (BASELINE)",
+    summary="Get ratings for a model artifact. (BASELINE)",
+    responses={
+        200: {"description": "Model rating retrieved successfully."},
+        404: {"description": "Artifact does not exist or lacks a rating."},
+        504: {"description": "Model processing timeout."},
+    },
 )
 async def get_model_rating(
     artifact_id: ArtifactID = Path(..., description="Artifact id"),
@@ -1068,8 +1102,11 @@ async def get_model_rating(
 
 @router.get(
     "/artifact/{artifact_type}/{artifact_id}/cost",
-    response_model=ArtifactCost,
-    summary="Get the cost of an artifact (BASELINE)",
+    summary="Get the cost of an artifact. (BASELINE)",
+    responses={
+        200: {"description": "Artifact cost retrieved successfully."},
+        404: {"description": "Artifact does not exist or cost unavailable (model not yet rated)."},
+    },
 )
 async def get_artifact_cost(
     artifact_type: ArtifactType = Path(..., description="Artifact type"),
@@ -1171,7 +1208,13 @@ def is_license_compatible(model_license: str, github_license: str) -> bool:
 
 @router.post(
     "/artifact/model/{artifact_id}/license-check",
-    summary="Assess license compatibility between model artifact and GitHub repo. (BASELINE)",
+    summary="Assess license compatibility between a model artifact and a GitHub repository. (BASELINE)",
+    responses={
+        200: {"description": "Boolean result: True if licenses are compatible, False otherwise."},
+        400: {"description": "Malformed GitHub repository URL."},
+        404: {"description": "Artifact or GitHub repository does not exist."},
+        502: {"description": "External license information could not be retrieved."},
+    },
 )
 async def license_check(
     artifact_id: ArtifactID,
@@ -1217,12 +1260,11 @@ async def license_check(
 
 @router.get(
     "/artifact/model/{artifact_id}/lineage",
-    response_model=ArtifactLineageGraph,
-    summary="Retrieve the lineage graph for this artifact. (BASELINE)",
+    summary="Retrieve the lineage graph for a model artifact. (BASELINE)",
     responses={
-        200: {"description": "Lineage graph extracted from structured metadata"},
-        400: {"description": "The lineage graph cannot be computed because the artifact metadata is missing or malformed"},
-        404: {"description": "Artifact does not exist"},
+        200: {"description": "Lineage graph extracted from structured metadata."},
+        400: {"description": "Lineage graph cannot be computed because metadata is missing or malformed."},
+        404: {"description": "Artifact does not exist."},
     },
 )
 async def get_artifact_lineage(

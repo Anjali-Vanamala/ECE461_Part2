@@ -3,14 +3,28 @@ Tracks API endpoints.
 
 Provides endpoints related to students' planned tracks in the system.
 """
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(tags=["tracks"])
 
 
-@router.get("/tracks",
-            status_code=status.HTTP_200_OK,
-            summary="Get the list of tracks a student has planned to implement in their code",)
+@router.get(
+    "/tracks",
+    summary="Get the list of tracks a student has planned.",
+    responses={
+        200: {
+            "description": "Successfully retrieved planned tracks.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "plannedTracks": ["Performance track"]
+                    }
+                }
+            },
+        },
+        500: {"description": "Internal server error while retrieving track information."},
+    },
+)
 async def get_planned_tracks():
     """
     Retrieve the list of tracks that a student has planned.

@@ -27,6 +27,50 @@ CLOUDWATCH_AVAILABLE = boto3 is not None
 
 logger = logging.getLogger("backend.middleware.logging")
 
+# Sensitive field patterns to redact from logs
+SENSITIVE_FIELDS = {
+    "api_key", "apikey", "api-key",
+    "password", "passwd", "pwd",
+    "token", "access_token", "refresh_token", "bearer",
+    "secret", "aws_secret_access_key", "aws_access_key_id",
+    "authorization", "auth",
+    "credit_card", "creditcard", "card_number",
+}
+
+
+def sanitize_json_string(text: str) -> str:
+    """Sanitize JSON strings by redacting sensitive field values."""
+    if not text or text == "<unreadable>":
+        return text
+    
+    try:
+        data = json.loads(text)
+        sanitized = _sanitize_dict(data)
+        return json.dumps(sanitized)
+    except (json.JSONDecodeError, TypeError):
+        # Not JSON, return as-is (non-JSON logs are less risky)
+        return text
+
+
+def _sanitize_dict(obj):
+    """Recursively sanitize dictionary objects by redacting sensitive field values."""
+    if isinstance(obj, dict):
+        sanitized = {}
+        for key, value in obj.items():
+            key_lower = str(key).lower().replace("-", "_")
+            
+            # Check if this is a sensitive field
+            if any(sensitive in key_lower for sensitive in SENSITIVE_FIELDS):
+                sanitized[key] = "[REDACTED]"
+            else:
+                # Recursively sanitize nested structures
+                sanitized[key] = _sanitize_dict(value)
+        return sanitized
+    elif isinstance(obj, list):
+        return [_sanitize_dict(item) for item in obj]
+    else:
+        return obj
+
 
 class LoggingMiddleware:
     """Simple request/response logger for ASGI apps."""
@@ -84,9 +128,10 @@ class LoggingMiddleware:
                 if not message.get("more_body", False):
                     try:
                         raw_body = b"".join(body_store).decode("utf-8", errors="replace")
+                        sanitized_body = sanitize_json_string(raw_body)
                     except Exception:
-                        raw_body = "<unreadable>"
-                    logger.info(f"[ARRIVED BODY] {raw_body}")
+                        sanitized_body = "<unreadable>"
+                    logger.info(f"[ARRIVED BODY] {sanitized_body}")
 
             return message
 
@@ -107,9 +152,10 @@ class LoggingMiddleware:
                         raw_response = b"".join(response_body_store).decode(
                             "utf-8", errors="replace"
                         )
+                        sanitized_response = sanitize_json_string(raw_response)
                     except Exception:
-                        raw_response = "<unreadable>"
-                    logger.info(f"[RESPONSE BODY] {raw_response}")
+                        sanitized_response = "<unreadable>"
+                    logger.info(f"[RESPONSE BODY] {sanitized_response}")
 
             await send(message)
 
@@ -124,9 +170,10 @@ class LoggingMiddleware:
 
             try:
                 raw_body = b"".join(body_store).decode("utf-8", errors="replace")
+                sanitized_body = sanitize_json_string(raw_body)
             except Exception:
-                raw_body = "<unreadable>"
-            logger.info(f"Request body: {raw_body}")
+                sanitized_body = "<unreadable>"
+            logger.info(f"Request body: {sanitized_body}")
 
             self._log_success(method, path, status, time.perf_counter() - start)
             self._send_metrics(method, path, status, success=True)

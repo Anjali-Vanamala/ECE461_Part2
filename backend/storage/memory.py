@@ -13,8 +13,9 @@ from __future__ import annotations
 import uuid
 from typing import Dict, Iterable, List, Optional, cast
 
-from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
-                            ArtifactQuery, ArtifactType, ModelRating)
+from backend.models import (Artifact, ArtifactAuditEntry, ArtifactID,
+                            ArtifactMetadata, ArtifactQuery, ArtifactType,
+                            ModelRating)
 from backend.storage.records import (CodeRecord, DatasetRecord,
                                      LineageMetadata, ModelRecord)
 
@@ -25,6 +26,7 @@ from backend.storage.records import (CodeRecord, DatasetRecord,
 _MODELS: Dict[ArtifactID, ModelRecord] = {}
 _DATASETS: Dict[ArtifactID, DatasetRecord] = {}
 _CODES: Dict[ArtifactID, CodeRecord] = {}
+_AUDIT_LOG: List[ArtifactAuditEntry] = []  # Simple audit trail
 
 _TYPE_TO_STORE = {
     ArtifactType.MODEL: _MODELS,
@@ -350,6 +352,19 @@ def reset() -> None:
     for store in _TYPE_TO_STORE.values():
         store = cast(dict[ArtifactID, object], store)
         store.clear()
+    _AUDIT_LOG.clear()
+
+
+def log_audit_entry(entry: ArtifactAuditEntry) -> None:
+    """Log an audit entry."""
+    _AUDIT_LOG.append(entry)
+
+
+def get_audit_log(artifact_id: Optional[ArtifactID] = None) -> List[ArtifactAuditEntry]:
+    """Get audit log entries, optionally filtered by artifact_id."""
+    if artifact_id:
+        return [e for e in _AUDIT_LOG if e.artifact.id == artifact_id]
+    return list(_AUDIT_LOG)
 
 
 # ---------------------------------------------------------------------------

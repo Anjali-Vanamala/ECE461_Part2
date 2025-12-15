@@ -17,8 +17,9 @@ from typing import Any, Dict, Iterable, List, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
-                            ArtifactQuery, ArtifactType, ModelRating)
+from backend.models import (Artifact, ArtifactAuditEntry, ArtifactID,
+                            ArtifactMetadata, ArtifactQuery, ArtifactType,
+                            ModelRating)
 from backend.storage.records import (CodeRecord, DatasetRecord,
                                      LineageMetadata, ModelRecord)
 
@@ -385,6 +386,7 @@ def _unlink_dataset_from_models(dataset_id: str) -> None:
         response = table.scan(
             FilterExpression="artifact_type = :type AND dataset_id = :did",
             ExpressionAttributeValues={":type": ArtifactType.MODEL.value, ":did": dataset_id},
+            Limit=100,  # DoS protection
         )
         for item in response.get("Items", []):
             table.update_item(
@@ -401,6 +403,7 @@ def _unlink_code_from_models(code_id: str) -> None:
         response = table.scan(
             FilterExpression="artifact_type = :type AND code_id = :cid",
             ExpressionAttributeValues={":type": ArtifactType.MODEL.value, ":cid": code_id},
+            Limit=100,  # DoS protection
         )
         for item in response.get("Items", []):
             table.update_item(
@@ -418,18 +421,11 @@ def list_metadata(artifact_type: ArtifactType) -> List[ArtifactMetadata]:
         response = table.scan(
             FilterExpression="artifact_type = :type",
             ExpressionAttributeValues={":type": artifact_type.value},
+            Limit=100,  # DoS protection
         )
-        while True:
-            for item in response.get("Items", []):
-                artifact = _deserialize_artifact(item["artifact"])
-                results.append(artifact.metadata)
-            if "LastEvaluatedKey" not in response:
-                break
-            response = table.scan(
-                FilterExpression="artifact_type = :type",
-                ExpressionAttributeValues={":type": artifact_type.value},
-                ExclusiveStartKey=response["LastEvaluatedKey"],
-            )
+        for item in response.get("Items", []):
+            artifact = _deserialize_artifact(item["artifact"])
+            results.append(artifact.metadata)
         return results
     except ClientError as e:
         print(f"[DynamoDB] Error listing metadata: {e}")
@@ -457,25 +453,18 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
                     filter_expr = "artifact_type = :type"
                     expr_values = {":type": artifact_type.value}
 
-                # Scan with pagination
+                # Scan with limit for DoS protection
                 response = table.scan(
                     FilterExpression=filter_expr,
                     ExpressionAttributeValues=expr_values,
+                    Limit=100,  # DoS protection
                 )
-                while True:
-                    for item in response.get("Items", []):
-                        artifact = _deserialize_artifact(item["artifact"])
-                        metadata = artifact.metadata
-                        # Double-check name match (case-insensitive)
-                        if query.name == "*" or query.name.lower() == metadata.name.lower():
-                            results[f"{metadata.type}:{metadata.id}"] = metadata
-                    if "LastEvaluatedKey" not in response:
-                        break
-                    response = table.scan(
-                        FilterExpression=filter_expr,
-                        ExpressionAttributeValues=expr_values,
-                        ExclusiveStartKey=response["LastEvaluatedKey"],
-                    )
+                for item in response.get("Items", []):
+                    artifact = _deserialize_artifact(item["artifact"])
+                    metadata = artifact.metadata
+                    # Double-check name match (case-insensitive)
+                    if query.name == "*" or query.name.lower() == metadata.name.lower():
+                        results[f"{metadata.type}:{metadata.id}"] = metadata
             except ClientError as e:
                 print(f"[DynamoDB] Error querying artifacts: {e}")
 
@@ -483,7 +472,7 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
 
 
 def reset() -> None:
-    """Delete all artifacts from the table."""
+    """Delete all artifacts from the table and clear audit log."""
     try:
         # Scan all items and delete them (handle pagination)
         with table.batch_writer() as batch:
@@ -497,7 +486,8 @@ def reset() -> None:
                     ProjectionExpression="artifact_id",
                     ExclusiveStartKey=response["LastEvaluatedKey"],
                 )
-        print("[DynamoDB] Reset: deleted all artifacts")
+        _AUDIT_LOG.clear()
+        print("[DynamoDB] Reset: deleted all artifacts and cleared audit log")
     except ClientError as e:
         print(f"[DynamoDB] Error resetting table: {e}")
 
@@ -509,6 +499,7 @@ def artifact_exists(artifact_type: ArtifactType, url: str) -> bool:
             FilterExpression="artifact_type = :type AND #u = :url",
             ExpressionAttributeNames={"#u": "url"},
             ExpressionAttributeValues={":type": artifact_type.value, ":url": url},
+            Limit=10,  # DoS protection - only need to find one
         )
         return len(response.get("Items", [])) > 0
     except ClientError as e:
@@ -750,3 +741,18 @@ _TYPE_TO_STORE = {
     ArtifactType.DATASET: _StoreDict(ArtifactType.DATASET),
     ArtifactType.CODE: _StoreDict(ArtifactType.CODE),
 }
+
+# Simple in-memory audit log (for both memory and DynamoDB backends)
+_AUDIT_LOG: List[ArtifactAuditEntry] = []
+
+
+def log_audit_entry(entry: ArtifactAuditEntry) -> None:
+    """Log an audit entry."""
+    _AUDIT_LOG.append(entry)
+
+
+def get_audit_log(artifact_id: Optional[ArtifactID] = None) -> List[ArtifactAuditEntry]:
+    """Get audit log entries, optionally filtered by artifact_id."""
+    if artifact_id:
+        return [e for e in _AUDIT_LOG if e.artifact.id == artifact_id]
+    return list(_AUDIT_LOG)

@@ -13,9 +13,10 @@ import logging
 import os
 import threading
 from datetime import datetime, timezone
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from backend.models import (HealthComponentBrief, HealthComponentCollection,
                             HealthComponentDetail, HealthIssue,
@@ -149,8 +150,14 @@ async def health_components(
     )
 
 
-def run_download_benchmark_script(job_id: str):
-    """Run the Python download benchmark function in a background thread"""
+def run_download_benchmark_script(job_id: str, target_base_url: str | None = None):
+    """Run the Python download benchmark function in a background thread
+
+    Args:
+        job_id: Unique identifier for this benchmark job
+        target_base_url: The API base URL to run downloads against. If not provided,
+                        falls back to API_BASE_URL env var or ECS default.
+    """
     import asyncio
     import sys
     import traceback
@@ -190,9 +197,10 @@ def run_download_benchmark_script(job_id: str):
             except Exception as e:
                 logger.error(f"Error in progress callback: {e}")
 
-        # Get API base URL from environment or use AWS API Gateway (production)
-        # For local testing, set API_BASE_URL=http://localhost:8000
-        api_base_url = os.getenv("API_BASE_URL", "https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod")
+        # Use target URL if provided, otherwise fall back to env var or default
+        # This allows the frontend to specify which backend to benchmark (ECS vs Lambda)
+        api_base_url = target_base_url or os.getenv("API_BASE_URL", "https://9tiiou1yzj.execute-api.us-east-2.amazonaws.com/prod")
+        logger.info(f"Benchmark will download from: {api_base_url}")
 
         # Create a new event loop for this thread to avoid interfering with FastAPI's event loop
         loop = asyncio.new_event_loop()
@@ -253,6 +261,11 @@ def run_download_benchmark_script(job_id: str):
             logger.info(f"Cleaned up thread reference for job {job_id}")
 
 
+class StartBenchmarkRequest(BaseModel):
+    """Request body for starting a download benchmark"""
+    target_url: Optional[str] = None
+
+
 @router.post(
     "/health/download-benchmark/start",
     summary="Start download benchmark.",
@@ -264,7 +277,8 @@ def run_download_benchmark_script(job_id: str):
                     "example": {
                         "job_id": "string",
                         "status": "running",
-                        "message": "Download benchmark started"
+                        "message": "Download benchmark started",
+                        "target_url": "https://example.com/api"
                     }
                 }
             },
@@ -272,10 +286,15 @@ def run_download_benchmark_script(job_id: str):
         409: {"description": "A benchmark job is already running."},
     },
 )
-async def start_download_benchmark() -> Dict:
+async def start_download_benchmark(request: StartBenchmarkRequest = StartBenchmarkRequest()) -> Dict:
     """
     Start the download benchmark script in a background thread.
     Returns a job_id that can be used to check status and get results.
+
+    Args:
+        request: Optional request body with target_url to specify which API endpoint
+                 to run the benchmark downloads against. If not provided, uses
+                 the server's configured API_BASE_URL or defaults to ECS endpoint.
     """
     import uuid
 
@@ -294,6 +313,10 @@ async def start_download_benchmark() -> Dict:
     # Generate job ID
     job_id = str(uuid.uuid4())
 
+    # Get target URL from request or use None (will fall back to defaults)
+    target_url = request.target_url
+    logger.info(f"Starting benchmark job {job_id} with target_url: {target_url or '(using default)'}")
+
     # Initialize job status
     download_benchmark_jobs[job_id] = {
         "job_id": job_id,
@@ -301,14 +324,15 @@ async def start_download_benchmark() -> Dict:
         "started_at": datetime.now(timezone.utc).isoformat(),
         "progress": "Initializing...",
         "current_progress": "0/100",  # Track X/100 downloads
+        "target_url": target_url,  # Store for reference
         "results": None,
         "error": None,
     }
 
-    # Start benchmark in background thread
+    # Start benchmark in background thread, passing target_url
     thread = threading.Thread(
         target=run_download_benchmark_script,
-        args=(job_id,),
+        args=(job_id, target_url),
         daemon=True
     )
     thread.start()
@@ -319,7 +343,8 @@ async def start_download_benchmark() -> Dict:
     return {
         "job_id": job_id,
         "status": "running",
-        "message": "Download benchmark started"
+        "message": "Download benchmark started",
+        "target_url": target_url
     }
 
 

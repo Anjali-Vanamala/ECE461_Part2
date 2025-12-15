@@ -42,7 +42,7 @@ def sanitize_json_string(text: str) -> str:
     """Sanitize JSON strings by redacting sensitive field values."""
     if not text or text == "<unreadable>":
         return text
-    
+
     try:
         data = json.loads(text)
         sanitized = _sanitize_dict(data)
@@ -58,7 +58,7 @@ def _sanitize_dict(obj):
         sanitized = {}
         for key, value in obj.items():
             key_lower = str(key).lower().replace("-", "_")
-            
+
             # Check if this is a sensitive field
             if any(sensitive in key_lower for sensitive in SENSITIVE_FIELDS):
                 sanitized[key] = "[REDACTED]"

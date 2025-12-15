@@ -22,7 +22,7 @@ import re
 import tempfile
 import time
 from datetime import datetime
-from typing import List
+from typing import List, Literal
 from urllib.parse import urlparse
 
 import regex
@@ -44,12 +44,12 @@ from backend.storage import memory, s3
 router = APIRouter(tags=["artifacts"])
 
 
-def _log_audit(request: Request, artifact: Artifact, action: str) -> None:
+def _log_audit(request: Request, artifact: Artifact, action: Literal["CREATE", "UPDATE", "DOWNLOAD", "RATE", "AUDIT"]) -> None:
     """Log an audit entry for an artifact action. Fails silently if logging fails."""
     try:
         client_ip = request.client.host if request.client else "unknown"
         user = AuditUser(name=client_ip, is_admin=False)
-        
+
         entry = ArtifactAuditEntry(
             user=user,
             date=datetime.now(),
@@ -704,7 +704,7 @@ async def download_artifact(
             status_code=404,
             detail="404: Artifact does not exist.",
         )
-    
+
     # Log download action
     _log_audit(request, artifact, "DOWNLOAD")
 

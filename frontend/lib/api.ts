@@ -257,11 +257,16 @@ export async function fetchHealthComponents(windowMinutes: number = 60, includeT
 export async function startDownloadBenchmark(backendUrl?: string) {
   const baseUrl = backendUrl || API_BASE_URL
   try {
+    // Pass the target URL in the request body so the benchmark downloads
+    // from the correct backend (ECS vs Lambda)
     const response = await fetch(`${baseUrl}/health/download-benchmark/start`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        target_url: baseUrl,  // Tell the backend which URL to benchmark
+      }),
     })
 
     if (!response.ok) {

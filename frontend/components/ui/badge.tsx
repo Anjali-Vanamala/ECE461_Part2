@@ -10,13 +10,13 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          'border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90',
+          'border-transparent bg-[#00732a] text-[#e5f7ed] [a&]:hover:bg-[#00692a]',
         secondary:
-          'border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90',
+          'border-transparent bg-[#005f4a] text-[#e5f7ed] [a&]:hover:bg-[#004f3a]',
         destructive:
-          'border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
+          'border-transparent bg-[#cc2a1f] text-white [a&]:hover:bg-[#a61f14]',
         outline:
-          'text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
+          'text-[#003d20] [a&]:hover:bg-[#004d30] [a&]:hover:text-[#e5f7ed]',
       },
     },
     defaultVariants: {
@@ -24,6 +24,7 @@ const badgeVariants = cva(
     },
   },
 )
+
 
 function Badge({
   className,

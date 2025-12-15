@@ -88,12 +88,28 @@ export default function BrowsePage() {
         <h1 className="text-3xl font-bold text-foreground mb-2">Browse Artifacts</h1>
         <p className="text-muted-foreground mb-8">Discover models, datasets, and code repositories</p>
 
-        <Tabs value={artifactType} onValueChange={(v) => setArtifactType(v as ArtifactType)} className="mb-8">
+        <Tabs value={artifactType} onValueChange={(v) => setArtifactType(v as ArtifactType)}>
           <TabsList>
-            <TabsTrigger value="model">Models</TabsTrigger>
-            <TabsTrigger value="dataset">Datasets</TabsTrigger>
-            <TabsTrigger value="code">Code</TabsTrigger>
+            <TabsTrigger value="model" id="tab-model-trigger" aria-controls="tab-model-content">
+              Models
+            </TabsTrigger>
+            <TabsTrigger value="dataset" id="tab-dataset-trigger" aria-controls="tab-dataset-content">
+              Datasets
+            </TabsTrigger>
+            <TabsTrigger value="code" id="tab-code-trigger" aria-controls="tab-code-content">
+              Code
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="model" id="tab-model-content" aria-labelledby="tab-model-trigger">
+            {/* Model content here */}
+          </TabsContent>
+          <TabsContent value="dataset" id="tab-dataset-content" aria-labelledby="tab-dataset-trigger">
+            {/* Dataset content here */}
+          </TabsContent>
+          <TabsContent value="code" id="tab-code-content" aria-labelledby="tab-code-trigger">
+            {/* Code content here */}
+          </TabsContent>
         </Tabs>
 
         {/* Search and View Toggle */}

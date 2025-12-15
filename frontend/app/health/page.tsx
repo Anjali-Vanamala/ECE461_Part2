@@ -237,17 +237,17 @@ export default function HealthPage() {
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "ok":
-        return "bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30"
-      case "degraded":
-        return "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30"
-      case "critical":
-        return "bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30"
-      default:
-        return "bg-gray-500/20 text-gray-600 dark:text-gray-400 border-gray-500/30"
-    }
+  switch (status) {
+    case "ok":
+      return "bg-green-400/30 text-green-800 dark:text-green-300 border-green-500/50"
+    case "degraded":
+      return "bg-yellow-400/30 text-yellow-800 dark:text-yellow-300 border-yellow-500/50"
+    case "critical":
+      return "bg-red-400/30 text-red-800 dark:text-red-300 border-red-500/50"
+    default:
+      return "bg-gray-400/30 text-gray-800 dark:text-gray-300 border-gray-500/50"
   }
+}
 
   const getStatusIcon = (status: string) => {
     switch (status) {

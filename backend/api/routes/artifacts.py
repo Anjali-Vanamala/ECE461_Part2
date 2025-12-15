@@ -351,8 +351,6 @@ async def regex_artifact_search(payload: dict = Body(...)):
             if readme is not None and len(readme) > 10:
                 timeout = calibrate_regex_timeout(readme)
                 test_readme = safe_regex_search(regex_str, readme, timeout)
-                if record.artifact.metadata.type == ArtifactType.CODE:
-                    logger.debug(f"Readme for regex search: {name}, {readme is None}, {test_readme}")
             else:
                 timeout = timeout_1
             test = safe_regex_search(regex_str, name, timeout)

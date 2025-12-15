@@ -1804,6 +1804,457 @@ class TestHealthEndpoints:
 
 
 # =============================================================================
+# Cost Endpoint Tests
+# =============================================================================
+
+class TestCostEndpoint:
+    """Test suite for artifact cost endpoint functionality."""
+
+    def test_cost_endpoint_returns_404_for_nonexistent_artifact(self):
+        """Test that cost endpoint returns 404 for non-existent artifacts."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        client = TestClient(app)
+        response = client.get("/artifact/model/nonexistent-id-12345/cost")
+
+        assert response.status_code == 404
+        assert "does not exist" in response.json()["detail"]
+
+    def test_cost_endpoint_returns_404_for_model_without_rating(self):
+        """Test that cost endpoint returns 404 for model without rating."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create a model artifact without rating
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="unrated-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="completed")
+
+        client = TestClient(app)
+        response = client.get("/artifact/model/unrated-model-id/cost")
+
+        assert response.status_code == 404
+        assert "Cost unavailable" in response.json()["detail"]
+
+    def test_cost_endpoint_returns_cost_for_rated_model(self):
+        """Test that cost endpoint returns correct cost for rated model."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType, ModelRating, SizeScore)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create a model artifact with rating
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="rated-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="completed")
+
+        # Create a rating with size_score
+        rating = ModelRating(
+            name="test-model",
+            category="test",
+            net_score=0.8,
+            net_score_latency=100,
+            ramp_up_time=0.7,
+            ramp_up_time_latency=50,
+            bus_factor=0.6,
+            bus_factor_latency=40,
+            performance_claims=0.9,
+            performance_claims_latency=200,
+            license=1.0,
+            license_latency=30,
+            dataset_and_code_score=0.8,
+            dataset_and_code_score_latency=150,
+            dataset_quality=0.75,
+            dataset_quality_latency=120,
+            code_quality=0.85,
+            code_quality_latency=80,
+            reproducibility=0.9,
+            reproducibility_latency=60,
+            reviewedness=0.7,
+            reviewedness_latency=45,
+            tree_score=0.8,
+            tree_score_latency=35,
+            size_score=SizeScore(
+                raspberry_pi=0.3,  # 30% compatible with Raspberry Pi
+                jetson_nano=0.5,
+                desktop_pc=0.8,
+                aws_server=0.9
+            ),
+            size_score_latency=200
+        )
+        memory.save_model_rating("rated-model-id", rating)
+
+        client = TestClient(app)
+        response = client.get("/artifact/model/rated-model-id/cost")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "rated-model-id" in data
+        # Cost = (1.0 - 0.3) * 1000 = 700.0
+        assert data["rated-model-id"]["total_cost"] == 700.0
+        assert data["rated-model-id"]["standalone_cost"] == 700.0
+
+    def test_cost_endpoint_returns_zero_for_non_model_artifacts(self):
+        """Test that cost endpoint returns 0.0 for non-model artifacts."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        # Create a dataset artifact
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="dataset-id", name="test-dataset", type=ArtifactType.DATASET),
+            data=ArtifactData(url="https://huggingface.co/datasets/test/dataset"),
+        )
+        memory.save_artifact(artifact)
+
+        client = TestClient(app)
+        response = client.get("/artifact/dataset/dataset-id/cost")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "dataset-id" in data
+        assert data["dataset-id"]["total_cost"] == 0.0
+        assert data["dataset-id"]["standalone_cost"] == 0.0
+
+    def test_cost_endpoint_handles_zero_raspberry_pi_score(self):
+        """Test that cost endpoint handles zero raspberry_pi score correctly."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType, ModelRating, SizeScore)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="zero-pi-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact, processing_status="completed")
+
+        rating = ModelRating(
+            name="test-model",
+            category="test",
+            net_score=0.8,
+            net_score_latency=100,
+            ramp_up_time=0.7,
+            ramp_up_time_latency=50,
+            bus_factor=0.6,
+            bus_factor_latency=40,
+            performance_claims=0.9,
+            performance_claims_latency=200,
+            license=1.0,
+            license_latency=30,
+            dataset_and_code_score=0.8,
+            dataset_and_code_score_latency=150,
+            dataset_quality=0.75,
+            dataset_quality_latency=120,
+            code_quality=0.85,
+            code_quality_latency=80,
+            reproducibility=0.9,
+            reproducibility_latency=60,
+            reviewedness=0.7,
+            reviewedness_latency=45,
+            tree_score=0.8,
+            tree_score_latency=35,
+            size_score=SizeScore(
+                raspberry_pi=0.0,  # 0% compatible - should give max cost
+                jetson_nano=0.5,
+                desktop_pc=0.8,
+                aws_server=0.9
+            ),
+            size_score_latency=200
+        )
+        memory.save_model_rating("zero-pi-model-id", rating)
+
+        client = TestClient(app)
+        response = client.get("/artifact/model/zero-pi-model-id/cost")
+
+        assert response.status_code == 200
+        data = response.json()
+        # Cost = (1.0 - 0.0) * 1000 = 1000.0
+        assert data["zero-pi-model-id"]["total_cost"] == 1000.0
+
+
+# =============================================================================
+# License Check Endpoint Tests
+# =============================================================================
+
+class TestLicenseCheckEndpoint:
+    """Test suite for license check endpoint functionality."""
+
+    def test_license_check_returns_404_for_nonexistent_artifact(self):
+        """Test that license check returns 404 for non-existent artifacts."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.storage import memory
+
+        memory.reset()
+
+        client = TestClient(app)
+        payload = {"github_url": "https://github.com/user/repo"}
+        response = client.post("/artifact/model/nonexistent-id-12345/license-check", json=payload)
+
+        assert response.status_code == 404
+        assert "does not exist" in response.json()["detail"]
+
+    @patch("requests.get")
+    def test_license_check_returns_400_for_malformed_github_url(self, mock_requests_get):
+        """Test that license check returns 400 for malformed GitHub URL."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact)
+        memory.save_model_license("test-model-id", "apache-2.0")
+
+        client = TestClient(app)
+        # Use a URL that doesn't match the github.com pattern (no github.com in it)
+        payload = {"github_url": "https://example.com/user/repo"}
+        response = client.post("/artifact/model/test-model-id/license-check", json=payload)
+
+        assert response.status_code == 400
+        assert "Malformed" in response.json()["detail"]
+        # Verify no HTTP request was made since URL validation happens first
+        mock_requests_get.assert_not_called()
+
+    def test_license_check_returns_false_for_model_without_license(self):
+        """Test that license check returns False for model without license."""
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="no-license-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact)
+
+        client = TestClient(app)
+        payload = {"github_url": "https://github.com/user/repo"}
+        response = client.post("/artifact/model/no-license-model-id/license-check", json=payload)
+
+        assert response.status_code == 200
+        assert response.json() is False  # Unknown license → incompatible
+
+    @patch("requests.get")
+    def test_license_check_returns_404_for_nonexistent_github_repo(self, mock_requests_get):
+        """Test that license check returns 404 for non-existent GitHub repo."""
+        from unittest.mock import MagicMock
+
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact)
+        memory.save_model_license("test-model-id", "apache-2.0")
+
+        # Mock GitHub API returning 404
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_requests_get.return_value = mock_response
+
+        client = TestClient(app)
+        payload = {"github_url": "https://github.com/nonexistent/repo"}
+        response = client.post("/artifact/model/test-model-id/license-check", json=payload)
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    @patch("requests.get")
+    def test_license_check_returns_502_for_github_api_error(self, mock_requests_get):
+        """Test that license check returns 502 when GitHub API fails."""
+        from fastapi.testclient import TestClient
+        from requests import ConnectionError
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact)
+        memory.save_model_license("test-model-id", "apache-2.0")
+
+        # Mock GitHub API connection error
+        mock_requests_get.side_effect = ConnectionError("Connection failed")
+
+        client = TestClient(app)
+        payload = {"github_url": "https://github.com/user/repo"}
+        response = client.post("/artifact/model/test-model-id/license-check", json=payload)
+
+        assert response.status_code == 502
+        assert "could not be retrieved" in response.json()["detail"]
+
+    @patch("requests.get")
+    def test_license_check_returns_true_for_compatible_licenses(self, mock_requests_get):
+        """Test that license check returns True for compatible licenses."""
+        from unittest.mock import MagicMock
+
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact)
+        memory.save_model_license("test-model-id", "apache-2.0")
+
+        # Mock GitHub API returning MIT license (compatible)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "license": {
+                "spdx_id": "MIT"
+            }
+        }
+        mock_requests_get.return_value = mock_response
+
+        client = TestClient(app)
+        payload = {"github_url": "https://github.com/user/repo"}
+        response = client.post("/artifact/model/test-model-id/license-check", json=payload)
+
+        assert response.status_code == 200
+        assert response.json() is True  # Both Apache-2.0 and MIT are compatible
+
+    @patch("requests.get")
+    def test_license_check_returns_false_for_incompatible_licenses(self, mock_requests_get):
+        """Test that license check returns False for incompatible licenses."""
+        from unittest.mock import MagicMock
+
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact)
+        memory.save_model_license("test-model-id", "apache-2.0")
+
+        # Mock GitHub API returning GPL license (incompatible)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "license": {
+                "spdx_id": "GPL-3.0"
+            }
+        }
+        mock_requests_get.return_value = mock_response
+
+        client = TestClient(app)
+        payload = {"github_url": "https://github.com/user/repo"}
+        response = client.post("/artifact/model/test-model-id/license-check", json=payload)
+
+        assert response.status_code == 200
+        assert response.json() is False  # GPL is incompatible
+
+    @patch("requests.get")
+    def test_license_check_handles_github_url_with_trailing_slash(self, mock_requests_get):
+        """Test that license check handles GitHub URL with trailing slash."""
+        from unittest.mock import MagicMock
+
+        from fastapi.testclient import TestClient
+
+        from backend.app import app
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test/model"),
+        )
+        memory.save_artifact(artifact)
+        memory.save_model_license("test-model-id", "mit")
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "license": {
+                "spdx_id": "MIT"
+            }
+        }
+        mock_requests_get.return_value = mock_response
+
+        client = TestClient(app)
+        payload = {"github_url": "https://github.com/user/repo/"}
+        response = client.post("/artifact/model/test-model-id/license-check", json=payload)
+
+        assert response.status_code == 200
+        assert response.json() is True
+
+
+# =============================================================================
 # Metrics Tracker Tests
 # =============================================================================
 

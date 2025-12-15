@@ -34,7 +34,13 @@ download_benchmark_jobs: Dict[str, Dict] = {}
 active_download_benchmark_threads: Dict[str, threading.Thread] = {}
 
 
-@router.get("/health", summary="Heartbeat check (BASELINE)")
+@router.get(
+    "/health",
+    summary="Heartbeat check. (BASELINE)",
+    responses={
+        200: {"description": "Health summary of the API service."},
+    },
+)
 async def health_summary() -> HealthSummaryResponse:
     """
     Get a summary of the health status of the API service."""
@@ -79,7 +85,10 @@ async def health_summary() -> HealthSummaryResponse:
 
 @router.get(
     "/health/components",
-    summary="Get component health details (NON-BASELINE)",
+    summary="Get component health details. (NON-BASELINE)",
+    responses={
+        200: {"description": "Detailed health information for API components."},
+    },
 )
 async def health_components(
     window_minutes: int = Query(60, ge=5, le=1440),
@@ -244,7 +253,25 @@ def run_download_benchmark_script(job_id: str):
             logger.info(f"Cleaned up thread reference for job {job_id}")
 
 
-@router.post("/health/download-benchmark/start", summary="Start download benchmark")
+@router.post(
+    "/health/download-benchmark/start",
+    summary="Start download benchmark.",
+    responses={
+        200: {
+            "description": "Download benchmark started successfully.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "job_id": "string",
+                        "status": "running",
+                        "message": "Download benchmark started"
+                    }
+                }
+            },
+        },
+        409: {"description": "A benchmark job is already running."},
+    },
+)
 async def start_download_benchmark() -> Dict:
     """
     Start the download benchmark script in a background thread.
@@ -296,7 +323,32 @@ async def start_download_benchmark() -> Dict:
     }
 
 
-@router.get("/health/download-benchmark/{job_id}", summary="Get download benchmark status")
+@router.get(
+    "/health/download-benchmark/{job_id}",
+    summary="Get download benchmark status.",
+    responses={
+        200: {
+            "description": "Status and results of the download benchmark job.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "job_id": "string",
+                        "status": "running",
+                        "started_at": "2025-12-14T12:00:00Z",
+                        "progress": "Downloading... 10/100 completed",
+                        "current_progress": "10/100",
+                        "results": None,
+                        "completed_at": None,
+                        "error": None,
+                        "stdout": None,
+                        "stderr": None
+                    }
+                }
+            },
+        },
+        404: {"description": "Benchmark job not found."},
+    },
+)
 async def get_download_benchmark_status(job_id: str) -> Dict:
     """
     Get the status and results of a download benchmark job.

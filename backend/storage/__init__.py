@@ -1,3 +1,7 @@
+"""
+Controls to check environment. Determines whether memory refers to 
+python local memory or dynamodb. Allows testing locally and in AWS.
+"""
 import os
 
 # Check which storage backend to use

@@ -5,7 +5,7 @@ Features:
 - Loads environment variables from a `.env` file if present.
 - Configures logging and CORS middleware.
 - Handles request validation errors with a custom 400 response.
-- Includes routers for health, artifacts, system, and tracks endpoints.
+- Includes routers for health, artifacts, and tracks endpoints.
 - Provides a root endpoint (`/`) returning a simple welcome message.
 
 API:
@@ -22,7 +22,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.api.routes import artifacts, health, system, tracks
+from backend.api.routes import artifacts, health, tracks
 from backend.middleware.logging import setup_logging
 
 logging.basicConfig(level=logging.INFO)
@@ -77,7 +77,6 @@ async def validation_exception_handler(request, exc):
 
 app.include_router(health.router)
 app.include_router(artifacts.router)
-app.include_router(system.router)
 app.include_router(tracks.router)
 
 

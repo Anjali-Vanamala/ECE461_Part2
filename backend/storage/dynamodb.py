@@ -17,8 +17,9 @@ from typing import Any, Dict, Iterable, List, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
-                            ArtifactQuery, ArtifactType, ModelRating)
+from backend.models import (Artifact, ArtifactAuditEntry, ArtifactID,
+                            ArtifactMetadata, ArtifactQuery, ArtifactType,
+                            ModelRating)
 from backend.storage.records import (CodeRecord, DatasetRecord,
                                      LineageMetadata, ModelRecord)
 
@@ -471,7 +472,7 @@ def query_artifacts(queries: Iterable[ArtifactQuery]) -> List[ArtifactMetadata]:
 
 
 def reset() -> None:
-    """Delete all artifacts from the table."""
+    """Delete all artifacts from the table and clear audit log."""
     try:
         # Scan all items and delete them (handle pagination)
         with table.batch_writer() as batch:
@@ -485,7 +486,8 @@ def reset() -> None:
                     ProjectionExpression="artifact_id",
                     ExclusiveStartKey=response["LastEvaluatedKey"],
                 )
-        print("[DynamoDB] Reset: deleted all artifacts")
+        _AUDIT_LOG.clear()
+        print("[DynamoDB] Reset: deleted all artifacts and cleared audit log")
     except ClientError as e:
         print(f"[DynamoDB] Error resetting table: {e}")
 
@@ -739,3 +741,18 @@ _TYPE_TO_STORE = {
     ArtifactType.DATASET: _StoreDict(ArtifactType.DATASET),
     ArtifactType.CODE: _StoreDict(ArtifactType.CODE),
 }
+
+# Simple in-memory audit log (for both memory and DynamoDB backends)
+_AUDIT_LOG: List[ArtifactAuditEntry] = []
+
+
+def log_audit_entry(entry: ArtifactAuditEntry) -> None:
+    """Log an audit entry."""
+    _AUDIT_LOG.append(entry)
+
+
+def get_audit_log(artifact_id: Optional[ArtifactID] = None) -> List[ArtifactAuditEntry]:
+    """Get audit log entries, optionally filtered by artifact_id."""
+    if artifact_id:
+        return [e for e in _AUDIT_LOG if e.artifact.id == artifact_id]
+    return list(_AUDIT_LOG)

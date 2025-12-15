@@ -33,6 +33,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
 from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
+from backend.lambda_utils import is_lambda_environment
 from backend.models import (Artifact, ArtifactAuditEntry, ArtifactCost,
                             ArtifactCostEntry, ArtifactData, ArtifactID,
                             ArtifactLineageEdge, ArtifactLineageGraph,
@@ -673,7 +674,7 @@ async def register_artifact(
         ),
         data=ArtifactData(url=payload.url, download_url=download_url),
     )
-    
+
     # For code artifacts, fetch README from GitHub if URL is GitHub
     readme: str | None = None
     if artifact_type == ArtifactType.CODE:
@@ -701,7 +702,7 @@ async def register_artifact(
                     readme = ""
             except Exception:
                 readme = ""
-    
+
     if readme:
         memory.save_artifact(artifact, readme=readme)
     else:

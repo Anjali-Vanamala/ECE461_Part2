@@ -20,6 +20,7 @@ import asyncio
 import os
 import re
 import tempfile
+import threading
 import time
 from typing import List
 from urllib.parse import urlparse
@@ -31,6 +32,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
 from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
+from backend.lambda_utils import is_lambda_environment
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactLineageEdge,
                             ArtifactLineageGraph, ArtifactLineageNode,
@@ -343,7 +345,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
             name = record.artifact.metadata.name
             test_readme = None
             if record.artifact.metadata.type == ArtifactType.MODEL:
-                readme = memory.get_model_readme(record.artifact.metadata.id)
+                readme = memory.get_model_readme(record.artifact.metadata.id)  # type: ignore[attr-defined]
             else:
                 readme = "temp"
             if readme is not None and len(readme) > 10:
@@ -612,12 +614,24 @@ async def register_artifact(
         memory.save_artifact(artifact, processing_status="processing")
 
         # Process in background
-        background_tasks.add_task(
-            process_model_artifact_async,
-            payload.url,
-            artifact_id,
-            name,
-        )
+        # In Lambda, BackgroundTasks don't work well because execution context ends
+        # Use threading for Lambda, BackgroundTasks for ECS
+        if is_lambda_environment():
+            # In Lambda, run in a daemon thread so response can return immediately
+            thread = threading.Thread(
+                target=process_model_artifact_async,
+                args=(payload.url, artifact_id, name),
+                daemon=True
+            )
+            thread.start()
+        else:
+            # In ECS/other environments, use FastAPI BackgroundTasks
+            background_tasks.add_task(
+                process_model_artifact_async,
+                payload.url,
+                artifact_id,
+                name,
+            )
 
         # Return 202 for models (async processing)
         response.status_code = status.HTTP_202_ACCEPTED
@@ -936,12 +950,21 @@ async def update_artifact(
         # Update model asynchronously (same pattern as POST)
         memory.save_artifact(payload, processing_status="processing")
 
-        background_tasks.add_task(
-            process_model_artifact_async,
-            payload.data.url,
-            artifact_id,
-            payload.metadata.name,
-        )
+        # Process in background - use threading for Lambda, BackgroundTasks for ECS
+        if is_lambda_environment():
+            thread = threading.Thread(
+                target=process_model_artifact_async,
+                args=(payload.data.url, artifact_id, payload.metadata.name),
+                daemon=True
+            )
+            thread.start()
+        else:
+            background_tasks.add_task(
+                process_model_artifact_async,
+                payload.data.url,
+                artifact_id,
+                payload.metadata.name,
+            )
 
         response.status_code = status.HTTP_202_ACCEPTED
         return payload
@@ -1220,7 +1243,7 @@ async def get_artifact_lineage(
 
     def traverse_ancestors(model_id: str) -> None:
         """Recursively find and add all ancestor models (base models)."""
-        model_record = memory.get_model_record(model_id)
+        model_record = memory.get_model_record(model_id)  # type: ignore[attr-defined]
         if not model_record:
             return
 
@@ -1240,7 +1263,7 @@ async def get_artifact_lineage(
                 base_model_name = model_record.base_model_name
 
             if base_model_name:
-                base_record = memory.find_model_by_name(base_model_name)
+                base_record = memory.find_model_by_name(base_model_name)  # type: ignore[attr-defined]
                 if base_record:
                     base_model_id = base_record.artifact.metadata.id
 
@@ -1270,7 +1293,7 @@ async def get_artifact_lineage(
 
     def traverse_descendants(model_id: str) -> None:
         """Recursively find and add all descendant models (children that use this as base)."""
-        child_records = memory.find_child_models(model_id)
+        child_records = memory.find_child_models(model_id)  # type: ignore[attr-defined]
 
         for child_record in child_records:
             child_id = child_record.artifact.metadata.id

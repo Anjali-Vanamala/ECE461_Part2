@@ -273,7 +273,18 @@ def save_artifact(
                         if artifact.metadata.id not in model_record.lineage.dataset_ids:
                             model_record.lineage.dataset_ids.append(artifact.metadata.id)
     elif artifact.metadata.type == ArtifactType.CODE:
-        _CODES[artifact.metadata.id] = CodeRecord(artifact=artifact)
+        recordc = _CODES.get(artifact.metadata.id)
+        if recordc:
+            recordc.artifact = artifact
+            if readme is not None:
+                recordc.readme = readme
+        else:
+            recordc = CodeRecord(
+                artifact=artifact,
+                readme=readme,
+            )
+            _CODES[artifact.metadata.id] = recordc
+
         code_name_normalized = _normalized(artifact.metadata.name)
         for model_record in _MODELS.values():
             if model_record.code_id is None and _normalized(model_record.code_name) == code_name_normalized:
@@ -396,7 +407,11 @@ def get_model_readme(artifact_id: ArtifactID) -> Optional[str]:
     """Get the README for a model artifact."""
     record = _MODELS.get(artifact_id)
     if not record:
-        return None
+        recordc = _CODES.get(artifact_id)
+        if not recordc:
+            return None
+        else:
+            return recordc.readme
     return record.readme
 
 

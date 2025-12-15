@@ -1,3 +1,17 @@
+"""
+Frontend accessibility and content checks using Selenium WebDriver.
+
+This module performs automated tests on the web application's pages to ensure:
+- Pages load correctly.
+- Accessibility standards for images, buttons, and links are met.
+- Main content and headings are present.
+- Specific pages (home, browse, health, artifact, model detail) function properly.
+
+Environment:
+- BASE_URL: Base URL of the web application (default: "http://localhost:3000")
+- ChromeDriver must be available in PATH.
+"""
+
 import os
 
 import pytest

@@ -15,12 +15,11 @@ from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional
 
 import boto3
-from botocore.exceptions import ClientError
-
 from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
                             ArtifactQuery, ArtifactType, ModelRating)
 from backend.storage.records import (CodeRecord, DatasetRecord,
                                      LineageMetadata, ModelRecord)
+from botocore.exceptions import ClientError
 
 # DynamoDB setup
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
@@ -97,6 +96,12 @@ def _item_to_record(item: Dict) -> CodeRecord | DatasetRecord | ModelRecord:
     artifact_type = ArtifactType(item["artifact_type"])
 
     if artifact_type == ArtifactType.MODEL:
+        lineage = _deserialize_lineage(item.get("lineage"))
+        # Extract base_model_id from lineage if present
+        base_model_id = None
+        if lineage and lineage.base_model_id:
+            base_model_id = lineage.base_model_id
+
         return ModelRecord(
             artifact=artifact,
             rating=_deserialize_rating(item.get("rating")),
@@ -110,7 +115,8 @@ def _item_to_record(item: Dict) -> CodeRecord | DatasetRecord | ModelRecord:
             readme=item.get("readme"),
             processing_status=item.get("processing_status", "completed"),
             base_model_name=item.get("base_model_name"),
-            lineage=_deserialize_lineage(item.get("lineage")),
+            base_model_id=base_model_id,
+            lineage=lineage,
         )
     elif artifact_type == ArtifactType.DATASET:
         return DatasetRecord(artifact=artifact)
@@ -262,6 +268,10 @@ def save_artifact(
     # Try to link dataset/code by name if IDs not set (AFTER item is saved)
     if artifact_type == ArtifactType.MODEL:
         _link_dataset_code_by_name(artifact_id, dataset_name, code_name)
+        # Link base model, datasets, and update child models (matching memory backend behavior)
+        _link_base_model_dynamodb(artifact_id)
+        _link_datasets_dynamodb(artifact_id)
+        _update_child_models_dynamodb(artifact_id)
 
     return artifact
 
@@ -609,17 +619,24 @@ def get_model_license(artifact_id: ArtifactID) -> Optional[str]:
 
 
 def get_model_readme(artifact_id: ArtifactID) -> Optional[str]:
-    """Get the readme for a model."""
+    """Get the readme for a model or code artifact."""
     try:
         response = table.get_item(Key={"artifact_id": artifact_id})
         if "Item" not in response:
             return None
 
         item = response["Item"]
-        if item.get("artifact_type") != ArtifactType.MODEL.value:
-            return None
+        artifact_type = item.get("artifact_type")
 
-        return item.get("readme")
+        # Check if it's a MODEL
+        if artifact_type == ArtifactType.MODEL.value:
+            return item.get("readme")
+
+        # Fallback: check if it's a CODE artifact (matching memory.py behavior)
+        if artifact_type == ArtifactType.CODE.value:
+            return item.get("readme")
+
+        return None
     except ClientError as e:
         print(f"[DynamoDB] Error getting model readme: {e}")
         return None
@@ -659,9 +676,14 @@ def update_processing_status(artifact_id: ArtifactID, status: str) -> None:
 
 
 def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
-    """Find a dataset by normalized name."""
-    normalized = _normalized(name) or ""
+    """Find dataset by name with flexible matching (handles namespace/name format)."""
+    normalized = _normalized(name)
+    if not normalized:
+        return None
+    normalized_short = normalized.split('/')[-1] if '/' in normalized else normalized
+
     try:
+        # First try exact match on normalized name
         response = table.scan(
             FilterExpression="artifact_type = :type AND name_normalized = :name",
             ExpressionAttributeValues={
@@ -674,6 +696,26 @@ def find_dataset_by_name(name: str) -> Optional[DatasetRecord]:
             record = _item_to_record(items[0])
             if isinstance(record, DatasetRecord):
                 return record
+
+        # If no exact match, scan all datasets and do flexible matching
+        # (matching memory.py behavior for namespace/name format)
+        response = table.scan(
+            FilterExpression="artifact_type = :type",
+            ExpressionAttributeValues={":type": ArtifactType.DATASET.value},
+            Limit=100,  # DoS protection
+        )
+        for item in response.get("Items", []):
+            artifact = _deserialize_artifact(item["artifact"])
+            candidate = _normalized(artifact.metadata.name)
+            if not candidate:
+                continue
+            candidate_short = candidate.split('/')[-1] if '/' in candidate else candidate
+
+            # Match on either full name OR short name
+            if candidate == normalized or candidate_short == normalized_short or candidate == normalized_short:
+                record = _item_to_record(item)
+                if isinstance(record, DatasetRecord):
+                    return record
         return None
     except ClientError as e:
         print(f"[DynamoDB] Error finding dataset by name: {e}")
@@ -700,6 +742,310 @@ def find_code_by_name(name: str) -> Optional[CodeRecord]:
     except ClientError as e:
         print(f"[DynamoDB] Error finding code by name: {e}")
         return None
+
+
+def get_model_record(artifact_id: ArtifactID) -> Optional[ModelRecord]:
+    """Get the ModelRecord for a given artifact ID."""
+    try:
+        response = table.get_item(Key={"artifact_id": artifact_id})
+        if "Item" not in response:
+            return None
+
+        item = response["Item"]
+        if item.get("artifact_type") != ArtifactType.MODEL.value:
+            return None
+
+        record = _item_to_record(item)
+        if isinstance(record, ModelRecord):
+            return record
+        return None
+    except ClientError as e:
+        print(f"[DynamoDB] Error getting model record: {e}")
+        return None
+
+
+def get_model_lineage(artifact_id: ArtifactID) -> Optional[LineageMetadata]:
+    """Get lineage metadata for a model."""
+    record = get_model_record(artifact_id)
+    if not record:
+        return None
+    return record.lineage
+
+
+def find_model_by_name(name: str) -> Optional[ModelRecord]:
+    """
+    Find a model by name (case-insensitive).
+    Handles both full HuggingFace IDs (namespace/model) and short names (model).
+    """
+    normalized = _normalized(name)
+    if not normalized:
+        return None
+    normalized_short = normalized.split('/')[-1] if '/' in normalized else normalized
+
+    try:
+        # First try exact match on normalized name
+        response = table.scan(
+            FilterExpression="artifact_type = :type AND name_normalized = :name",
+            ExpressionAttributeValues={
+                ":type": ArtifactType.MODEL.value,
+                ":name": normalized,
+            },
+            Limit=100,  # DoS protection
+        )
+        items = response.get("Items", [])
+        if items:
+            record = _item_to_record(items[0])
+            if isinstance(record, ModelRecord):
+                return record
+
+        # If no exact match, scan all models and do flexible matching
+        response = table.scan(
+            FilterExpression="artifact_type = :type",
+            ExpressionAttributeValues={":type": ArtifactType.MODEL.value},
+            Limit=100,  # DoS protection
+        )
+        for item in response.get("Items", []):
+            artifact = _deserialize_artifact(item["artifact"])
+            candidate = _normalized(artifact.metadata.name)
+            if not candidate:
+                continue
+            candidate_short = candidate.split('/')[-1] if '/' in candidate else candidate
+
+            # Match on either full name OR short name
+            if candidate == normalized or candidate_short == normalized_short or candidate == normalized_short:
+                record = _item_to_record(item)
+                if isinstance(record, ModelRecord):
+                    return record
+        return None
+    except ClientError as e:
+        print(f"[DynamoDB] Error finding model by name: {e}")
+        return None
+
+
+def _link_base_model_dynamodb(artifact_id: ArtifactID) -> None:
+    """
+    Link base model from lineage metadata by finding matching model in DynamoDB.
+    Handles both full HuggingFace IDs (namespace/model) and short names (model).
+    Matches memory._link_base_model() behavior.
+    """
+    try:
+        # Get the model record
+        response = table.get_item(Key={"artifact_id": artifact_id})
+        if "Item" not in response:
+            return
+
+        item = response["Item"]
+        if item.get("artifact_type") != ArtifactType.MODEL.value:
+            return
+
+        record = _item_to_record(item)
+        if not isinstance(record, ModelRecord):
+            return
+
+        # Get base model name from lineage or base_model_name field
+        base_model_name = None
+        if record.lineage and record.lineage.base_model_name:
+            base_model_name = record.lineage.base_model_name
+        elif record.base_model_name:
+            base_model_name = record.base_model_name
+
+        if not base_model_name:
+            return
+
+        # Check if already linked
+        if (record.lineage and record.lineage.base_model_id) or record.base_model_id:
+            return
+
+        # Normalize the base model name for matching
+        normalized_base = _normalized(base_model_name)
+        if not normalized_base:
+            return
+
+        # Find matching model in DynamoDB (handles flexible namespace/short-name matching)
+        base_record = find_model_by_name(base_model_name)
+        if not base_record:
+            return
+
+        base_model_id = base_record.artifact.metadata.id
+
+        # Update lineage in DynamoDB
+        if record.lineage:
+            # Update the lineage object
+            record.lineage.base_model_id = base_model_id
+            lineage_dict = _serialize_lineage(record.lineage)
+            if lineage_dict:
+                table.update_item(
+                    Key={"artifact_id": artifact_id},
+                    UpdateExpression="SET lineage = :lineage",
+                    ConditionExpression="artifact_type = :type",
+                    ExpressionAttributeValues={
+                        ":lineage": _convert_floats_to_decimal(lineage_dict),
+                        ":type": ArtifactType.MODEL.value,
+                    },
+                )
+                print(f"[DynamoDB] Linked base model {base_model_id} to model {artifact_id}")
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            print(f"[DynamoDB] Error linking base model: {e}")
+
+
+def _link_datasets_dynamodb(artifact_id: ArtifactID) -> None:
+    """
+    Link datasets from lineage metadata by finding matching datasets in DynamoDB.
+    Handles both full HuggingFace IDs (namespace/dataset) and short names (dataset).
+    Matches memory._link_datasets() behavior.
+    """
+    try:
+        # Get the model record
+        response = table.get_item(Key={"artifact_id": artifact_id})
+        if "Item" not in response:
+            return
+
+        item = response["Item"]
+        if item.get("artifact_type") != ArtifactType.MODEL.value:
+            return
+
+        record = _item_to_record(item)
+        if not isinstance(record, ModelRecord):
+            return
+
+        if not record.lineage or not record.lineage.dataset_names:
+            return
+
+        # Clear existing dataset_ids to rebuild from scratch (matching memory behavior)
+        record.lineage.dataset_ids = []
+
+        for dataset_name in record.lineage.dataset_names:
+            if not _normalized(dataset_name):
+                continue
+
+            # Find matching dataset in DynamoDB (handles flexible namespace/short-name matching)
+            dataset_record = find_dataset_by_name(dataset_name)
+            if dataset_record:
+                record.lineage.dataset_ids.append(dataset_record.artifact.metadata.id)
+
+        # Update lineage in DynamoDB if any datasets were linked
+        if record.lineage.dataset_ids:
+            lineage_dict = _serialize_lineage(record.lineage)
+            if lineage_dict:
+                table.update_item(
+                    Key={"artifact_id": artifact_id},
+                    UpdateExpression="SET lineage = :lineage",
+                    ConditionExpression="artifact_type = :type",
+                    ExpressionAttributeValues={
+                        ":lineage": _convert_floats_to_decimal(lineage_dict),
+                        ":type": ArtifactType.MODEL.value,
+                    },
+                )
+                print(f"[DynamoDB] Linked {len(record.lineage.dataset_ids)} dataset(s) to model {artifact_id}")
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            print(f"[DynamoDB] Error linking datasets: {e}")
+
+
+def _update_child_models_dynamodb(newly_added_model_id: ArtifactID) -> None:
+    """
+    After adding a new model, check if any existing models reference it as a base model.
+    Updates those models' lineage in DynamoDB.
+    Matches memory._update_child_models() behavior.
+    """
+    try:
+        # Get the newly added model
+        newly_added_record = get_model_record(newly_added_model_id)
+        if not newly_added_record:
+            return
+
+        newly_added_name = _normalized(newly_added_record.artifact.metadata.name)
+        if not newly_added_name:
+            return
+        newly_added_short = newly_added_name.split('/')[-1] if '/' in newly_added_name else newly_added_name
+
+        # Scan all models to find ones waiting for this model as base
+        response = table.scan(
+            FilterExpression="artifact_type = :type",
+            ExpressionAttributeValues={":type": ArtifactType.MODEL.value},
+            Limit=100,  # DoS protection
+        )
+
+        for item in response.get("Items", []):
+            if item["artifact_id"] == newly_added_model_id:
+                continue  # Skip the newly added model itself
+
+            record = _item_to_record(item)
+            if not isinstance(record, ModelRecord):
+                continue
+
+            # Get base model name from lineage or base_model_name field
+            base_model_name = None
+            if record.lineage and record.lineage.base_model_name:
+                base_model_name = record.lineage.base_model_name
+            elif record.base_model_name:
+                base_model_name = record.base_model_name
+
+            if not base_model_name:
+                continue
+
+            # Check if this model was waiting for the newly added model as its base
+            normalized_base_name = _normalized(base_model_name)
+            if not normalized_base_name:
+                continue
+            base_model_short = normalized_base_name.split('/')[-1] if '/' in normalized_base_name else normalized_base_name
+
+            # Match on either full name OR short name
+            name_matches = newly_added_name == normalized_base_name or newly_added_name == base_model_short
+            short_matches = newly_added_short == base_model_short
+            if name_matches or short_matches:
+                # Check if already linked
+                if (record.lineage and record.lineage.base_model_id is None) or record.base_model_id is None:
+                    # Update lineage in DynamoDB
+                    if record.lineage:
+                        record.lineage.base_model_id = newly_added_model_id
+                        lineage_dict = _serialize_lineage(record.lineage)
+                        if lineage_dict:
+                            table.update_item(
+                                Key={"artifact_id": record.artifact.metadata.id},
+                                UpdateExpression="SET lineage = :lineage",
+                                ConditionExpression="artifact_type = :type",
+                                ExpressionAttributeValues={
+                                    ":lineage": _convert_floats_to_decimal(lineage_dict),
+                                    ":type": ArtifactType.MODEL.value,
+                                },
+                            )
+                            print(f"[DynamoDB] Updated child model {record.artifact.metadata.id} with base model {newly_added_model_id}")
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            print(f"[DynamoDB] Error updating child models: {e}")
+
+
+def find_child_models(parent_model_id: ArtifactID) -> List[ModelRecord]:
+    """
+    Find all models that use the given model as their base model.
+    Returns list of ModelRecords that have this model as their parent.
+    """
+    children = []
+    try:
+        # Scan all models and check if they reference this parent as base_model
+        response = table.scan(
+            FilterExpression="artifact_type = :type",
+            ExpressionAttributeValues={":type": ArtifactType.MODEL.value},
+            Limit=100,  # DoS protection
+        )
+        for item in response.get("Items", []):
+            record = _item_to_record(item)
+            if not isinstance(record, ModelRecord):
+                continue
+
+            # Check if this model's base_model_id matches the parent
+            # base_model_id is automatically extracted from lineage in _item_to_record
+            if record.base_model_id == parent_model_id:
+                children.append(record)
+            # Also check lineage.base_model_id directly (redundant but safe)
+            elif record.lineage and record.lineage.base_model_id == parent_model_id:
+                children.append(record)
+        return children
+    except ClientError as e:
+        print(f"[DynamoDB] Error finding child models: {e}")
+        return []
 
 
 # Helper function for regex search in artifacts.py

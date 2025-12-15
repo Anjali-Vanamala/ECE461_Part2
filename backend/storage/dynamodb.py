@@ -97,7 +97,7 @@ def _item_to_record(item: Dict) -> CodeRecord | DatasetRecord | ModelRecord:
     elif artifact_type == ArtifactType.DATASET:
         return DatasetRecord(artifact=artifact)
     else:  # CODE
-        return CodeRecord(artifact=artifact)
+        return CodeRecord(artifact=artifact, readme=item.get("readme"))
 
 
 def save_artifact(

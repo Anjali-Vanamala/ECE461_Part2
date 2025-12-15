@@ -31,6 +31,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
 from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
+import logger
 from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
                             ArtifactData, ArtifactID, ArtifactLineageEdge,
                             ArtifactLineageGraph, ArtifactLineageNode,
@@ -301,14 +302,14 @@ def calibrate_regex_timeout(test_text) -> float:
     baseline2 = time.perf_counter() - start
 
     # Never allow insanely tiny values
-    return max(0.01, baseline * 20, baseline2 * 20)
+    return max(0.01, baseline * 2, baseline2 * 2)
 
 
 def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | None:
     """
     Safely perform regex search with timeout to avoid catastrophic backtracking."""
     try:
-        return bool(regex.search(pattern, text, timeout=timeout))
+        return bool(regex.search(pattern, text, regex.IGNORECASE, timeout=timeout))
     except TimeoutError:
         return None
 
@@ -342,13 +343,17 @@ async def regex_artifact_search(payload: dict = Body(...)):
         for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name
             test_readme = None
-            if record.artifact.metadata.type == ArtifactType.MODEL:
+            if record.artifact.metadata.type == ArtifactType.MODEL or record.artifact.metadata.type == ArtifactType.CODE:
                 readme = memory.get_model_readme(record.artifact.metadata.id)
+                if record.artifact.metadata.type == ArtifactType.CODE:
+                    logger.debug(f"Readme for regex search: {name}, {str(readme).encode('cp1252', errors='replace').decode('cp1252')}, {record.artifact.metadata.type}")
             else:
                 readme = "temp"
             if readme is not None and len(readme) > 10:
                 timeout = calibrate_regex_timeout(readme)
                 test_readme = safe_regex_search(regex_str, readme, timeout)
+                if record.artifact.metadata.type == ArtifactType.CODE:
+                    logger.debug(f"Readme for regex search: {name}, {readme is None}, {test_readme}")
             else:
                 timeout = timeout_1
             test = safe_regex_search(regex_str, name, timeout)
@@ -640,7 +645,37 @@ async def register_artifact(
         ),
         data=ArtifactData(url=payload.url, download_url=download_url),
     )
-    memory.save_artifact(artifact)
+    readme: str | None = None
+
+    if artifact_type == "code":
+
+        match = re.search(r"github\.com/([^/]+)/([^/]+)", payload.url)
+        if match:
+            owner, repo = match.groups()
+            repo = repo.replace(".git", "")
+
+            headers = {
+                "Accept": "application/vnd.github.v3.raw",
+            }
+            token = os.getenv("GITHUB_TOKEN")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+
+            try:
+                resp = requests.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/readme",
+                    headers=headers,
+                    timeout=20,
+                )
+                if resp.status_code == 200:
+                    readme = resp.text
+                else:
+                    readme = ""
+            except Exception:
+                readme = ""
+        memory.save_artifact(artifact, readme=readme)
+    else:
+        memory.save_artifact(artifact)
 
     # Return 201 for non-model artifacts (immediate processing)
     response.status_code = status.HTTP_201_CREATED

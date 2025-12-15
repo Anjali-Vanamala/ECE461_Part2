@@ -25,6 +25,7 @@ from starlette.requests import Request
 
 from backend.api.routes import artifacts, health, system, tracks
 from backend.middleware.logging import setup_logging
+from backend.middleware.rate_limit import setup_rate_limit
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -126,3 +127,4 @@ def read_root():
 
 
 app = setup_logging(app)  # type: ignore[assignment]
+app = setup_rate_limit(app)  # type: ignore[assignment]

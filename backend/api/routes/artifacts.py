@@ -21,6 +21,7 @@ import os
 import re
 import tempfile
 import time
+from datetime import datetime
 from typing import List
 from urllib.parse import urlparse
 
@@ -31,16 +32,34 @@ from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
 from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
-from backend.models import (Artifact, ArtifactCost, ArtifactCostEntry,
-                            ArtifactData, ArtifactID, ArtifactLineageEdge,
-                            ArtifactLineageGraph, ArtifactLineageNode,
-                            ArtifactMetadata, ArtifactQuery,
-                            ArtifactRegistration, ArtifactType, ModelRating,
-                            SimpleLicenseCheckRequest)
+from backend.models import (Artifact, ArtifactAuditEntry, ArtifactCost,
+                            ArtifactCostEntry, ArtifactData, ArtifactID,
+                            ArtifactLineageEdge, ArtifactLineageGraph,
+                            ArtifactLineageNode, ArtifactMetadata,
+                            ArtifactQuery, ArtifactRegistration, ArtifactType,
+                            AuditUser, ModelRating, SimpleLicenseCheckRequest)
 from backend.services.rating_service import compute_model_artifact
 from backend.storage import memory, s3
 
 router = APIRouter(tags=["artifacts"])
+
+
+def _log_audit(request: Request, artifact: Artifact, action: str) -> None:
+    """Log an audit entry for an artifact action. Fails silently if logging fails."""
+    try:
+        client_ip = request.client.host if request.client else "unknown"
+        user = AuditUser(name=client_ip, is_admin=False)
+        
+        entry = ArtifactAuditEntry(
+            user=user,
+            date=datetime.now(),
+            artifact=artifact.metadata,
+            action=action,
+        )
+        memory.log_audit_entry(entry)
+    except Exception:
+        # Fail silently - audit logging should not break requests
+        pass
 
 
 def _derive_name(url: str) -> str:
@@ -610,6 +629,7 @@ async def register_artifact(
 
         # Save artifact with "processing" status
         memory.save_artifact(artifact, processing_status="processing")
+        _log_audit(request, artifact, "CREATE")
 
         # Process in background
         background_tasks.add_task(
@@ -641,6 +661,7 @@ async def register_artifact(
         data=ArtifactData(url=payload.url, download_url=download_url),
     )
     memory.save_artifact(artifact)
+    _log_audit(request, artifact, "CREATE")
 
     # Return 201 for non-model artifacts (immediate processing)
     response.status_code = status.HTTP_201_CREATED
@@ -683,6 +704,9 @@ async def download_artifact(
             status_code=404,
             detail="404: Artifact does not exist.",
         )
+    
+    # Log download action
+    _log_audit(request, artifact, "DOWNLOAD")
 
     # 2. For models, check processing status
     if artifact_type == ArtifactType.MODEL:
@@ -919,6 +943,7 @@ async def get_artifact(
     summary="Update this content of the artifact. (BASELINE)",
 )
 async def update_artifact(
+    request: Request,
     payload: Artifact,
     background_tasks: BackgroundTasks,
     response: Response,
@@ -935,6 +960,7 @@ async def update_artifact(
     if artifact_type == ArtifactType.MODEL:
         # Update model asynchronously (same pattern as POST)
         memory.save_artifact(payload, processing_status="processing")
+        _log_audit(request, payload, "UPDATE")
 
         background_tasks.add_task(
             process_model_artifact_async,
@@ -952,6 +978,7 @@ async def update_artifact(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact does not exist.")
 
     memory.save_artifact(payload)
+    _log_audit(request, payload, "UPDATE")
     return payload
 
 
@@ -1324,3 +1351,15 @@ async def get_artifact_lineage(
     logger.info(f"Built complete lineage graph for artifact {artifact_id}: {len(nodes)} nodes, {len(edges)} edges")
 
     return ArtifactLineageGraph(nodes=nodes, edges=edges)
+
+
+@router.get(
+    "/artifacts/{artifact_type}/{artifact_id}/audit",
+    response_model=List[ArtifactAuditEntry],
+    summary="Get audit log for an artifact.",
+)
+async def get_artifact_audit(
+    artifact_id: ArtifactID = Path(..., description="Artifact id"),
+) -> List[ArtifactAuditEntry]:
+    """Get audit log entries for an artifact."""
+    return memory.get_audit_log(artifact_id)

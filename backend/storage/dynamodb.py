@@ -15,11 +15,12 @@ from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional
 
 import boto3
+from botocore.exceptions import ClientError
+
 from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
                             ArtifactQuery, ArtifactType, ModelRating)
 from backend.storage.records import (CodeRecord, DatasetRecord,
                                      LineageMetadata, ModelRecord)
-from botocore.exceptions import ClientError
 
 # DynamoDB setup
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")

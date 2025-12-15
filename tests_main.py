@@ -2335,3 +2335,190 @@ class TestLambdaArtifactProcessing(IsolatedAsyncioTestCase):
         finally:
             if original:
                 os.environ["COMPUTE_BACKEND"] = original
+
+
+# Storage Function Tests
+# =============================================================================
+
+class TestStorageFunctions:
+    """Test suite for storage functions: get_model_record, find_model_by_name, find_child_models, get_model_lineage."""
+
+    def test_get_model_record_returns_record(self):
+        """Test that get_model_record returns the correct ModelRecord."""
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="test-model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test-model"),
+        )
+        memory.save_artifact(artifact)
+
+        record = memory.get_model_record("test-model-id")
+        assert record is not None
+        assert record.artifact.metadata.id == "test-model-id"
+        assert record.artifact.metadata.name == "test-model"
+
+    def test_get_model_record_returns_none_for_missing(self):
+        """Test that get_model_record returns None for non-existent model."""
+        from backend.storage import memory
+
+        memory.reset()
+
+        record = memory.get_model_record("nonexistent-id")
+        assert record is None
+
+    def test_find_model_by_name_exact_match(self):
+        """Test that find_model_by_name finds model by exact name match."""
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="model-id", name="bert-base", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/bert-base"),
+        )
+        memory.save_artifact(artifact)
+
+        record = memory.find_model_by_name("bert-base")
+        assert record is not None
+        assert record.artifact.metadata.id == "model-id"
+
+    def test_find_model_by_name_case_insensitive(self):
+        """Test that find_model_by_name is case-insensitive."""
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="model-id", name="BERT-Base", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/bert-base"),
+        )
+        memory.save_artifact(artifact)
+
+        record = memory.find_model_by_name("bert-base")
+        assert record is not None
+        assert record.artifact.metadata.id == "model-id"
+
+    def test_find_model_by_name_short_name_match(self):
+        """Test that find_model_by_name matches on short name (last part after /)."""
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="model-id", name="google/bert-base", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/google/bert-base"),
+        )
+        memory.save_artifact(artifact)
+
+        record = memory.find_model_by_name("bert-base")
+        assert record is not None
+        assert record.artifact.metadata.id == "model-id"
+
+    def test_find_model_by_name_returns_none_for_missing(self):
+        """Test that find_model_by_name returns None for non-existent model."""
+        from backend.storage import memory
+
+        memory.reset()
+
+        record = memory.find_model_by_name("nonexistent-model")
+        assert record is None
+
+    def test_find_child_models_finds_children(self):
+        """Test that find_child_models finds all models using a parent as base."""
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+        from backend.storage.records import LineageMetadata
+
+        memory.reset()
+
+        # Create parent model
+        parent_artifact = Artifact(
+            metadata=ArtifactMetadata(id="parent-id", name="parent-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/parent-model"),
+        )
+        memory.save_artifact(parent_artifact)
+
+        # Create child model with lineage pointing to parent
+        child_artifact = Artifact(
+            metadata=ArtifactMetadata(id="child-id", name="child-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/child-model"),
+        )
+        lineage = LineageMetadata(base_model_id="parent-id")
+        memory.save_artifact(child_artifact, lineage=lineage)
+
+        children = memory.find_child_models("parent-id")
+        assert len(children) == 1
+        assert children[0].artifact.metadata.id == "child-id"
+
+    def test_find_child_models_returns_empty_for_no_children(self):
+        """Test that find_child_models returns empty list when no children exist."""
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test-model"),
+        )
+        memory.save_artifact(artifact)
+
+        children = memory.find_child_models("model-id")
+        assert len(children) == 0
+
+    def test_get_model_lineage_returns_lineage(self):
+        """Test that get_model_lineage returns lineage metadata."""
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+        from backend.storage.records import LineageMetadata
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test-model"),
+        )
+        lineage = LineageMetadata(
+            base_model_name="bert-base",
+            base_model_id="base-id",
+            dataset_names=["dataset1"],
+            config_metadata={"key": "value"}
+        )
+        memory.save_artifact(artifact, lineage=lineage)
+
+        retrieved_lineage = memory.get_model_lineage("model-id")
+        assert retrieved_lineage is not None
+        assert retrieved_lineage.base_model_name == "bert-base"
+        assert retrieved_lineage.base_model_id == "base-id"
+        assert "dataset1" in retrieved_lineage.dataset_names
+
+    def test_get_model_lineage_returns_none_for_no_lineage(self):
+        """Test that get_model_lineage returns None when no lineage exists."""
+        from backend.models import (Artifact, ArtifactData, ArtifactMetadata,
+                                    ArtifactType)
+        from backend.storage import memory
+
+        memory.reset()
+
+        artifact = Artifact(
+            metadata=ArtifactMetadata(id="model-id", name="test-model", type=ArtifactType.MODEL),
+            data=ArtifactData(url="https://huggingface.co/test-model"),
+        )
+        memory.save_artifact(artifact)
+
+        lineage = memory.get_model_lineage("model-id")
+        assert lineage is None

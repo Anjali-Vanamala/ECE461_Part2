@@ -32,6 +32,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
 from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
+from backend.lambda_utils import is_lambda_environment
 from backend.models import (Artifact, ArtifactAuditEntry, ArtifactCost,
                             ArtifactCostEntry, ArtifactData, ArtifactID,
                             ArtifactLineageEdge, ArtifactLineageGraph,
@@ -660,7 +661,35 @@ async def register_artifact(
         ),
         data=ArtifactData(url=payload.url, download_url=download_url),
     )
-    memory.save_artifact(artifact)
+    
+    # For code artifacts, fetch README from GitHub if URL is GitHub
+    readme: str | None = None
+    if artifact_type == ArtifactType.CODE:
+        match = re.search(r"github\.com/([^/]+)/([^/]+)", payload.url)
+        if match:
+            owner, repo = match.groups()
+            repo = repo.replace(".git", "")
+            headers = {"Accept": "application/vnd.github.v3.raw"}
+            token = os.getenv("GITHUB_TOKEN")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            try:
+                resp = requests.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/readme",
+                    headers=headers,
+                    timeout=10
+                )
+                if resp.status_code == 200:
+                    readme = resp.text
+                else:
+                    readme = ""
+            except Exception:
+                readme = ""
+    
+    if readme:
+        memory.save_artifact(artifact, readme=readme)
+    else:
+        memory.save_artifact(artifact)
     _log_audit(request, artifact, "CREATE")
 
     # Return 201 for non-model artifacts (immediate processing)

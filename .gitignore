@@ -4,11 +4,16 @@ __pycache__/
 error_logs
 test.log
 .coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
 temp_log.txt
 .mypy_cache/
 venv
 tmp/
 CLAUDE.md
+lambda-build/
 
 # Frontend dependencies
 node_modules/

@@ -52,3 +52,4 @@ class DatasetRecord:
 class CodeRecord:
     """In-memory record for a code artifact."""
     artifact: Artifact
+    readme: Optional[str] = None

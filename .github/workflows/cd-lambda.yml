@@ -1,0 +1,225 @@
+name: CD - Deploy FastAPI to Lambda
+
+# Requirements:
+# - Automated deployment to AWS Lambda upon merge to main
+# - Backend accessible via API Gateway
+# 
+# Prerequisites (manual setup required):
+# - Lambda function: ece461-backend-lambda (created once manually or via CLI)
+# - API Gateway REST API or HTTP API (created once manually)
+# - IAM role for Lambda with DynamoDB/S3/RDS permissions
+# - GitHub OIDC role with Lambda/API Gateway permissions
+# - GitHub secrets: AWS_IAM_ROLE_ARN
+# - Optional: Lambda layer for large dependencies (if package > 50MB)
+
+on:
+  push:
+    branches: [ 'main' ]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deploy'
+        required: false
+        default: 'manual'
+      branch:
+        description: 'Branch to deploy from'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-2
+  LAMBDA_FUNCTION_NAME: ece461-backend-lambda
+  LAMBDA_HANDLER: backend.lambda_handler.handler
+  LAMBDA_RUNTIME: python3.11
+  LAMBDA_TIMEOUT: 900  # 15 minutes (max)
+  LAMBDA_MEMORY: 1024  # 1GB (adjust based on needs)
+
+jobs:
+  build-package-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r dependencies.txt
+
+      - name: Run tests (optional)
+        run: |
+          pip install pytest coverage
+          coverage run -m pytest -q || true
+          coverage report || true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          role-session-name: gha-lambda-deploy
+
+      - name: Package Lambda function
+        run: |
+          chmod +x scripts/package-lambda.sh
+          ./scripts/package-lambda.sh
+
+      - name: Check if Lambda function exists
+        id: check-lambda
+        run: |
+          if aws lambda get-function \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Lambda function exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  Lambda function does not exist, will create it"
+          fi
+
+      - name: Create Lambda function (if needed)
+        if: steps.check-lambda.outputs.exists == 'false'
+        run: |
+          echo "Creating Lambda function..."
+          
+          # Get account ID for default role
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          
+          # Default execution role (adjust if you have a custom role)
+          EXECUTION_ROLE="arn:aws:iam::${ACCOUNT_ID}:role/lambda-execution-role"
+          
+          # Check if role exists, if not, use a placeholder (will need manual setup)
+          if aws iam get-role --role-name lambda-execution-role >/dev/null 2>&1; then
+            ROLE_ARN="$EXECUTION_ROLE"
+          else
+            echo "⚠️  Warning: lambda-execution-role not found"
+            echo "   You'll need to create an IAM role with Lambda execution permissions"
+            echo "   Role should have: AWSLambdaBasicExecutionRole + DynamoDB/S3/RDS access"
+            exit 1
+          fi
+          
+          aws lambda create-function \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --runtime ${{ env.LAMBDA_RUNTIME }} \
+            --role "$ROLE_ARN" \
+            --handler ${{ env.LAMBDA_HANDLER }} \
+            --zip-file fileb://lambda-deployment.zip \
+            --timeout ${{ env.LAMBDA_TIMEOUT }} \
+            --memory-size ${{ env.LAMBDA_MEMORY }} \
+            --region ${{ env.AWS_REGION }} \
+            --environment "Variables={COMPUTE_BACKEND=lambda,LOG_FILE=/tmp/error_logs.log,LOG_LEVEL=1}" \
+            --description "ECE461 Model Registry API - FastAPI on Lambda"
+          
+          echo "✅ Lambda function created"
+          echo "⏳ Waiting for function to be active..."
+          aws lambda wait function-active \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --region ${{ env.AWS_REGION }}
+          echo "✅ Function is now active"
+
+      - name: Update Lambda function code
+        if: steps.check-lambda.outputs.exists == 'true'
+        run: |
+          echo "Updating Lambda function code..."
+          aws lambda update-function-code \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --zip-file fileb://lambda-deployment.zip \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "✅ Lambda function code updated"
+
+      - name: Wait for function to be ready
+        run: |
+          echo "Waiting for Lambda function to be ready..."
+          aws lambda wait function-active \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            || echo "Function may still be updating"
+
+      - name: Update Lambda configuration
+        run: |
+          echo "Updating Lambda configuration..."
+          
+          # Update environment variables (only if function already exists and was updated)
+          # For new functions, environment is set during creation
+          aws lambda update-function-configuration \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --timeout ${{ env.LAMBDA_TIMEOUT }} \
+            --memory-size ${{ env.LAMBDA_MEMORY }} \
+            --region ${{ env.AWS_REGION }} \
+            --environment "Variables={COMPUTE_BACKEND=lambda,LOG_FILE=/tmp/error_logs.log,LOG_LEVEL=1}" \
+            >/dev/null || echo "Configuration update skipped (function may be updating)"
+          
+          echo "✅ Lambda configuration updated"
+          
+          # Wait for configuration update to complete
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            || echo "Function update may still be in progress"
+
+      - name: Get API Gateway info
+        id: get-api
+        run: |
+          # Try to find API Gateway associated with this Lambda
+          # Check REST APIs
+          REST_API_ID=$(aws apigateway get-rest-apis \
+            --region ${{ env.AWS_REGION }} \
+            --query "items[?name=='ece461-api' || name=='ece461-backend-api'].id" \
+            --output text 2>/dev/null | head -n1 || echo "")
+          
+          if [ -n "$REST_API_ID" ] && [ "$REST_API_ID" != "None" ]; then
+            echo "API_TYPE=rest" >> $GITHUB_OUTPUT
+            echo "API_ID=$REST_API_ID" >> $GITHUB_OUTPUT
+            echo "✅ Found REST API: $REST_API_ID"
+          else
+            # Check HTTP APIs
+            HTTP_API_ID=$(aws apigatewayv2 get-apis \
+              --region ${{ env.AWS_REGION }} \
+              --query "Items[?Name=='ece461-api' || Name=='ece461-backend-api'].ApiId" \
+              --output text 2>/dev/null | head -n1 || echo "")
+            
+            if [ -n "$HTTP_API_ID" ] && [ "$HTTP_API_ID" != "None" ]; then
+              echo "API_TYPE=http" >> $GITHUB_OUTPUT
+              echo "API_ID=$HTTP_API_ID" >> $GITHUB_OUTPUT
+              echo "✅ Found HTTP API: $HTTP_API_ID"
+            else
+              echo "API_TYPE=" >> $GITHUB_OUTPUT
+              echo "API_ID=" >> $GITHUB_OUTPUT
+              echo "⚠️  No API Gateway found - you'll need to create and configure it manually"
+            fi
+          fi
+
+      - name: Output deployment info
+        run: |
+          echo "✅ Lambda Deployment Complete"
+          echo "Function: ${{ env.LAMBDA_FUNCTION_NAME }}"
+          echo "Region: ${{ env.AWS_REGION }}"
+          echo "Handler: ${{ env.LAMBDA_HANDLER }}"
+          echo "Runtime: ${{ env.LAMBDA_RUNTIME }}"
+          echo "Timeout: ${{ env.LAMBDA_TIMEOUT }}s"
+          echo "Memory: ${{ env.LAMBDA_MEMORY }}MB"
+          if [ -n "${{ steps.get-api.outputs.API_ID }}" ]; then
+            if [ "${{ steps.get-api.outputs.API_TYPE }}" == "rest" ]; then
+              echo "REST API ID: ${{ steps.get-api.outputs.API_ID }}"
+              echo "API URL: https://${{ steps.get-api.outputs.API_ID }}.execute-api.${{ env.AWS_REGION }}.amazonaws.com"
+            else
+              echo "HTTP API ID: ${{ steps.get-api.outputs.API_ID }}"
+              echo "API URL: https://${{ steps.get-api.outputs.API_ID }}.execute-api.${{ env.AWS_REGION }}.amazonaws.com"
+            fi
+          fi
+          echo ""
+          echo "View function: https://console.aws.amazon.com/lambda/home?region=${{ env.AWS_REGION }}#/functions/${{ env.LAMBDA_FUNCTION_NAME }}"

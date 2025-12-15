@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from dataclasses import asdict
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -18,7 +19,8 @@ from botocore.exceptions import ClientError
 
 from backend.models import (Artifact, ArtifactID, ArtifactMetadata,
                             ArtifactQuery, ArtifactType, ModelRating)
-from backend.storage.records import CodeRecord, DatasetRecord, ModelRecord
+from backend.storage.records import (CodeRecord, DatasetRecord,
+                                     LineageMetadata, ModelRecord)
 
 # DynamoDB setup
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
@@ -75,6 +77,20 @@ def _deserialize_rating(data: Optional[Dict]) -> Optional[ModelRating]:
     return ModelRating(**data)
 
 
+def _serialize_lineage(lineage: Optional[LineageMetadata]) -> Optional[Dict]:
+    """Convert LineageMetadata to JSON-serializable dict."""
+    if lineage is None:
+        return None
+    return asdict(lineage)
+
+
+def _deserialize_lineage(data: Optional[Dict]) -> Optional[LineageMetadata]:
+    """Convert dict to LineageMetadata."""
+    if data is None:
+        return None
+    return LineageMetadata(**data)
+
+
 def _item_to_record(item: Dict) -> CodeRecord | DatasetRecord | ModelRecord:
     """Convert DynamoDB item to appropriate Record type."""
     artifact = _deserialize_artifact(item["artifact"])
@@ -93,11 +109,13 @@ def _item_to_record(item: Dict) -> CodeRecord | DatasetRecord | ModelRecord:
             code_url=item.get("code_url"),
             readme=item.get("readme"),
             processing_status=item.get("processing_status", "completed"),
+            base_model_name=item.get("base_model_name"),
+            lineage=_deserialize_lineage(item.get("lineage")),
         )
     elif artifact_type == ArtifactType.DATASET:
         return DatasetRecord(artifact=artifact)
     else:  # CODE
-        return CodeRecord(artifact=artifact)
+        return CodeRecord(artifact=artifact, readme=item.get("readme"))
 
 
 def save_artifact(
@@ -111,6 +129,8 @@ def save_artifact(
     code_url: Optional[str] = None,
     readme: Optional[str] = None,
     processing_status: Optional[str] = None,
+    lineage: Optional[LineageMetadata] = None,
+    base_model_name: Optional[str] = None,
 ) -> Artifact:
     """Insert or update an artifact entry in DynamoDB."""
     artifact_id = artifact.metadata.id
@@ -201,6 +221,20 @@ def save_artifact(
         # Preserve existing code_id if present
         if existing_item and "code_id" in existing_item:
             item["code_id"] = existing_item["code_id"]
+
+        # Preserve existing base_model_name if not provided
+        if base_model_name is not None:
+            item["base_model_name"] = base_model_name
+        elif existing_item and "base_model_name" in existing_item:
+            item["base_model_name"] = existing_item["base_model_name"]
+
+        # Preserve existing lineage if not provided
+        if lineage is not None:
+            lineage_dict = _serialize_lineage(lineage)
+            if lineage_dict is not None:
+                item["lineage"] = lineage_dict
+        elif existing_item and "lineage" in existing_item:
+            item["lineage"] = existing_item["lineage"]
 
         # Preserve existing processing_status if not provided, or default to "completed"
         if processing_status is not None:

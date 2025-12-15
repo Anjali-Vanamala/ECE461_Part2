@@ -41,7 +41,7 @@ if env_file.exists():
 
 # Hardcode /prod for API Gateway stage path
 # API Gateway strips /prod before forwarding, so route handlers remain unchanged
-root_path = "/prod"
+ROOT_PATH = "/prod"
 
 app = fastapi.FastAPI(
     title="Model Registry API",
@@ -51,7 +51,7 @@ app = fastapi.FastAPI(
         "name": "MIT License",
         "url": "https://opensource.org/licenses/MIT",
     },
-    root_path=root_path,  # Set root path for API Gateway stage (e.g., /prod)
+    root_path=ROOT_PATH,  # Set root path for API Gateway stage (e.g., /prod)
 )
 
 # Add CORS middleware to allow frontend requests

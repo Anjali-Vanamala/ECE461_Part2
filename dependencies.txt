@@ -11,5 +11,6 @@ python-multipart
 pydantic
 boto3
 regex
+mangum
 aiohttp
 certifi

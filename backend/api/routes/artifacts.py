@@ -20,6 +20,7 @@ import asyncio
 import os
 import re
 import tempfile
+import threading
 import time
 from datetime import datetime
 from typing import List, Literal
@@ -32,7 +33,6 @@ from fastapi import (APIRouter, BackgroundTasks, Body, HTTPException, Path,
 from fastapi.responses import RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_url
 
-from backend.lambda_utils import is_lambda_environment
 from backend.models import (Artifact, ArtifactAuditEntry, ArtifactCost,
                             ArtifactCostEntry, ArtifactData, ArtifactID,
                             ArtifactLineageEdge, ArtifactLineageGraph,
@@ -321,14 +321,14 @@ def calibrate_regex_timeout(test_text) -> float:
     baseline2 = time.perf_counter() - start
 
     # Never allow insanely tiny values
-    return max(0.01, baseline * 20, baseline2 * 20)
+    return max(0.01, baseline * 2, baseline2 * 2)
 
 
 def safe_regex_search(pattern: str, text: str, timeout: float = 0.1) -> bool | None:
     """
     Safely perform regex search with timeout to avoid catastrophic backtracking."""
     try:
-        return bool(regex.search(pattern, text, timeout=timeout))
+        return bool(regex.search(pattern, text, regex.IGNORECASE, timeout=timeout))
     except TimeoutError:
         return None
 
@@ -362,7 +362,7 @@ async def regex_artifact_search(payload: dict = Body(...)):
         for record in store.values():  # type: ignore[attr-defined]
             name = record.artifact.metadata.name
             test_readme = None
-            if record.artifact.metadata.type == ArtifactType.MODEL:
+            if record.artifact.metadata.type == ArtifactType.MODEL or record.artifact.metadata.type == ArtifactType.CODE:
                 readme = memory.get_model_readme(record.artifact.metadata.id)
             else:
                 readme = "temp"
@@ -633,12 +633,24 @@ async def register_artifact(
         _log_audit(request, artifact, "CREATE")
 
         # Process in background
-        background_tasks.add_task(
-            process_model_artifact_async,
-            payload.url,
-            artifact_id,
-            name,
-        )
+        # In Lambda, BackgroundTasks don't work well because execution context ends
+        # Use threading for Lambda, BackgroundTasks for ECS
+        if is_lambda_environment():
+            # In Lambda, run in a daemon thread so response can return immediately
+            thread = threading.Thread(
+                target=process_model_artifact_async,
+                args=(payload.url, artifact_id, name),
+                daemon=True
+            )
+            thread.start()
+        else:
+            # In ECS/other environments, use FastAPI BackgroundTasks
+            background_tasks.add_task(
+                process_model_artifact_async,
+                payload.url,
+                artifact_id,
+                name,
+            )
 
         # Return 202 for models (async processing)
         response.status_code = status.HTTP_202_ACCEPTED
@@ -669,15 +681,19 @@ async def register_artifact(
         if match:
             owner, repo = match.groups()
             repo = repo.replace(".git", "")
-            headers = {"Accept": "application/vnd.github.v3.raw"}
+
+            headers = {
+                "Accept": "application/vnd.github.v3.raw",
+            }
             token = os.getenv("GITHUB_TOKEN")
             if token:
                 headers["Authorization"] = f"Bearer {token}"
+
             try:
                 resp = requests.get(
                     f"https://api.github.com/repos/{owner}/{repo}/readme",
                     headers=headers,
-                    timeout=10
+                    timeout=20,
                 )
                 if resp.status_code == 200:
                     readme = resp.text
@@ -991,12 +1007,21 @@ async def update_artifact(
         memory.save_artifact(payload, processing_status="processing")
         _log_audit(request, payload, "UPDATE")
 
-        background_tasks.add_task(
-            process_model_artifact_async,
-            payload.data.url,
-            artifact_id,
-            payload.metadata.name,
-        )
+        # Process in background - use threading for Lambda, BackgroundTasks for ECS
+        if is_lambda_environment():
+            thread = threading.Thread(
+                target=process_model_artifact_async,
+                args=(payload.data.url, artifact_id, payload.metadata.name),
+                daemon=True
+            )
+            thread.start()
+        else:
+            background_tasks.add_task(
+                process_model_artifact_async,
+                payload.data.url,
+                artifact_id,
+                payload.metadata.name,
+            )
 
         response.status_code = status.HTTP_202_ACCEPTED
         return payload
@@ -1276,7 +1301,7 @@ async def get_artifact_lineage(
 
     def traverse_ancestors(model_id: str) -> None:
         """Recursively find and add all ancestor models (base models)."""
-        model_record = memory.get_model_record(model_id)
+        model_record = memory.get_model_record(model_id)  # type: ignore[attr-defined]
         if not model_record:
             return
 
@@ -1296,7 +1321,7 @@ async def get_artifact_lineage(
                 base_model_name = model_record.base_model_name
 
             if base_model_name:
-                base_record = memory.find_model_by_name(base_model_name)
+                base_record = memory.find_model_by_name(base_model_name)  # type: ignore[attr-defined]
                 if base_record:
                     base_model_id = base_record.artifact.metadata.id
 
@@ -1326,7 +1351,7 @@ async def get_artifact_lineage(
 
     def traverse_descendants(model_id: str) -> None:
         """Recursively find and add all descendant models (children that use this as base)."""
-        child_records = memory.find_child_models(model_id)
+        child_records = memory.find_child_models(model_id)  # type: ignore[attr-defined]
 
         for child_record in child_records:
             child_id = child_record.artifact.metadata.id

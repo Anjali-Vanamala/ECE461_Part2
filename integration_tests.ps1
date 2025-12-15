@@ -1414,7 +1414,7 @@ Test-Call 'POST /artifact/byRegEx ".*bookcorpus.*"' {
         -Body '{"regex":".*bookcorpus.*"}'
 } -ExpectedStatus @(200, 201) -Assert {
     param($json)
-    if ($json.Count -ne 2) {
+    if ($json.Count -ne 4) {
         throw "Expected exactly 2 results, but got $($json.Count)"
     }
 
